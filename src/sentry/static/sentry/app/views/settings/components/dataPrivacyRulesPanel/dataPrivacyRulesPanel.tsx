@@ -14,7 +14,7 @@ import DataPrivacyRulesPanelForm from './dataPrivacyRulesPanelForm';
 import {Suggestion, defaultSuggestions} from './dataPrivacyRulesPanelSelectorFieldTypes';
 import {RULE_TYPE, METHOD_TYPE} from './utils';
 import DataPrivacyRulesPanelFooter from './dataPrivacyRulesPanelFooter';
-import DataPrivacyRulesPanelContent from './dataPrivacyRulesPanelContent';
+import DataPrivacyRulesPanelContent from './dataPrivacyRulesPanelContent/dataPrivacyRulesPanelContent';
 
 const DEFAULT_RULE_FROM_VALUE = '';
 
@@ -227,10 +227,15 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
     }));
   };
 
-  handleDeleteRule = (ruleId: number) => {
-    this.setState(prevState => ({
-      rules: prevState.rules.filter(rule => rule.id !== ruleId),
-    }));
+  handleDeleteRule = (ruleId: Rule['id']) => {
+    this.setState(
+      prevState => ({
+        rules: prevState.rules.filter(rule => rule.id !== ruleId),
+      }),
+      () => {
+        this.handleSubmit();
+      }
+    );
   };
 
   handleChange = (updatedRule: Rule) => {
@@ -252,6 +257,7 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
   handleSubmit = async () => {
     const {endpoint} = this.props;
     const {rules} = this.state;
+
     let customRulesCounter = 0;
     const applications: Applications = {};
     const customRules: PiiConfigRule = {};
@@ -369,14 +375,7 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
 
   render() {
     const {additionalContext, disabled} = this.props;
-    const {
-      rules,
-      savedRules,
-      eventIdInputValue,
-      selectorSuggestions,
-      eventIdStatus,
-      isFormValid,
-    } = this.state;
+    const {rules} = this.state;
 
     return (
       <React.Fragment>
@@ -399,6 +398,7 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
               rules={rules}
               disabled={disabled}
               onAddRule={this.handleAddRule}
+              onDeleteRule={this.handleDeleteRule}
             />
           </PanelBody>
           {rules.length > 0 && (
