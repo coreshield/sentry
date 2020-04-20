@@ -3,7 +3,7 @@ import omit from 'lodash/omit';
 import isEqual from 'lodash/isEqual';
 
 import {t, tct} from 'app/locale';
-import {Panel, PanelAlert, PanelBody} from 'app/components/panels';
+import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
 import {Client} from 'app/api';
 import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
 import ExternalLink from 'app/components/links/externalLink';
@@ -13,8 +13,8 @@ import {EventIdFieldStatus} from './dataPrivacyRulesEventIdField';
 import DataPrivacyRulesPanelForm from './dataPrivacyRulesPanelForm';
 import {Suggestion, defaultSuggestions} from './dataPrivacyRulesPanelSelectorFieldTypes';
 import {RULE_TYPE, METHOD_TYPE} from './utils';
-import DataprivacyRulesPanelHeader from './dataprivacyRulesPanelHeader';
 import DataPrivacyRulesPanelFooter from './dataPrivacyRulesPanelFooter';
+import DataPrivacyRulesPanelContent from './dataPrivacyRulesPanelContent';
 
 const DEFAULT_RULE_FROM_VALUE = '';
 
@@ -381,14 +381,9 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
     return (
       <React.Fragment>
         <Panel>
-          <DataprivacyRulesPanelHeader
-            onKeyDown={this.handleEventIdKeyDown}
-            onChange={this.handleEventIdChange}
-            onBlur={this.handleEventIdBlur}
-            value={eventIdInputValue}
-            status={eventIdStatus}
-            disabled={disabled}
-          />
+          <PanelHeader>
+            <div>{t('Data Privacy Rules')}</div>
+          </PanelHeader>
           <PanelAlert type="info">
             {additionalContext}{' '}
             {tct('For more details, see [linkToDocs].', {
@@ -400,32 +395,18 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
             })}
           </PanelAlert>
           <PanelBody>
-            {rules.map(rule => (
-              <DataPrivacyRulesPanelForm
-                key={rule.id}
-                onDelete={this.handleDeleteRule}
-                onChange={this.handleChange}
-                selectorSuggestions={selectorSuggestions}
-                rule={rule}
-                disabled={disabled}
-              />
-            ))}
+            <DataPrivacyRulesPanelContent
+              rules={rules}
+              disabled={disabled}
+              onAddRule={this.handleAddRule}
+            />
           </PanelBody>
-          <DataPrivacyRulesPanelFooter
-            onAddRule={this.handleAddRule}
-            onCancel={this.handleCancelForm}
-            onSave={this.handleSaveForm}
-            disabled={disabled}
-            disableCancelbutton={
-              (savedRules.length === 0 && rules.length === 0) ||
-              isEqual(rules, savedRules)
-            }
-            disableSaveButton={
-              !isFormValid ||
-              (savedRules.length === 0 && rules.length === 0) ||
-              isEqual(rules, savedRules)
-            }
-          />
+          {rules.length > 0 && (
+            <DataPrivacyRulesPanelFooter
+              onAddRule={this.handleAddRule}
+              disabled={disabled}
+            />
+          )}
         </Panel>
       </React.Fragment>
     );

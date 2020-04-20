@@ -174,13 +174,9 @@ const Wrapper = styled('div')`
   padding: ${space(3)} ${space(2)};
   display: grid;
   grid-gap: ${space(2)};
-  grid-template-columns: 1fr;
   align-items: flex-start;
   border-bottom: 1px solid ${p => p.theme.borderDark};
-
-  @media (min-width: ${p => p.theme.breakpoints[3]}) {
-    grid-template-columns: 1fr 40px;
-  }
+  grid-template-columns: 1fr 40px;
 `;
 
 const WrapperFields = styled('div')`
@@ -189,10 +185,6 @@ const WrapperFields = styled('div')`
   grid-row-gap: ${space(3)};
   align-items: flex-start;
   justify-items: start;
-
-  @media (min-width: ${p => p.theme.breakpoints[1]}) {
-    grid-template-columns: 1fr 1fr;
-  }
 
   @media (min-width: ${p => p.theme.breakpoints[3]}) {
     grid-template-columns: 200px 200px 1fr;
