@@ -7,9 +7,11 @@ import {t} from 'app/locale';
 import space from 'app/styles/space';
 import {IconDelete} from 'app/icons/iconDelete';
 
-import DataPrivacyRulesPanelEmpty from '../dataPrivacyRulesPanelEmpty';
-import DataPrivacyRulesPanelForm from '../dataPrivacyRulesPanelForm';
+import DataPrivacyRulesPanelEmpty from './dataPrivacyRulesPanelEmpty';
+import DataPrivacyRulesPanelForm from './dataPrivacyRulesPanelForm';
 import DataPrivacyRulesPanelContentFilter from './dataPrivacyRulesPanelContentFilter';
+import DataPrivacyRulesPanelEditRuleModal from './dataPrivacyRulesPanelEditRuleModal';
+import DataPrivacyRulesPanelContentAddRuleModal from './dataPrivacyRulesPanelAddRuleModal';
 
 type Rule = React.ComponentProps<typeof DataPrivacyRulesPanelForm>['rule'];
 
@@ -22,6 +24,8 @@ type Props = {
 
 type State = {
   selectedRules: Array<Rule['id']>;
+  editRule?: Rule;
+  newRule?: Rule;
 };
 
 class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
@@ -29,8 +33,10 @@ class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
     selectedRules: [],
   };
 
-  handleClickItem = (ruleId: number) => () => {
-    console.log('ruleId', ruleId);
+  handleClickItem = (rule: Rule) => () => {
+    this.setState({
+      editRule: rule,
+    });
   };
 
   handleSelectRule = (ruleId: number, isChecked: boolean) => (
@@ -79,8 +85,14 @@ class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
     console.log('work in progress');
   };
 
+  handleCloseEditRuleModal = () => {
+    this.setState({
+      editRule: undefined,
+    });
+  };
+
   render() {
-    const {selectedRules} = this.state;
+    const {selectedRules, editRule} = this.state;
     const {rules, disabled, onAddRule} = this.props;
 
     if (rules.length === 0) {
@@ -88,7 +100,7 @@ class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
     }
 
     return (
-      <div>
+      <React.Fragment>
         <DataPrivacyRulesPanelContentFilter
           onSelectAll={this.handleSelectAll}
           onDeleteAllSelected={this.handleDeleteAllSelected}
@@ -96,10 +108,15 @@ class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
           isAllSelected={selectedRules.length === rules.length}
         />
         <List>
-          {rules.map(({id, method, type, from}) => {
+          {rules.map(rule => {
+            const {id, method, type, from} = rule;
             const isChecked = selectedRules.includes(id);
             return (
-              <ListItem key={id} isChecked={isChecked} onClick={this.handleClickItem(id)}>
+              <ListItem
+                key={id}
+                isChecked={isChecked}
+                onClick={this.handleClickItem(rule)}
+              >
                 <CheckboxFancy
                   onClick={this.handleSelectRule(id, isChecked)}
                   isChecked={isChecked}
@@ -110,7 +127,18 @@ class DataPrivacyRulesPanelContent extends React.Component<Props, State> {
             );
           })}
         </List>
-      </div>
+        {editRule && (
+          <DataPrivacyRulesPanelEditRuleModal
+            show={!!editRule}
+            onCancel={this.handleCloseEditRuleModal}
+            disabled={disabled}
+            rule={editRule}
+            onSave={() => console.log('save')}
+            onChange={() => console.log('cancel')}
+            onDelete={() => console.log('onDelete')}
+          />
+        )}
+      </React.Fragment>
     );
   }
 }

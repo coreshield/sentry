@@ -59,7 +59,7 @@ const DataPrivacyRulesPanelContentFilter = ({
 const Wrapper = styled('div')`
   display: flex;
   background-color: ${p => p.theme.offWhite};
-  padding: ${space(2)};
+  padding: ${space(1)} ${space(2)};
   border-bottom: 1px solid ${p => p.theme.borderDark};
 `;
 
@@ -67,7 +67,7 @@ const CheckboxWrapper = styled('div')`
   align-items: center;
   display: grid;
   grid-gap: ${space(1)};
-  grid-template-columns: 16px minmax(80px, auto) 16px;
+  grid-template-columns: 20px minmax(100px, auto) 16px;
   font-size: ${p => p.theme.fontSizeMedium};
 `;
 

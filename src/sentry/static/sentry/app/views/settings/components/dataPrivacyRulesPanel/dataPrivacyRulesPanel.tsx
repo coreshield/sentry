@@ -1,22 +1,24 @@
 import React from 'react';
 import omit from 'lodash/omit';
 import isEqual from 'lodash/isEqual';
+import styled from '@emotion/styled';
 
+import space from 'app/styles/space';
+import Button from 'app/components/button';
 import {t, tct} from 'app/locale';
 import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
 import {Client} from 'app/api';
 import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
 import ExternalLink from 'app/components/links/externalLink';
 import SentryTypes from 'app/sentryTypes';
+import {IconAdd} from 'app/icons/iconAdd';
 
 import {EventIdFieldStatus} from './dataPrivacyRulesEventIdField';
 import DataPrivacyRulesPanelForm from './dataPrivacyRulesPanelForm';
 import {Suggestion, defaultSuggestions} from './dataPrivacyRulesPanelSelectorFieldTypes';
 import {RULE_TYPE, METHOD_TYPE} from './utils';
-import DataPrivacyRulesPanelFooter from './dataPrivacyRulesPanelFooter';
-import DataPrivacyRulesPanelContent from './dataPrivacyRulesPanelContent/dataPrivacyRulesPanelContent';
-
-const DEFAULT_RULE_FROM_VALUE = '';
+import DataPrivacyRulesPanelAddRuleModal from './dataPrivacyRulesPanelAddRuleModal';
+import DataPrivacyRulesPanelContent from './dataPrivacyRulesPanelContent';
 
 type Rule = React.ComponentProps<typeof DataPrivacyRulesPanelForm>['rule'];
 
@@ -49,6 +51,7 @@ type State = {
   eventIdInputValue: string;
   eventIdStatus: EventIdFieldStatus;
   isFormValid: boolean;
+  showAddRuleModal: boolean;
 };
 
 class DataPrivacyRulesPanel extends React.Component<Props, State> {
@@ -65,6 +68,7 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
     eventIdStatus: EventIdFieldStatus.NONE,
     eventIdInputValue: '',
     isFormValid: true,
+    showAddRuleModal: false,
   };
 
   componentDidMount() {
@@ -212,19 +216,11 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
     }
   };
 
-  handleAddRule = () => {
-    this.setState(prevState => ({
-      rules: [
-        ...prevState.rules,
-        {
-          id: prevState.rules.length + 1,
-          type: RULE_TYPE.CREDITCARD,
-          method: METHOD_TYPE.MASK,
-          from: DEFAULT_RULE_FROM_VALUE,
-        },
-      ],
-      isFormValid: false,
-    }));
+  handleToggleAddRuleModal = (showModal: boolean) => () => {
+    this.setState({
+      showAddRuleModal: showModal,
+      isFormValid: !showModal,
+    });
   };
 
   handleDeleteRule = (ruleId: Rule['id']) => {
@@ -375,7 +371,7 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
 
   render() {
     const {additionalContext, disabled} = this.props;
-    const {rules} = this.state;
+    const {rules, showAddRuleModal} = this.state;
 
     return (
       <React.Fragment>
@@ -397,15 +393,30 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
             <DataPrivacyRulesPanelContent
               rules={rules}
               disabled={disabled}
-              onAddRule={this.handleAddRule}
               onDeleteRule={this.handleDeleteRule}
+              onAddRule={this.handleToggleAddRuleModal(true)}
+            />
+            <DataPrivacyRulesPanelAddRuleModal
+              show={showAddRuleModal}
+              nextRuleId={rules.length + 1}
+              onCancel={this.handleToggleAddRuleModal(false)}
+              disabled={disabled}
+              onSave={() => console.log('save')}
+              onChange={() => console.log('cancel')}
             />
           </PanelBody>
           {rules.length > 0 && (
-            <DataPrivacyRulesPanelFooter
-              onAddRule={this.handleAddRule}
-              disabled={disabled}
-            />
+            <PanelAction>
+              <Button
+                disabled={disabled}
+                icon={<IconAdd size="xs" />}
+                onClick={this.handleToggleAddRuleModal(true)}
+                size="small"
+                priority="primary"
+              >
+                {t('Add Rule')}
+              </Button>
+            </PanelAction>
           )}
         </Panel>
       </React.Fragment>
@@ -414,3 +425,10 @@ class DataPrivacyRulesPanel extends React.Component<Props, State> {
 }
 
 export default DataPrivacyRulesPanel;
+
+const PanelAction = styled('div')`
+  padding: ${space(1)} ${space(2)};
+  position: relative;
+  display: flex;
+  justify-content: flex-end;
+`;

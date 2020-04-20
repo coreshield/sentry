@@ -26,11 +26,11 @@ type Rule = {
 };
 
 type Props = {
-  onDelete: (ruleId: Rule['id']) => void;
   onChange: (rule: Rule) => void;
   selectorSuggestions: Array<Suggestion>;
   rule: Rule;
   disabled?: boolean;
+  onDelete?: (ruleId: Rule['id']) => void;
 };
 
 type State = {
@@ -67,7 +67,9 @@ class DataPrivacyRulesForm extends React.PureComponent<Props, State> {
   handleDelete = (event: React.MouseEvent) => {
     event.stopPropagation();
     const {onDelete, rule} = this.props;
-    onDelete(rule.id);
+    if (onDelete) {
+      onDelete(rule.id);
+    }
   };
 
   handleValidation = <T extends keyof Omit<Rule, 'id'>>(field: T) => () => {
@@ -176,7 +178,7 @@ const Wrapper = styled('div')`
   grid-gap: ${space(2)};
   align-items: flex-start;
   border-bottom: 1px solid ${p => p.theme.borderDark};
-  grid-template-columns: 1fr 40px;
+  grid-template-columns: 1fr;
 `;
 
 const WrapperFields = styled('div')`
