@@ -11,7 +11,6 @@ import Access from 'app/components/acl/access';
 import Count from 'app/components/count';
 import DropdownControl from 'app/components/dropdownControl';
 import Duration from 'app/components/duration';
-import InlineSvg from 'app/components/inlineSvg';
 import LoadingError from 'app/components/loadingError';
 import MenuItem from 'app/components/menuItem';
 import PageHeading from 'app/components/pageHeading';
@@ -20,6 +19,8 @@ import Projects from 'app/utils/projects';
 import SubscribeButton from 'app/components/subscribeButton';
 import getDynamicText from 'app/utils/getDynamicText';
 import space from 'app/styles/space';
+import theme from 'app/utils/theme';
+import {IconCheckmark, IconChevron} from 'app/icons';
 
 import {Incident, IncidentStats} from '../types';
 import {isOpen} from '../utils';
@@ -28,7 +29,6 @@ import Status from '../status';
 type Props = {
   className?: string;
   hasIncidentDetailsError: boolean;
-  // Can be undefined when loading
   incident?: Incident;
   stats?: IncidentStats;
   onSubscriptionChange: (event: React.MouseEvent) => void;
@@ -50,13 +50,14 @@ export default class DetailsHeader extends React.Component<Props> {
             <DropdownControl
               data-test-id="status-dropdown"
               label={statusLabel}
-              menuWidth="180px"
+              menuWidth="200px"
               alignRight
               buttonProps={{size: 'small', disabled: !incident}}
             >
-              <StyledMenuItem onSelect={onStatusChange}>
-                <ResolveIcon src="icon-circle-check" /> {t('Resolve this incident')}
-              </StyledMenuItem>
+              <StatusMenuItem onSelect={onStatusChange}>
+                <IconCheckmark circle color={theme.greenLight} />
+                {t('Resolve this incident')}
+              </StatusMenuItem>
             </DropdownControl>
           ) : (
             statusLabel
@@ -95,7 +96,7 @@ export default class DetailsHeader extends React.Component<Props> {
             </IncidentsLink>
             {dateStarted && (
               <React.Fragment>
-                <Chevron src="icon-chevron-right" size={space(2)} />
+                <IconChevron direction="right" color={theme.gray1} size={space(1.5)} />
                 <IncidentDate>{dateStarted}</IncidentDate>
               </React.Fragment>
             )}
@@ -208,10 +209,12 @@ const ItemValue = styled('div')`
 `;
 
 const Breadcrumb = styled('div')`
-  display: flex;
+  display: grid;
+  grid-auto-flow: column;
+  grid-gap: ${space(1)};
   align-items: center;
   font-size: ${p => p.theme.fontSizeLarge};
-  margin-bottom: ${space(0.5)};
+  margin-bottom: ${space(1)};
 `;
 
 const IncidentTitle = styled('div', {
@@ -229,19 +232,13 @@ const IncidentsLink = styled(Link)`
   color: inherit;
 `;
 
-const Chevron = styled(InlineSvg)`
-  color: ${p => p.theme.gray1};
-  margin: 0 ${space(0.5)};
-`;
-
-const StyledMenuItem = styled(MenuItem)`
-  font-size: ${p => p.theme.fontSizeMedium};
-  text-align: left;
-  padding: ${space(1)} 12px; /* To match dropdown */
-  white-space: nowrap;
-`;
-
-const ResolveIcon = styled(InlineSvg)`
-  color: ${p => p.theme.greenLight};
-  margin-right: ${space(0.5)};
+const StatusMenuItem = styled(MenuItem)`
+  > span {
+    font-size: ${p => p.theme.fontSizeMedium};
+    text-align: left;
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    grid-gap: ${space(1)};
+    align-items: center;
+  }
 `;

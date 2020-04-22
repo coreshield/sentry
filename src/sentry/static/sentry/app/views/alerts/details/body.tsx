@@ -21,7 +21,8 @@ import Link from 'app/components/links/link';
 import NavTabs from 'app/components/navTabs';
 import Placeholder from 'app/components/placeholder';
 import SeenByList from 'app/components/seenByList';
-import {IconEdit, IconTelescope, IconWarning} from 'app/icons';
+import {IconTelescope, IconWarning, IconLink} from 'app/icons';
+import {SectionHeading} from 'app/components/charts/styles';
 import Projects from 'app/utils/projects';
 import space from 'app/styles/space';
 import theme from 'app/utils/theme';
@@ -35,7 +36,6 @@ import {
 } from '../types';
 import Activity from './activity';
 import Chart from './chart';
-import SideHeader from './sideHeader';
 
 type Props = {
   incident?: Incident;
@@ -207,7 +207,7 @@ export default class DetailsBody extends React.Component<Props> {
             <PageContent>
               {incident?.alertRule && (
                 <React.Fragment>
-                  <SideHeader>
+                  <SidebarHeading>
                     <span>{t('Alert Rule')}</span>
                     {incident?.alertRule?.status !== AlertRuleStatus.SNAPSHOT && (
                       <SideHeaderLink
@@ -215,15 +215,15 @@ export default class DetailsBody extends React.Component<Props> {
                           pathname: `/settings/${params.orgId}/projects/${incident?.projects[0]}/alerts/metric-rules/${incident?.alertRule?.id}/`,
                         }}
                       >
-                        <IconEdit />
                         {t('View Rule')}
+                        <IconLink size="xs" />
                       </SideHeaderLink>
                     )}
-                  </SideHeader>
+                  </SidebarHeading>
 
                   {this.renderRuleDetails()}
 
-                  <SideHeader>
+                  <SidebarHeading>
                     <span>{t('Query')}</span>
                     <Feature features={['discover-basic']}>
                       <Projects
@@ -237,13 +237,13 @@ export default class DetailsBody extends React.Component<Props> {
                               ((initiallyLoaded && projects) as Project[]) || []
                             )}
                           >
-                            <IconTelescope size="xs" />
                             {t('View in Discover')}
+                            <IconTelescope size="xs" />
                           </SideHeaderLink>
                         )}
                       </Projects>
                     </Feature>
-                  </SideHeader>
+                  </SidebarHeading>
 
                   <Query>{incident?.alertRule.query || '""'}</Query>
                 </React.Fragment>
@@ -276,7 +276,7 @@ const ActivityPageContent = styled(PageContent)`
 `;
 
 const Sidebar = styled('div')`
-  width: 40%;
+  width: 400px;
 
   ${PageContent} {
     padding-top: ${space(3)};
@@ -294,12 +294,18 @@ const Sidebar = styled('div')`
   }
 `;
 
+const SidebarHeading = styled(SectionHeading)`
+  display: flex;
+  justify-content: space-between;
+`;
+
 const SideHeaderLink = styled(Link)`
   display: grid;
   grid-auto-flow: column;
   align-items: center;
   grid-gap: ${space(0.5)};
-  text-transform: none;
+  font-weight: normal;
+  color: ${p => p.theme.gray5};
 `;
 
 const StyledPageContent = styled(PageContent)`
@@ -335,12 +341,12 @@ const StyledSeenByList = styled(SeenByList)`
 
 const RuleDetails = styled('div')`
   display: grid;
-  font-size: ${p => p.theme.fontSizeMedium};
+  font-size: ${p => p.theme.fontSizeSmall};
   grid-template-columns: auto max-content;
   margin-bottom: ${space(2)};
 
   & > span {
-    padding: ${space(0.25)} ${space(1)};
+    padding: ${space(0.5)} ${space(1)};
   }
 
   & > span:nth-child(2n + 2) {
@@ -349,15 +355,14 @@ const RuleDetails = styled('div')`
 
   & > span:nth-child(4n + 1),
   & > span:nth-child(4n + 2) {
-    background-color: ${p => p.theme.offWhite2};
+    background-color: ${p => p.theme.offWhite};
   }
 `;
 
 const Query = styled('div')`
   font-family: ${p => p.theme.text.familyMono};
-  font-size: ${p => p.theme.fontSizeRelativeSmall};
-  background-color: ${p => p.theme.offWhite2};
-  border-radius: ${p => p.theme.borderRadius};
+  font-size: ${p => p.theme.fontSizeSmall};
+  background-color: ${p => p.theme.offWhite};
   padding: ${space(0.5)} ${space(1)};
   color: ${p => p.theme.gray4};
 `;
