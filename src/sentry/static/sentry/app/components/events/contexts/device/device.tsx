@@ -2,7 +2,7 @@ import React from 'react';
 
 import ContextBlock from 'app/components/events/contexts/contextBlockV2';
 
-import { DeviceData, DeviceKnownDataType } from './types';
+import {DeviceData, DeviceKnownDataType} from './types';
 import getDeviceKnownData from './getDeviceKnownData';
 
 type Props = {
@@ -19,8 +19,6 @@ const deviceKnownDataValues = [
   DeviceKnownDataType.ORIENTATION,
   DeviceKnownDataType.MEMORY,
   DeviceKnownDataType.STORAGE,
-  DeviceKnownDataType.STORAGE_SIZE,
-  DeviceKnownDataType.FREE_STORAGE,
   DeviceKnownDataType.SIMULATOR,
   DeviceKnownDataType.BOOT_TIME,
   DeviceKnownDataType.TIMEZONE,
@@ -42,7 +40,7 @@ const deviceKnownDataValues = [
   DeviceKnownDataType.MODEL,
 ];
 
-const Device = ({ data }: Props) => (
+const Device = ({data}: Props) => (
   <ContextBlock knownData={getDeviceKnownData(data, deviceKnownDataValues)} />
 );
 

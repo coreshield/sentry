@@ -11,8 +11,6 @@ export enum DeviceKnownDataType {
   ORIENTATION = 'orientation',
   MEMORY = 'memory',
   STORAGE = 'storage',
-  STORAGE_SIZE = 'storage_size',
-  FREE_STORAGE = 'free_storage',
   SIMULATOR = 'simulator',
   BOOT_TIME = 'boot_time',
   TIMEZONE = 'timezone',
