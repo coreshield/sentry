@@ -26,6 +26,7 @@ import Projects from 'app/utils/projects';
 import space from 'app/styles/space';
 import withOrganization from 'app/utils/withOrganization';
 import Access from 'app/components/acl/access';
+import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
 
 import {Incident} from '../types';
 import {TableLayout, TitleAndSparkLine} from './styles';
@@ -242,6 +243,7 @@ class IncidentsListContainer extends React.Component<Props> {
 
     return (
       <DocumentTitle title={`Alerts- ${orgId} - Sentry`}>
+        <GlobalSelectionHeader organization={organization} showDateSelector={false} />
         <PageContent>
           <PageHeader>
             <StyledPageHeading>
