@@ -3,11 +3,10 @@ import * as ReactRouter from 'react-router';
 
 import ChartZoom from 'app/components/charts/chartZoom';
 import {IconWarning} from 'app/icons';
-import theme from 'app/utils/theme';
 import {GlobalSelection} from 'app/types';
 import TransitionChart from 'app/components/charts/transitionChart';
-import TransparentLoadingMask from 'app/components/charts/components/transparentLoadingMask';
-import ErrorPanel from 'app/components/charts/components/errorPanel';
+import TransparentLoadingMask from 'app/components/charts/transparentLoadingMask';
+import ErrorPanel from 'app/components/charts/errorPanel';
 
 import HealthChart from './healthChart';
 import {YAxis} from './releaseChartControls';
@@ -41,7 +40,7 @@ const ReleaseChartContainer = ({
           if (errored) {
             return (
               <ErrorPanel>
-                <IconWarning color={theme.gray2} size="lg" />
+                <IconWarning color="gray500" size="lg" />
               </ErrorPanel>
             );
           }

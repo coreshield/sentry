@@ -64,7 +64,7 @@ if getattr(settings, "DEBUG_VIEWS", settings.DEBUG):
 if settings.DEBUG:
     urlpatterns += [
         url(
-            r"^_static/[^/]+/[^/]+/images/favicon\.ico$",
+            r"^_static/[^/]+/[^/]+/images/favicon\.(ico|png)$",
             generic.dev_favicon,
             name="sentry-dev-favicon",
         )
@@ -475,6 +475,7 @@ urlpatterns += [
                     name="sentry-organization-issue-list",
                 ),
                 url(
+                    # See src.sentry.models.group.Group.get_absolute_url if this changes
                     r"^(?P<organization_slug>[\w_-]+)/issues/(?P<group_id>\d+)/$",
                     react_page_view,
                     name="sentry-organization-issue",
@@ -631,6 +632,7 @@ urlpatterns += [
                 url(r"^vsts/", include("sentry.integrations.vsts.urls")),
                 url(r"^bitbucket/", include("sentry.integrations.bitbucket.urls")),
                 url(r"^bitbucket-server/", include("sentry.integrations.bitbucket_server.urls")),
+                url(r"^vercel/", include("sentry.integrations.vercel.urls")),
             ]
         ),
     ),

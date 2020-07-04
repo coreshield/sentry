@@ -41,15 +41,21 @@ def test_get_json_meta_type():
     assert get_json_meta_type("transaction", "Char") == "string"
     assert get_json_meta_type("foo", "unknown") == "string"
     assert get_json_meta_type("other", "") == "string"
-    assert get_json_meta_type("avg_duration", "number") == "duration"
-    assert get_json_meta_type("duration", "number") == "duration"
-    assert get_json_meta_type("p75", "number") == "duration"
-    assert get_json_meta_type("p95", "number") == "duration"
-    assert get_json_meta_type("p99", "number") == "duration"
-    assert get_json_meta_type("apdex_transaction_duration_300", "number") == "number"
-    assert get_json_meta_type("error_rate", "number") == "percentage"
-    assert get_json_meta_type("impact_300", "number") == "number"
-    assert get_json_meta_type("percentile_transaction_duration_0_95", "number") == "duration"
+    assert get_json_meta_type("avg_duration", "") == "duration"
+    assert get_json_meta_type("duration", "UInt64") == "duration"
+    assert get_json_meta_type("p50", "Float32") == "duration"
+    assert get_json_meta_type("p75", "Float32") == "duration"
+    assert get_json_meta_type("p95", "Float32") == "duration"
+    assert get_json_meta_type("p99", "Float32") == "duration"
+    assert get_json_meta_type("p100", "Float32") == "duration"
+    assert get_json_meta_type("apdex_transaction_duration_300", "Float32") == "number"
+    assert get_json_meta_type("failure_rate", "Float32") == "percentage"
+    assert get_json_meta_type("impact_300", "Float32") == "number"
+    assert get_json_meta_type("user_misery_300", "Float32") == "number"
+    assert get_json_meta_type("percentile_transaction_duration_0_95", "Float32") == "duration"
+    assert get_json_meta_type("count_thing", "UInt64") == "integer"
+    assert get_json_meta_type("count_thing", "String") == "string"
+    assert get_json_meta_type("count_thing", "Nullable(String)") == "string"
 
 
 class ParseSearchQueryTest(unittest.TestCase):
@@ -164,6 +170,22 @@ class ParseSearchQueryTest(unittest.TestCase):
             SearchFilter(
                 key=SearchKey(name="message"), operator="=", value=SearchValue(raw_value=' he"llo ')
             )
+        ]
+
+    def test_empty_spaces_stripped_correctly(self):
+        assert parse_search_query(
+            "event.type:transaction   transaction:/organizations/:orgId/discover/results/"
+        ) == [
+            SearchFilter(
+                key=SearchKey(name="event.type"),
+                operator="=",
+                value=SearchValue(raw_value="transaction"),
+            ),
+            SearchFilter(
+                key=SearchKey(name="transaction"),
+                operator="=",
+                value=SearchValue(raw_value="/organizations/:orgId/discover/results/"),
+            ),
         ]
 
     def test_timestamp(self):
@@ -570,7 +592,8 @@ class ParseSearchQueryTest(unittest.TestCase):
         ]
 
     def test_numeric_filter(self):
-        # Numeric format should still return a string if field isn't whitelisted
+        # Numeric format should still return a string if field isn't
+        # allowed
         assert parse_search_query("random_field:>500") == [
             SearchFilter(
                 key=SearchKey(name="random_field"),
@@ -628,6 +651,27 @@ class ParseSearchQueryTest(unittest.TestCase):
     def test_invalid_aggregate_column_with_duration_filter(self):
         with self.assertRaises(InvalidSearchQuery, regex="not a duration column"):
             parse_search_query("avg(stack.colno):>500s")
+
+    def test_aggregate_rel_time_filter(self):
+        now = timezone.now()
+        with freeze_time(now):
+            assert parse_search_query("last_seen():+7d") == [
+                SearchFilter(
+                    key=SearchKey(name="last_seen()"),
+                    operator="<=",
+                    value=SearchValue(raw_value=now - timedelta(days=7)),
+                )
+            ]
+            assert parse_search_query("last_seen():-2w") == [
+                SearchFilter(
+                    key=SearchKey(name="last_seen()"),
+                    operator=">=",
+                    value=SearchValue(raw_value=now - timedelta(days=14)),
+                )
+            ]
+            assert parse_search_query("random:-2w") == [
+                SearchFilter(key=SearchKey(name="random"), operator="=", value=SearchValue("-2w"))
+            ]
 
     def test_quotes_filtered_on_raw(self):
         # Enclose the full raw query? Strip it.
@@ -997,6 +1041,7 @@ class GetSnubaQueryArgsTest(TestCase):
             "user.email:foo@example.com release:1.2.1 fruit:apple hello",
             {
                 "project_id": [1, 2, 3],
+                "organization_id": 1,
                 "start": datetime.datetime(2015, 5, 18, 10, 15, 1, tzinfo=timezone.utc),
                 "end": datetime.datetime(2015, 5, 19, 10, 15, 1, tzinfo=timezone.utc),
             },
@@ -1105,7 +1150,7 @@ class GetSnubaQueryArgsTest(TestCase):
     def test_has_issue_id(self):
         has_issue_filter = get_filter("has:issue.id")
         assert has_issue_filter.group_ids == []
-        assert has_issue_filter.conditions == [[["isNull", ["issue.id"]], "!=", 1]]
+        assert has_issue_filter.conditions == [["issue.id", "!=", 0]]
 
     def test_not_has_issue_id(self):
         has_issue_filter = get_filter("!has:issue.id")
@@ -1144,11 +1189,29 @@ class GetSnubaQueryArgsTest(TestCase):
         assert _filter.filter_keys == {"group_id": [1]}
         assert _filter.group_ids == [1]
 
-    def test_issue_filter(self):
+    def test_issue_filter_invalid(self):
         with pytest.raises(InvalidSearchQuery) as err:
             get_filter("issue:1", {"organization_id": 1})
         assert "Invalid value '" in six.text_type(err)
         assert "' for 'issue:' filter" in six.text_type(err)
+
+    def test_issue_filter(self):
+        group = self.create_group(project=self.project)
+        _filter = get_filter(
+            "issue:{}".format(group.qualified_short_id), {"organization_id": self.organization.id}
+        )
+        assert _filter.conditions == [["issue.id", "=", group.id]]
+        assert _filter.filter_keys == {}
+        assert _filter.group_ids == []
+
+    def test_negated_issue_filter(self):
+        group = self.create_group(project=self.project)
+        _filter = get_filter(
+            "!issue:{}".format(group.qualified_short_id), {"organization_id": self.organization.id}
+        )
+        assert _filter.conditions == [["issue.id", "!=", group.id]]
+        assert _filter.filter_keys == {}
+        assert _filter.group_ids == []
 
     def test_environment_param(self):
         params = {"environment": ["", "prod"]}
@@ -1196,8 +1259,8 @@ class GetSnubaQueryArgsTest(TestCase):
         params = {"project_id": [p1.id, p2.id]}
         _filter = get_filter("project.name:{}".format(p1.slug), params)
         assert _filter.conditions == [["project_id", "=", p1.id]]
-        assert _filter.filter_keys == {"project_id": [p1.id, p2.id]}
-        assert _filter.project_ids == [p1.id, p2.id]
+        assert _filter.filter_keys == {"project_id": [p1.id]}
+        assert _filter.project_ids == [p1.id]
 
         params = {"project_id": [p1.id, p2.id]}
         _filter = get_filter("!project.name:{}".format(p1.slug), params)
@@ -1252,9 +1315,25 @@ class GetSnubaQueryArgsTest(TestCase):
         assert [[["isNull", ["user.ip"]], "=", 1], ["user.ip", "!=", "123"]] == conditions[2]
         assert [[["isNull", ["user.id"]], "=", 1], ["user.id", "!=", "123"]] == conditions[3]
 
+    def test_function_negation(self):
+        result = get_filter("!p95():5s")
+        assert result.having == [["p95", "!=", 5000.0]]
+
+        result = get_filter("!p95():>5s")
+        assert result.having == [["p95", "<=", 5000.0]]
+
+        result = get_filter("!p95():>=5s")
+        assert result.having == [["p95", "<", 5000.0]]
+
+        result = get_filter("!p95():<5s")
+        assert result.having == [["p95", ">=", 5000.0]]
+
+        result = get_filter("!p95():<=5s")
+        assert result.having == [["p95", ">", 5000.0]]
+
     def test_function_with_default_arguments(self):
-        result = get_filter("rpm():>100", {"start": before_now(minutes=5), "end": before_now()})
-        assert result.having == [["rpm", ">", 100]]
+        result = get_filter("epm():>100", {"start": before_now(minutes=5), "end": before_now()})
+        assert result.having == [["epm", ">", 100]]
 
     def test_function_with_alias(self):
         result = get_filter("percentile(transaction.duration, 0.95):>100")
@@ -1274,7 +1353,23 @@ class GetSnubaQueryArgsTest(TestCase):
 
     def test_function_with_date_arguments(self):
         result = get_filter("last_seen():2020-04-01T19:34:52+00:00")
-        assert result.having == [["last_seen", "=", 1585769692000]]
+        assert result.having == [["last_seen", "=", 1585769692]]
+
+    def test_function_with_date_negation(self):
+        result = get_filter("!last_seen():2020-04-01T19:34:52+00:00")
+        assert result.having == [["last_seen", "!=", 1585769692]]
+
+        result = get_filter("!last_seen():>2020-04-01T19:34:52+00:00")
+        assert result.having == [["last_seen", "<=", 1585769692]]
+
+        result = get_filter("!last_seen():>=2020-04-01T19:34:52+00:00")
+        assert result.having == [["last_seen", "<", 1585769692]]
+
+        result = get_filter("!last_seen():<2020-04-01T19:34:52+00:00")
+        assert result.having == [["last_seen", ">=", 1585769692]]
+
+        result = get_filter("!last_seen():<=2020-04-01T19:34:52+00:00")
+        assert result.having == [["last_seen", ">", 1585769692]]
 
     @pytest.mark.xfail(reason="this breaks issue search so needs to be redone")
     def test_trace_id(self):
@@ -1292,16 +1387,33 @@ class ResolveFieldListTest(unittest.TestCase):
     def test_blank_field_ignored(self):
         fields = ["", "title", "   "]
         result = resolve_field_list(fields, eventstore.Filter())
-        assert result["selected_columns"] == ["title", "id", "project.id"]
+        assert result["selected_columns"] == [
+            "title",
+            "id",
+            "project.id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project.name`",
+            ],
+        ]
 
     def test_automatic_fields_no_aggregates(self):
         fields = ["event.type", "message"]
         result = resolve_field_list(fields, eventstore.Filter())
-        assert result["selected_columns"] == ["event.type", "message", "id", "project.id"]
-        assert result["aggregations"] == [
-            ["transform(project_id, array(), array(), '')", None, "project.name"]
+        assert result["selected_columns"] == [
+            "event.type",
+            "message",
+            "id",
+            "project.id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project.name`",
+            ],
         ]
-        assert result["groupby"] == ["event.type", "message", "id", "project.id"]
+        assert result["aggregations"] == []
+        assert result["groupby"] == []
 
     def test_field_alias_duration_expansion_with_brackets(self):
         fields = [
@@ -1310,6 +1422,7 @@ class ResolveFieldListTest(unittest.TestCase):
             "last_seen()",
             "apdex(300)",
             "impact(300)",
+            "user_misery(300)",
             "percentile(transaction.duration, 0.75)",
             "percentile(transaction.duration, 0.95)",
             "percentile(transaction.duration, 0.99)",
@@ -1327,11 +1440,10 @@ class ResolveFieldListTest(unittest.TestCase):
                 None,
                 "impact_300",
             ],
+            ["uniqIf(user, greater(duration, 1200))", None, "user_misery_300"],
             ["quantile(0.75)", "transaction.duration", "percentile_transaction_duration_0_75"],
             ["quantile(0.95)", "transaction.duration", "percentile_transaction_duration_0_95"],
             ["quantile(0.99)", "transaction.duration", "percentile_transaction_duration_0_99"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == []
 
@@ -1347,11 +1459,15 @@ class ResolveFieldListTest(unittest.TestCase):
             "user.id",
             "message",
             "project.id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project`",
+            ],
         ]
         assert result["aggregations"] == [
             ["max", "timestamp", "last_seen"],
             ["argMax", ["id", "timestamp"], "latest_event"],
-            ["transform(project_id, array(), array(), '')", None, "project"],
         ]
         assert result["groupby"] == [
             "title",
@@ -1373,9 +1489,6 @@ class ResolveFieldListTest(unittest.TestCase):
             ["uniq", "user", "count_unique_user"],
             ["count", None, "count_id"],
             ["min", "timestamp", "min_timestamp"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == []
 
@@ -1388,9 +1501,6 @@ class ResolveFieldListTest(unittest.TestCase):
             ["count", None, "count_id"],
             ["count", None, "count_user"],
             ["count", None, "count_transaction_duration"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == []
 
@@ -1399,9 +1509,6 @@ class ResolveFieldListTest(unittest.TestCase):
         result = resolve_field_list(fields, eventstore.Filter())
         assert result["aggregations"] == [
             ["uniq", "user.id", "count_unique_user_id"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
 
     def test_aggregate_function_invalid_name(self):
@@ -1432,9 +1539,6 @@ class ResolveFieldListTest(unittest.TestCase):
         assert result["selected_columns"] == []
         assert result["aggregations"] == [
             ["quantile(0.75)", "transaction.duration", "percentile_transaction_duration_0_75"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == []
 
@@ -1472,69 +1576,60 @@ class ResolveFieldListTest(unittest.TestCase):
             in six.text_type(err)
         )
 
-    def test_rpm_function(self):
-        fields = ["rpm(3600)"]
+    def test_epm_function(self):
+        fields = ["epm(3600)"]
         result = resolve_field_list(fields, eventstore.Filter())
         assert result["selected_columns"] == []
         assert result["aggregations"] == [
-            ["divide(count(), divide(3600, 60))", None, "rpm_3600"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
+            ["divide(count(), divide(3600, 60))", None, "epm_3600"],
         ]
         assert result["groupby"] == []
 
         with pytest.raises(InvalidSearchQuery) as err:
-            fields = ["rpm(30)"]
+            fields = ["epm(30)"]
             resolve_field_list(fields, eventstore.Filter())
         assert (
-            "rpm(30): interval argument invalid: 30 must be greater than or equal to 60"
+            "epm(30): interval argument invalid: 30 must be greater than or equal to 60"
             in six.text_type(err)
         )
 
         with pytest.raises(InvalidSearchQuery) as err:
-            fields = ["rpm()"]
+            fields = ["epm()"]
             resolve_field_list(fields, eventstore.Filter())
-        assert "rpm(): invalid arguments: function called without default" in six.text_type(err)
+        assert "epm(): invalid arguments: function called without default" in six.text_type(err)
 
         with pytest.raises(InvalidSearchQuery) as err:
-            fields = ["rpm()"]
+            fields = ["epm()"]
             resolve_field_list(fields, eventstore.Filter(start="abc", end="def"))
-        assert "rpm(): invalid arguments: function called with invalid default" in six.text_type(
+        assert "epm(): invalid arguments: function called with invalid default" in six.text_type(
             err
         )
 
-        fields = ["rpm()"]
+        fields = ["epm()"]
         result = resolve_field_list(
             fields, eventstore.Filter(start=before_now(hours=2), end=before_now(hours=1))
         )
         assert result["selected_columns"] == []
         assert result["aggregations"] == [
-            ["divide(count(), divide(3600, 60))", None, "rpm"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
+            ["divide(count(), divide(3600, 60))", None, "epm"],
         ]
         assert result["groupby"] == []
 
-    def test_rps_function(self):
-        fields = ["rps(3600)"]
+    def test_eps_function(self):
+        fields = ["eps(3600)"]
         result = resolve_field_list(fields, eventstore.Filter())
 
         assert result["selected_columns"] == []
         assert result["aggregations"] == [
-            ["divide(count(), 3600)", None, "rps_3600"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
+            ["divide(count(), 3600)", None, "eps_3600"],
         ]
         assert result["groupby"] == []
 
         with pytest.raises(InvalidSearchQuery) as err:
-            fields = ["rps(0)"]
+            fields = ["eps(0)"]
             result = resolve_field_list(fields, eventstore.Filter())
         assert (
-            "rps(0): interval argument invalid: 0 must be greater than or equal to 1"
+            "eps(0): interval argument invalid: 0 must be greater than or equal to 1"
             in six.text_type(err)
         )
 
@@ -1550,9 +1645,6 @@ class ResolveFieldListTest(unittest.TestCase):
         ]
         assert result["aggregations"] == [
             ["count", None, "count"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == ["histogram_transaction_duration_10_1000_0"]
 
@@ -1604,14 +1696,27 @@ class ResolveFieldListTest(unittest.TestCase):
             resolve_field_list(fields, eventstore.Filter(orderby="timestamp"))
         assert "Cannot order" in six.text_type(err)
 
+    def test_orderby_unselected_field_with_histogram(self):
+        fields = ["histogram(transaction.duration, 10, 1000, 0)", "message"]
+        with pytest.raises(InvalidSearchQuery) as err:
+            resolve_field_list(fields, eventstore.Filter(orderby="timestamp"))
+        assert "Cannot order" in six.text_type(err)
+
     def test_orderby_basic_field(self):
         fields = ["message"]
         result = resolve_field_list(fields, eventstore.Filter(orderby="-message"))
-        assert result["selected_columns"] == ["message", "id", "project.id"]
-        assert result["aggregations"] == [
-            ["transform(project_id, array(), array(), '')", None, "project.name"]
+        assert result["selected_columns"] == [
+            "message",
+            "id",
+            "project.id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project.name`",
+            ],
         ]
-        assert result["groupby"] == ["message", "id", "project.id"]
+        assert result["aggregations"] == []
+        assert result["groupby"] == []
 
     def test_orderby_field_aggregate(self):
         fields = ["count(id)", "count_unique(user)"]
@@ -1620,9 +1725,6 @@ class ResolveFieldListTest(unittest.TestCase):
         assert result["aggregations"] == [
             ["count", None, "count_id"],
             ["uniq", "user", "count_unique_user"],
-            ["argMax", ["id", "timestamp"], "latest_event"],
-            ["argMax", ["project.id", "timestamp"], "projectid"],
-            ["transform(projectid, array(), array(), '')", None, "project.name"],
         ]
         assert result["groupby"] == []
 
@@ -1630,17 +1732,31 @@ class ResolveFieldListTest(unittest.TestCase):
         fields = ["issue"]
         result = resolve_field_list(fields, eventstore.Filter(orderby="-issue"))
         assert result["orderby"] == ["-issue.id"]
-        assert result["selected_columns"] == ["issue.id", "id", "project.id"]
-        assert result["aggregations"] == [
-            ["transform(project_id, array(), array(), '')", None, "project.name"]
+        assert result["selected_columns"] == [
+            "issue.id",
+            "id",
+            "project.id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project.name`",
+            ],
         ]
-        assert result["groupby"] == ["issue.id", "id", "project.id"]
+        assert result["aggregations"] == []
+        assert result["groupby"] == []
 
     def test_orderby_project_alias(self):
         fields = ["project"]
         result = resolve_field_list(fields, eventstore.Filter(orderby="-project"))
-        assert result["orderby"] == ["-project"]
-        assert result["aggregations"] == [
-            ["transform(project_id, array(), array(), '')", None, "project"]
+        assert result["selected_columns"] == [
+            "project.id",
+            "id",
+            [
+                "transform",
+                [["toString", ["project_id"]], ["array", []], ["array", []], "''"],
+                "`project`",
+            ],
         ]
-        assert result["groupby"] == ["project.id", "id"]
+        assert result["orderby"] == ["-project"]
+        assert result["aggregations"] == []
+        assert result["groupby"] == []

@@ -37,7 +37,7 @@ def schedule_digests():
 @instrumented_task(name="sentry.tasks.digests.deliver_digest", queue="digests.delivery")
 def deliver_digest(key, schedule_timestamp=None):
     from sentry import digests
-    from sentry.mail.adapter import MailAdapter
+    from sentry.mail import mail_adapter
 
     try:
         project, target_type, target_identifier = split_key(key)
@@ -59,4 +59,13 @@ def deliver_digest(key, schedule_timestamp=None):
             return
 
         if digest:
-            MailAdapter().notify_digest(project, digest, target_type, target_identifier)
+            mail_adapter.notify_digest(project, digest, target_type, target_identifier)
+        else:
+            logger.info(
+                "Skipped digest delivery due to empty digest",
+                extra={
+                    "project": project.id,
+                    "target_type": target_type.value,
+                    "target_identifier": target_identifier,
+                },
+            )

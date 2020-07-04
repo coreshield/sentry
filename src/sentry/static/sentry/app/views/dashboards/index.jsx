@@ -19,17 +19,17 @@ class Dashboards extends React.Component {
 
     return (
       <Feature features={['discover']} renderDisabled>
-        <GlobalSelectionHeader organization={organization} />
+        <GlobalSelectionHeader showEnvironmentSelector={false}>
+          <PageContent>
+            <LightWeightNoProjectMessage organization={organization}>
+              <PageHeader>
+                <PageHeading withMargins>{t('Dashboards')}</PageHeading>
+              </PageHeader>
 
-        <PageContent>
-          <LightWeightNoProjectMessage organization={organization}>
-            <PageHeader>
-              <PageHeading withMargins>{t('Dashboards')}</PageHeading>
-            </PageHeader>
-
-            {children}
-          </LightWeightNoProjectMessage>
-        </PageContent>
+              {children}
+            </LightWeightNoProjectMessage>
+          </PageContent>
+        </GlobalSelectionHeader>
       </Feature>
     );
   }

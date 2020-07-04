@@ -1,6 +1,6 @@
 import React from 'react';
 import {Link} from 'react-router';
-import queryString from 'query-string';
+import * as queryString from 'query-string';
 import {Query} from 'history';
 
 import {EventTag, Meta} from 'app/types';
@@ -11,7 +11,7 @@ import Pill from 'app/components/pill';
 import VersionHoverCard from 'app/components/versionHoverCard';
 import InlineSvg from 'app/components/inlineSvg';
 import Version from 'app/components/version';
-import {IconOpen} from 'app/icons/iconOpen';
+import {IconOpen} from 'app/icons';
 
 type Props = {
   tag: EventTag;
@@ -46,18 +46,7 @@ const EventTagsPill = ({
           <Version version={tag.value} anchor={false} tooltipRawVersion truncate />
         ) : (
           <DeviceName value={tag.value}>
-            {deviceName =>
-              meta ? (
-                <AnnotatedText
-                  value={deviceName}
-                  chunks={meta.chunks}
-                  remarks={meta.rem}
-                  errors={meta.err}
-                />
-              ) : (
-                deviceName
-              )
-            }
+            {deviceName => <AnnotatedText value={deviceName} meta={meta} />}
           </DeviceName>
         )}
       </Link>
@@ -67,21 +56,22 @@ const EventTagsPill = ({
         </a>
       )}
       {isRelease && (
-        <VersionHoverCard
-          containerClassName="pill-icon"
-          version={tag.value}
-          orgId={orgId}
-          projectId={projectId}
-        >
-          <Link
-            to={{
-              pathname: `${releasesPath}${tag.value}/`,
-              search: locationSearch,
-            }}
+        <div className="pill-icon">
+          <VersionHoverCard
+            orgSlug={orgId}
+            projectSlug={projectId}
+            releaseVersion={tag.value}
           >
-            <InlineSvg src="icon-circle-info" size="14px" />
-          </Link>
-        </VersionHoverCard>
+            <Link
+              to={{
+                pathname: `${releasesPath}${tag.value}/`,
+                search: locationSearch,
+              }}
+            >
+              <InlineSvg src="icon-circle-info" size="14px" />
+            </Link>
+          </VersionHoverCard>
+        </div>
       )}
     </Pill>
   );

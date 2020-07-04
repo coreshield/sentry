@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import operator
 import six
 
-
 from sentry.api.serializers import serialize
 from sentry.models import Release, ReleaseCommit, Commit, CommitFileChange, Group
 from sentry.api.serializers.models.commit import CommitSerializer, get_users_for_commits
@@ -247,7 +246,8 @@ def get_serialized_event_file_committers(project, event, frame_limit=25):
 
     for committer in committers:
         commit_ids = [commit.id for (commit, _) in committer["commits"]]
-        committer["commits"] = [serialized_commits_by_id[commit_id] for commit_id in commit_ids]
+        commits_result = [serialized_commits_by_id[commit_id] for commit_id in commit_ids]
+        committer["commits"] = dedupe_commits(commits_result)
 
     metrics.incr(
         "feature.owners.has-committers",
@@ -255,3 +255,7 @@ def get_serialized_event_file_committers(project, event, frame_limit=25):
         skip_internal=False,
     )
     return committers
+
+
+def dedupe_commits(commits):
+    return {c["id"]: c for c in commits}.values()

@@ -126,14 +126,14 @@ class QueryIntegrationTest(SnubaTestCase, TestCase):
         other_project.delete()
 
         result = discover.query(
-            selected_columns=["project.name", "message", "project"],
+            selected_columns=["message", "project"],
             query="",
             params={"project_id": project_ids},
-            orderby="project.name",
+            orderby="project",
         )
         data = result["data"]
         assert len(data) == 3
-        assert [item["project.name"] for item in data] == ["", "a" * 32, "z" * 32]
+        assert [item["project"] for item in data] == ["", "a" * 32, "z" * 32]
 
     def test_field_aliasing_in_selected_columns(self):
         result = discover.query(
@@ -210,6 +210,7 @@ class QueryIntegrationTest(SnubaTestCase, TestCase):
         assert data[0]["project.id"] == self.project.id
         assert data[0]["user.email"] == "bruce@example.com"
         assert data[0]["release"] == "first-release"
+        assert data[0]["project.name"] == self.project.slug
 
         assert len(result["meta"]) == 5
         assert result["meta"][0] == {"name": "user.email", "type": "Nullable(String)"}
@@ -227,8 +228,6 @@ class QueryIntegrationTest(SnubaTestCase, TestCase):
         )
         data = result["data"]
         assert len(data) == 1
-        assert data[0]["projectid"] == self.project.id
-        assert data[0]["latest_event"] == self.event.event_id
         assert data[0]["count_unique_user_email"] == 1
 
     def test_release_condition(self):
@@ -243,6 +242,18 @@ class QueryIntegrationTest(SnubaTestCase, TestCase):
             selected_columns=["id", "message"],
             query="release:{}".format(self.release.version),
             params={"project_id": [self.project.id]},
+        )
+        assert len(result["data"]) == 1
+        data = result["data"]
+        assert data[0]["id"] == self.event.event_id
+        assert data[0]["message"] == self.event.message
+        assert "event_id" not in data[0]
+
+    def test_latest_release_condition(self):
+        result = discover.query(
+            selected_columns=["id", "message"],
+            query="release:latest",
+            params={"project_id": [self.project.id], "organization_id": self.organization.id},
         )
         assert len(result["data"]) == 1
         data = result["data"]
@@ -375,22 +386,112 @@ class QueryTransformTest(TestCase):
             selected_columns=["user", "project"], query="", params={"project_id": [self.project.id]}
         )
         mock_query.assert_called_with(
-            selected_columns=["email", "username", "ip_address", "user_id", "project_id"],
-            aggregations=[
+            selected_columns=[
+                "email",
+                "username",
+                "ip_address",
+                "user_id",
+                "project_id",
                 [
-                    "transform(project_id, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), self.project.slug
-                    ),
-                    None,
-                    "project",
-                ]
+                    "transform",
+                    [
+                        ["toString", ["project_id"]],
+                        ["array", [u"'{}'".format(self.project.id)]],
+                        ["array", [u"'{}'".format(self.project.slug)]],
+                        "''",
+                    ],
+                    "`project`",
+                ],
             ],
+            aggregations=[],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             end=None,
             start=None,
             conditions=[],
-            groupby=["email", "username", "ip_address", "user_id", "project_id"],
+            groupby=[],
+            having=[],
+            orderby=None,
+            limit=50,
+            offset=None,
+            referrer=None,
+        )
+
+    @patch("sentry.snuba.discover.raw_query")
+    def test_project_filter_limits_automatic_fields(self, mock_query):
+        project2 = self.create_project(organization=self.organization)
+        mock_query.return_value = {
+            "meta": [{"name": "title"}, {"name": "project_id"}],
+            "data": [{"title": "stuff", "project_id": project2.id}],
+        }
+        discover.query(
+            selected_columns=["title", "project"],
+            query="project:{}".format(project2.slug),
+            params={"project_id": [self.project.id, project2.id]},
+        )
+        mock_query.assert_called_with(
+            selected_columns=[
+                "title",
+                "project_id",
+                [
+                    "transform",
+                    [
+                        ["toString", ["project_id"]],
+                        ["array", [u"'{}'".format(project2.id)]],
+                        ["array", [u"'{}'".format(project2.slug)]],
+                        "''",
+                    ],
+                    "`project`",
+                ],
+            ],
+            aggregations=[],
+            filter_keys={"project_id": [project2.id]},
+            dataset=Dataset.Discover,
+            end=None,
+            start=None,
+            conditions=[["project_id", "=", project2.id]],
+            groupby=[],
+            having=[],
+            orderby=None,
+            limit=50,
+            offset=None,
+            referrer=None,
+        )
+
+    @patch("sentry.snuba.discover.raw_query")
+    def test_project_with_aggregate_grouping(self, mock_query):
+        project2 = self.create_project(organization=self.organization)
+        mock_query.return_value = {
+            "meta": [{"name": "title"}, {"name": "project_id"}],
+            "data": [{"title": "stuff", "project_id": project2.id}],
+        }
+        discover.query(
+            selected_columns=["title", "project", "p99()"],
+            query="project:{}".format(project2.slug),
+            params={"project_id": [self.project.id, project2.id]},
+        )
+        mock_query.assert_called_with(
+            selected_columns=[
+                "title",
+                "project_id",
+                [
+                    "transform",
+                    [
+                        ["toString", ["project_id"]],
+                        ["array", [u"'{}'".format(project2.id)]],
+                        ["array", [u"'{}'".format(project2.slug)]],
+                        "''",
+                    ],
+                    "`project`",
+                ],
+            ],
+            aggregations=[[u"quantile(0.99)", "duration", u"p99"]],
+            filter_keys={"project_id": [project2.id]},
+            dataset=Dataset.Discover,
+            end=None,
+            start=None,
+            conditions=[["project_id", "=", project2.id]],
+            groupby=["title", "project_id"],
             having=[],
             orderby=None,
             limit=50,
@@ -444,18 +545,7 @@ class QueryTransformTest(TestCase):
         )
         mock_query.assert_called_with(
             selected_columns=["transaction", "duration"],
-            aggregations=[
-                ["uniq", "duration", "count_unique_transaction_duration"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), self.project.slug
-                    ),
-                    None,
-                    "project.name",
-                ],
-            ],
+            aggregations=[["uniq", "duration", "count_unique_transaction_duration"]],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             end=None,
@@ -486,15 +576,6 @@ class QueryTransformTest(TestCase):
             aggregations=[
                 ["quantile(0.95)", "duration", "p95"],
                 ["uniq", "transaction", "count_unique_transaction"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), self.project.slug
-                    ),
-                    None,
-                    "project.name",
-                ],
             ],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
@@ -526,15 +607,6 @@ class QueryTransformTest(TestCase):
             aggregations=[
                 ["quantile(0.95)", "duration", "p95"],
                 ["uniq", "transaction", "count_unique_transaction"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), self.project.slug
-                    ),
-                    None,
-                    "project.name",
-                ],
             ],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
@@ -550,35 +622,48 @@ class QueryTransformTest(TestCase):
         )
 
     @patch("sentry.snuba.discover.raw_query")
-    def test_selected_columns_error_rate_alias(self, mock_query):
+    def test_selected_columns_failure_rate_alias(self, mock_query):
         mock_query.return_value = {
-            "meta": [{"name": "transaction"}, {"name": "error_rate"}],
-            "data": [{"transaction": "api.do_things", "error_rate": 0.314159}],
+            "meta": [{"name": "transaction"}, {"name": "failure_rate"}],
+            "data": [{"transaction": "api.do_things", "failure_rate": 0.314159}],
         }
         discover.query(
-            selected_columns=["transaction", "error_rate()"],
+            selected_columns=["transaction", "failure_rate()"],
             query="",
             params={"project_id": [self.project.id]},
             auto_fields=True,
         )
         mock_query.assert_called_with(
             selected_columns=["transaction"],
-            aggregations=[
-                [
-                    "divide(countIf(and(notEquals(transaction_status, 0), notEquals(transaction_status, 2))), count())",
-                    None,
-                    "error_rate",
-                ],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), self.project.slug
-                    ),
-                    None,
-                    "project.name",
-                ],
-            ],
+            aggregations=[["failure_rate()", None, "failure_rate"]],
+            filter_keys={"project_id": [self.project.id]},
+            dataset=Dataset.Discover,
+            groupby=["transaction"],
+            conditions=[],
+            end=None,
+            start=None,
+            orderby=None,
+            having=[],
+            limit=50,
+            offset=None,
+            referrer=None,
+        )
+
+    @patch("sentry.snuba.discover.raw_query")
+    def test_selected_columns_user_misery_alias(self, mock_query):
+        mock_query.return_value = {
+            "meta": [{"name": "transaction"}, {"name": "user_misery_300"}],
+            "data": [{"transaction": "api.do_things", "user_misery_300": 15}],
+        }
+        discover.query(
+            selected_columns=["transaction", "user_misery(300)"],
+            query="",
+            params={"project_id": [self.project.id]},
+            auto_fields=True,
+        )
+        mock_query.assert_called_with(
+            selected_columns=["transaction"],
+            aggregations=[["uniqIf(user, greater(duration, 1200))", None, "user_misery_300"]],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             groupby=["transaction"],
@@ -608,18 +693,7 @@ class QueryTransformTest(TestCase):
         )
         mock_query.assert_called_with(
             selected_columns=["transaction"],
-            aggregations=[
-                ["quantile(0.75)", "duration", "percentile_transaction_duration_0_75"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), six.text_type(self.project.slug)
-                    ),
-                    None,
-                    "project.name",
-                ],
-            ],
+            aggregations=[["quantile(0.75)", "duration", "percentile_transaction_duration_0_75"]],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             groupby=["transaction"],
@@ -840,7 +914,7 @@ class QueryTransformTest(TestCase):
         mock_query.assert_called_with(
             selected_columns=["transaction", "duration"],
             conditions=[["project_id", "=", project2.id]],
-            filter_keys={"project_id": [self.project.id, project2.id]},
+            filter_keys={"project_id": [project2.id]},
             groupby=[],
             dataset=Dataset.Discover,
             aggregations=[],
@@ -1041,7 +1115,7 @@ class QueryTransformTest(TestCase):
                 ["avg", "duration", "avg_transaction_duration"],
                 ["max", "time", "max_time"],
             ],
-            having=[["max_time", ">", 1575158400000]],
+            having=[["max_time", ">", 1575158400]],
             end=end_time,
             start=start_time,
             orderby=None,
@@ -1125,18 +1199,7 @@ class QueryTransformTest(TestCase):
         )
         mock_query.assert_called_with(
             selected_columns=["transaction"],
-            aggregations=[
-                ["quantile(0.75)", "duration", "percentile_transaction_duration_0_75"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), six.text_type(self.project.slug)
-                    ),
-                    None,
-                    "project.name",
-                ],
-            ],
+            aggregations=[["quantile(0.75)", "duration", "percentile_transaction_duration_0_75"]],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             groupby=["transaction"],
@@ -1162,7 +1225,7 @@ class QueryTransformTest(TestCase):
         discover.query(
             selected_columns=["histogram(transaction.duration, 10)", "count()"],
             query="",
-            params={"project_id": [self.project.id]},
+            params={"project_id": [self.project.id], "environment": self.environment.name},
             auto_fields=True,
             use_aggregate_conditions=False,
         )
@@ -1174,22 +1237,11 @@ class QueryTransformTest(TestCase):
                     "histogram_transaction_duration_10_1000_0",
                 ]
             ],
-            aggregations=[
-                ["count", None, "count"],
-                ["argMax", ["event_id", "timestamp"], "latest_event"],
-                ["argMax", ["project_id", "timestamp"], "projectid"],
-                [
-                    "transform(projectid, array({}), array('{}'), '')".format(
-                        six.text_type(self.project.id), six.text_type(self.project.slug)
-                    ),
-                    None,
-                    "project.name",
-                ],
-            ],
+            aggregations=[["count", None, "count"]],
             filter_keys={"project_id": [self.project.id]},
             dataset=Dataset.Discover,
             groupby=["histogram_transaction_duration_10_1000_0"],
-            conditions=[],
+            conditions=[[["environment", "=", self.environment.name]]],
             end=None,
             start=None,
             orderby=None,
@@ -1487,6 +1539,34 @@ class QueryTransformTest(TestCase):
         assert results["data"][0]["histogram_transaction_duration_10"] == 869
         assert results["data"][0]["count"] == 1
 
+    @patch("sentry.snuba.discover.raw_query")
+    def test_histogram_enormous_max(self, mock_query):
+        mock_query.side_effect = [
+            {"data": [{"max_transaction.duration": 64733000000, "min_transaction.duration": 1}]},
+            {
+                "meta": [
+                    {"name": "histogram_transaction_duration_10_6473300000_0"},
+                    {"name": "count"},
+                ],
+                "data": [
+                    {"histogram_transaction_duration_10_6473300000_0": 64733000000, "count": 1}
+                ],
+            },
+        ]
+
+        results = discover.query(
+            selected_columns=["histogram(transaction.duration, 10)", "count()"],
+            query="",
+            params={"project_id": [self.project.id]},
+            orderby="histogram_transaction_duration_10",
+            auto_fields=True,
+            use_aggregate_conditions=False,
+        )
+
+        assert len(results["data"]) == 11
+        assert results["data"][-1]["histogram_transaction_duration_10"] == 64733000000
+        assert results["data"][-1]["count"] == 1
+
 
 class TimeseriesQueryTest(SnubaTestCase, TestCase):
     def setUp(self):
@@ -1585,9 +1665,9 @@ class TimeseriesQueryTest(SnubaTestCase, TestCase):
         )
         assert len(result.data["data"]) == 3
 
-    def test_error_rate_field_alias(self):
+    def test_failure_rate_field_alias(self):
         result = discover.timeseries_query(
-            selected_columns=["error_rate()"],
+            selected_columns=["failure_rate()"],
             query="event.type:transaction transaction:api.issue.delete",
             params={
                 "start": self.day_ago,
@@ -2093,7 +2173,7 @@ class GetFacetsTest(SnubaTestCase, TestCase):
         projects = [f for f in result if f.key == "project"]
         assert [p.count for p in projects] == [1, 1]
 
-    def test_enviroment_promoted_tag(self):
+    def test_environment_promoted_tag(self):
         for env in ("prod", "staging", None):
             self.store_event(
                 data={

@@ -27,6 +27,33 @@ describe('getParams', function() {
     });
   });
 
+  it('should return statsPeriod if statsPeriod, start, and end are provided', function() {
+    expect(
+      getParams({
+        start: '2019-10-01T00:00:00',
+        end: '2019-10-02T00:00:00',
+        statsPeriod: '55d',
+        period: '90d',
+      })
+    ).toEqual({statsPeriod: '55d'});
+
+    expect(
+      getParams({
+        start: '2019-10-01T00:00:00',
+        end: '2019-10-02T00:00:00',
+        statsPeriod: '55d',
+      })
+    ).toEqual({statsPeriod: '55d'});
+
+    expect(
+      getParams({
+        start: '2019-10-01T00:00:00',
+        end: '2019-10-02T00:00:00',
+        period: '55d',
+      })
+    ).toEqual({statsPeriod: '55d'});
+  });
+
   it('should parse start and end', function() {
     expect(
       getParams({start: '2019-10-01T00:00:00', end: '2019-10-02T00:00:00'})
@@ -130,5 +157,14 @@ describe('parseStatsPeriod', function() {
     expect(parseStatsPeriod('24f')).toEqual(undefined);
     expect(parseStatsPeriod('')).toEqual(undefined);
     expect(parseStatsPeriod('24')).toEqual({period: '24', periodLength: 's'});
+  });
+
+  it('does not return start and end if `allowAbsoluteDatetime` option is passed', function() {
+    expect(
+      getParams(
+        {start: '2019-10-01T00:00:00', end: '2019-10-02T00:00:00'},
+        {allowAbsoluteDatetime: false}
+      )
+    ).toEqual({statsPeriod: '14d'});
   });
 });

@@ -70,3 +70,35 @@ describe('appendTagCondition', function() {
     expect(result).toEqual('user.name:"jill jones"');
   });
 });
+
+describe('decodeScalar()', function() {
+  it('unwraps array values', function() {
+    expect(utils.decodeScalar(['one', 'two'])).toEqual('one');
+  });
+
+  it('handles strings', function() {
+    expect(utils.decodeScalar('one')).toEqual('one');
+  });
+
+  it('handles falsey values', function() {
+    expect(utils.decodeScalar(undefined)).toBeUndefined();
+    expect(utils.decodeScalar(false)).toBeUndefined();
+    expect(utils.decodeScalar('')).toBeUndefined();
+  });
+});
+
+describe('decodeList()', function() {
+  it('wraps string values', function() {
+    expect(utils.decodeList('one')).toEqual(['one']);
+  });
+
+  it('handles arrays', function() {
+    expect(utils.decodeList(['one', 'two'])).toEqual(['one', 'two']);
+  });
+
+  it('handles falsey values', function() {
+    expect(utils.decodeList(undefined)).toBeUndefined();
+    expect(utils.decodeList(false)).toBeUndefined();
+    expect(utils.decodeList('')).toBeUndefined();
+  });
+});

@@ -51,16 +51,15 @@ const Wrapper = styled('div')`
   flex: 1;
   justify-content: flex-end;
   text-align: right;
-  margin-right: ${space(2)};
   margin-left: ${space(0.5)};
 `;
 
 const Period = styled(Link)<{selected: boolean}>`
-  color: ${p => (p.selected ? p.theme.gray3 : p.theme.gray2)};
+  color: ${p => (p.selected ? p.theme.gray600 : p.theme.gray500)};
 
   &:hover,
   &:focus {
-    color: ${p => (p.selected ? p.theme.gray3 : p.theme.gray2)};
+    color: ${p => (p.selected ? p.theme.gray600 : p.theme.gray500)};
   }
 `;
 

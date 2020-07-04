@@ -5,7 +5,7 @@ import {t} from 'app/locale';
 import space from 'app/styles/space';
 import Button from 'app/components/button';
 import Well from 'app/components/well';
-import {IconCommit} from 'app/icons/iconCommit';
+import {IconCommit} from 'app/icons';
 
 type Props = {
   orgId: string;
@@ -14,7 +14,7 @@ type Props = {
 const ReleaseNoCommitData = ({orgId}: Props) => (
   <StyledWell centered>
     <IconCommit size="xl" />
-    <h5>{t('Releases are better with commit data!')}</h5>
+    <h4>{t('Releases are better with commit data!')}</h4>
     <p>
       {t(
         'Connect a repository to see commit info, files changed, and authors involved in future releases.'

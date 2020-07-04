@@ -7,7 +7,7 @@ import pick from 'lodash/pick';
 import styled from '@emotion/styled';
 import {Location} from 'history';
 
-import {Organization, SavedQuery} from 'app/types';
+import {Organization, SavedQuery, SelectValue} from 'app/types';
 import {PageContent} from 'app/styles/organization';
 import {t} from 'app/locale';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
@@ -15,6 +15,7 @@ import Alert from 'app/components/alert';
 import AsyncComponent from 'app/components/asyncComponent';
 import Banner from 'app/components/banner';
 import Button from 'app/components/button';
+import DropdownControl, {DropdownItem} from 'app/components/dropdownControl';
 import ConfigStore from 'app/stores/configStore';
 import Feature from 'app/components/acl/feature';
 import LightWeightNoProjectMessage from 'app/components/lightWeightNoProjectMessage';
@@ -25,13 +26,23 @@ import localStorage from 'app/utils/localStorage';
 import space from 'app/styles/space';
 import withOrganization from 'app/utils/withOrganization';
 import EventView from 'app/utils/discover/eventView';
+import {decodeScalar} from 'app/utils/queryString';
 
 import {DEFAULT_EVENT_VIEW} from './data';
-import {getPrebuiltQueries, decodeScalar} from './utils';
+import {getPrebuiltQueries} from './utils';
 import QueryList from './queryList';
 import backgroundSpace from '../../../images/spot/background-space.svg';
 
 const BANNER_DISMISSED_KEY = 'discover-banner-dismissed';
+
+const SORT_OPTIONS: SelectValue<string>[] = [
+  {label: t('Recently Edited'), value: '-dateUpdated'},
+  {label: t('My Queries'), value: 'myqueries'},
+  {label: t('Query Name (A-Z)'), value: 'name'},
+  {label: t('Date Created (Newest)'), value: '-dateCreated'},
+  {label: t('Date Created (Oldest)'), value: 'dateCreated'},
+  {label: t('Most Outdated'), value: 'dateUpdated'},
+];
 
 function checkIsBannerHidden(): boolean {
   return localStorage.getItem(BANNER_DISMISSED_KEY) === 'true';
@@ -78,6 +89,15 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     return String(decodeScalar(location.query.query) || '').trim();
   }
 
+  getActiveSort() {
+    const {location} = this.props;
+
+    const urlSort = location.query.sort
+      ? decodeScalar(location.query.sort)
+      : '-dateUpdated';
+    return SORT_OPTIONS.find(item => item.value === urlSort) || SORT_OPTIONS[0];
+  }
+
   getEndpoints(): [string, string, any][] {
     const {organization, location} = this.props;
 
@@ -114,7 +134,7 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
       cursor,
       query: `version:2 name:"${searchQuery}"`,
       per_page: perPage,
-      sortBy: '-dateUpdated',
+      sortBy: this.getActiveSort().value,
     };
     if (!cursor) {
       delete queryParams.cursor;
@@ -140,7 +160,7 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
       });
     }
 
-    const PAYLOAD_KEYS = ['cursor', 'query'] as const;
+    const PAYLOAD_KEYS = ['sort', 'cursor', 'query'] as const;
 
     const payloadKeysChanged = !isEqual(
       pick(prevProps.location.query, PAYLOAD_KEYS),
@@ -171,6 +191,18 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
         ...location.query,
         cursor: undefined,
         query: String(searchQuery).trim() || undefined,
+      },
+    });
+  };
+
+  handleSortChange = (value: string) => {
+    const {location} = this.props;
+    ReactRouter.browserHistory.push({
+      pathname: location.pathname,
+      query: {
+        ...location.query,
+        cursor: undefined,
+        sort: value,
       },
     });
   };
@@ -207,7 +239,7 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
         >
           {t('Build a new query')}
         </StarterButton>
-        <StarterButton href="https://docs.sentry.io/performance/discover/">
+        <StarterButton href="https://docs.sentry.io/performance-monitoring/discover-queries/">
           {t('Read the docs')}
         </StarterButton>
       </Banner>
@@ -215,34 +247,28 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
   }
 
   renderActions() {
-    const {location, organization} = this.props;
-
-    const eventView = EventView.fromNewQueryWithLocation(DEFAULT_EVENT_VIEW, location);
-    const to = eventView.getResultsViewUrlTarget(organization.slug);
+    const activeSort = this.getActiveSort();
 
     return (
       <StyledActions>
         <StyledSearchBar
           defaultQuery=""
           query={this.getSavedQuerySearchQuery()}
-          placeholder={t('Search for saved queries')}
+          placeholder={t('Search saved queries')}
           onSearch={this.handleSearchQuery}
         />
-        <StyledOr>or</StyledOr>
-        <StyledButton
-          data-test-id="build-new-query"
-          to={to}
-          priority="primary"
-          onClick={() => {
-            trackAnalyticsEvent({
-              eventKey: 'discover_v2.build_new_query',
-              eventName: 'Discoverv2: Build a new Discover Query',
-              organization_id: parseInt(this.props.organization.id, 10),
-            });
-          }}
-        >
-          {t('Build a new query')}
-        </StyledButton>
+        <DropdownControl buttonProps={{prefix: t('Sort By')}} label={activeSort.label}>
+          {SORT_OPTIONS.map(({label, value}) => (
+            <DropdownItem
+              key={value}
+              onSelect={this.handleSortChange}
+              eventKey={value}
+              isActive={value === activeSort.value}
+            >
+              {label}
+            </DropdownItem>
+          ))}
+        </DropdownControl>
       </StyledActions>
     );
   }
@@ -266,41 +292,26 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     );
   }
 
-  render() {
-    let body: React.ReactNode;
+  renderBody() {
     const {location, organization} = this.props;
-    const {loading, savedQueries, savedQueriesPageLinks, error} = this.state;
-    if (loading) {
-      body = this.renderLoading();
-    } else if (error) {
-      body = this.renderError();
-    } else {
-      body = (
-        <PageContent>
-          <StyledPageHeader>{t('Discover')}</StyledPageHeader>
-          {this.renderBanner()}
-          {this.renderActions()}
-          <QueryList
-            pageLinks={savedQueriesPageLinks}
-            savedQueries={savedQueries}
-            savedQuerySearchQuery={this.getSavedQuerySearchQuery()}
-            location={location}
-            organization={organization}
-            onQueryChange={this.handleQueryChange}
-          />
-          <Feature features={['organizations:discover']} organization={organization}>
-            <div>
-              <SwitchLink
-                href={`/organizations/${organization.slug}/discover/`}
-                onClick={this.onGoLegacyDiscover}
-              >
-                {t('Go to Legacy Discover')}
-              </SwitchLink>
-            </div>
-          </Feature>
-        </PageContent>
-      );
-    }
+    const {savedQueries, savedQueriesPageLinks} = this.state;
+
+    return (
+      <QueryList
+        pageLinks={savedQueriesPageLinks}
+        savedQueries={savedQueries}
+        savedQuerySearchQuery={this.getSavedQuerySearchQuery()}
+        location={location}
+        organization={organization}
+        onQueryChange={this.handleQueryChange}
+      />
+    );
+  }
+
+  render() {
+    const {location, organization} = this.props;
+    const eventView = EventView.fromNewQueryWithLocation(DEFAULT_EVENT_VIEW, location);
+    const to = eventView.getResultsViewUrlTarget(organization.slug);
 
     return (
       <Feature
@@ -311,7 +322,41 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
         <SentryDocumentTitle title={t('Discover')} objSlug={organization.slug}>
           <StyledPageContent>
             <LightWeightNoProjectMessage organization={organization}>
-              {body}
+              <PageContent>
+                <StyledPageHeader>
+                  {t('Discover')}
+                  <StyledButton
+                    data-test-id="build-new-query"
+                    to={to}
+                    priority="primary"
+                    onClick={() => {
+                      trackAnalyticsEvent({
+                        eventKey: 'discover_v2.build_new_query',
+                        eventName: 'Discoverv2: Build a new Discover Query',
+                        organization_id: parseInt(this.props.organization.id, 10),
+                      });
+                    }}
+                  >
+                    {t('Build a new query')}
+                  </StyledButton>
+                </StyledPageHeader>
+                {this.renderBanner()}
+                {this.renderActions()}
+                {this.renderComponent()}
+                <Feature
+                  features={['organizations:discover']}
+                  organization={organization}
+                >
+                  <div>
+                    <SwitchLink
+                      href={`/organizations/${organization.slug}/discover/`}
+                      onClick={this.onGoLegacyDiscover}
+                    >
+                      {t('Go to Legacy Discover')}
+                    </SwitchLink>
+                  </div>
+                </Feature>
+              </PageContent>
             </LightWeightNoProjectMessage>
           </StyledPageContent>
         </SentryDocumentTitle>
@@ -326,25 +371,22 @@ const StyledPageContent = styled(PageContent)`
 
 export const StyledPageHeader = styled('div')`
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   font-size: ${p => p.theme.headerFontSize};
-  color: ${p => p.theme.gray4};
-  height: 40px;
-  margin-bottom: ${space(1)};
+  color: ${p => p.theme.gray800};
+  justify-content: space-between;
+  margin-bottom: ${space(2)};
 `;
 
 const StyledSearchBar = styled(SearchBar)`
   flex-grow: 1;
 `;
 
-const StyledOr = styled('span')`
-  color: ${p => p.theme.gray2};
-  font-size: ${p => p.theme.fontSizeMedium};
-  margin: 0 ${space(1.5)};
-`;
-
 const StyledActions = styled('div')`
-  display: flex;
+  display: grid;
+  grid-gap: ${space(2)};
+  grid-template-columns: auto min-content;
+
   align-items: center;
   margin-bottom: ${space(3)};
 `;

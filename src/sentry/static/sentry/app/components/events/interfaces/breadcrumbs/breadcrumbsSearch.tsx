@@ -2,9 +2,8 @@ import React from 'react';
 import styled from '@emotion/styled';
 
 import TextField from 'app/components/forms/textField';
-import {IconSearch} from 'app/icons/iconSearch';
+import {IconSearch, IconClose} from 'app/icons';
 import {t} from 'app/locale';
-import {IconClose} from 'app/icons/iconClose';
 import space from 'app/styles/space';
 
 type Props = {
@@ -27,7 +26,7 @@ const BreadCrumbsSearch = ({
       onChange={onChangeSearchTerm}
     />
     <StyledIconSearch />
-    <StyledIconClose show={!!searchTerm} onClick={onClearSearchTerm} circle />
+    <StyledIconClose show={!!searchTerm} onClick={onClearSearchTerm} isCircled />
   </Wrapper>
 );
 
@@ -42,15 +41,15 @@ const Wrapper = styled('div')`
 const StyledTextField = styled(TextField)<TextField['props']>`
   margin-bottom: 0;
   input {
+    height: 28px;
     padding-left: ${space(4)};
     padding-right: ${space(4)};
-    height: 28px;
   }
 `;
 
 const StyledIconSearch = styled(IconSearch)`
   position: absolute;
-  color: ${p => p.theme.gray2};
+  color: ${p => p.theme.gray500};
   font-size: ${p => p.theme.fontSizeMedium};
   left: ${space(1)};
 `;
@@ -62,7 +61,7 @@ const StyledIconClose = styled(IconClose, {
 }>`
   position: absolute;
   cursor: pointer;
-  color: ${p => p.theme.gray6};
+  color: ${p => p.theme.gray400};
   right: ${space(0.75)};
   visibility: ${p => (p.show ? 'visible' : 'hidden')};
 `;

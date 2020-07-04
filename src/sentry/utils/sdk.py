@@ -20,8 +20,11 @@ UNSAFE_FILES = (
     "sentry/event_manager.py",
     "sentry/tasks/process_buffer.py",
     "sentry/ingest/ingest_consumer.py",
-    "sentry/ingest/outcomes_consumer.py",
+    # This consumer lives outside of sentry but is just as unsafe.
+    "outcomes_consumer.py",
 )
+
+UNSAFE_TAG = "_unsafe"
 
 # Reexport sentry_sdk just in case we ever have to write another shim like we
 # did for raven
@@ -35,6 +38,11 @@ def is_current_event_safe():
     """
 
     with configure_scope() as scope:
+
+        # Scope was explicitly marked as unsafe
+        if scope._tags.get(UNSAFE_TAG):
+            return False
+
         project_id = scope._tags.get("project")
 
         if project_id and project_id == settings.SENTRY_PROJECT:
@@ -45,6 +53,17 @@ def is_current_event_safe():
             return False
 
     return True
+
+
+def mark_scope_as_unsafe():
+    """
+    Set the unsafe tag on the SDK scope for outgoing crashe and transactions.
+
+    Marking a scope explicitly as unsafe allows the recursion breaker to
+    decide early, before walking the stack and checking for unsafe files.
+    """
+    with configure_scope() as scope:
+        scope.set_tag(UNSAFE_TAG, True)
 
 
 def set_current_project(project_id):
@@ -100,13 +119,14 @@ class SentryInternalFilter(logging.Filter):
     def filter(self, record):
         # TODO(mattrobenolt): handle an upstream Sentry
         metrics.incr("internal.uncaptured.logs", skip_internal=False)
-        return is_current_event_safe()
+        return True
 
 
 def configure_sdk():
     from sentry_sdk.integrations.logging import LoggingIntegration
     from sentry_sdk.integrations.django import DjangoIntegration
     from sentry_sdk.integrations.celery import CeleryIntegration
+    from sentry_sdk.integrations.redis import RedisIntegration
 
     assert sentry_sdk.Hub.main.client is None
 
@@ -153,7 +173,8 @@ def configure_sdk():
                 relay_transport.capture_event(event)
             else:
                 metrics.incr("internal.uncaptured.events.relay", skip_internal=False)
-                sdk_logger.warn("internal-error.unsafe-stacktrace.relay")
+                if event.get("type") != "transaction":
+                    sdk_logger.warn("internal-error.unsafe-stacktrace.relay")
 
     sentry_sdk.init(
         transport=capture_event,
@@ -162,6 +183,7 @@ def configure_sdk():
             CeleryIntegration(),
             LoggingIntegration(event_level=None),
             RustInfoIntegration(),
+            RedisIntegration(),
         ],
         traceparent_v2=True,
         **sdk_options

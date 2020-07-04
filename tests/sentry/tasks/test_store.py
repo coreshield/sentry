@@ -3,7 +3,6 @@ from __future__ import absolute_import
 import pytest
 
 from sentry.utils.compat import mock
-from sentry import options
 from time import time
 
 from sentry import quotas
@@ -77,8 +76,8 @@ def mock_get_symbolication_function():
 
 
 @pytest.fixture
-def mock_default_cache():
-    with mock.patch("sentry.tasks.store.default_cache") as m:
+def mock_event_processing_store():
+    with mock.patch("sentry.tasks.store.event_processing_store") as m:
         yield m
 
 
@@ -121,7 +120,6 @@ def test_move_to_symbolicate_event(
         "extra": {"foo": "bar"},
     }
 
-    options.set("sentry:preprocess-use-new-behavior", True)
     preprocess_event(data=data)
 
     assert mock_symbolicate_event.delay.call_count == 1
@@ -130,31 +128,9 @@ def test_move_to_symbolicate_event(
 
 
 @pytest.mark.django_db
-def test_move_to_symbolicate_event_old(
-    default_project, mock_process_event, mock_save_event, mock_symbolicate_event, register_plugin
-):
-    # Temporarily test old behavior
-    register_plugin(BasicPreprocessorPlugin)
-    data = {
-        "project": default_project.id,
-        "platform": "native",
-        "logentry": {"formatted": "test"},
-        "event_id": EVENT_ID,
-        "extra": {"foo": "bar"},
-    }
-
-    options.set("sentry:preprocess-use-new-behavior", False)
-    preprocess_event(data=data)
-
-    assert mock_symbolicate_event.delay.call_count == 0
-    assert mock_process_event.delay.call_count == 1
-    assert mock_save_event.delay.call_count == 0
-
-
-@pytest.mark.django_db
 def test_symbolicate_event_call_process_inline(
     default_project,
-    mock_default_cache,
+    mock_event_processing_store,
     mock_process_event,
     mock_save_event,
     mock_get_symbolication_function,
@@ -167,7 +143,8 @@ def test_symbolicate_event_call_process_inline(
         "event_id": EVENT_ID,
         "extra": {"foo": "bar"},
     }
-    mock_default_cache.get.return_value = data
+    mock_event_processing_store.get.return_value = data
+    mock_event_processing_store.store.return_value = "e:1"
 
     symbolicated_data = {"type": "error"}
 
@@ -177,11 +154,9 @@ def test_symbolicate_event_call_process_inline(
         symbolicate_event(cache_key="e:1", start_time=1)
 
     # The event mutated, so make sure we save it back
-    ((_, (key, event, duration), _),) = mock_default_cache.set.mock_calls
+    ((_, (event,), _),) = mock_event_processing_store.store.mock_calls
 
-    assert key == "e:1"
     assert event == symbolicated_data
-    assert duration == 3600
 
     assert mock_save_event.delay.call_count == 0
     assert mock_process_event.delay.call_count == 0
@@ -192,7 +167,6 @@ def test_symbolicate_event_call_process_inline(
         process_task=mock_process_event,
         data=symbolicated_data,
         data_has_changed=True,
-        new_process_behavior=True,
         from_symbolicate=True,
     )
 
@@ -219,7 +193,7 @@ def test_move_to_save_event(
 
 @pytest.mark.django_db
 def test_process_event_mutate_and_save(
-    default_project, mock_default_cache, mock_save_event, register_plugin
+    default_project, mock_event_processing_store, mock_save_event, register_plugin
 ):
     register_plugin(BasicPreprocessorPlugin)
 
@@ -231,16 +205,15 @@ def test_process_event_mutate_and_save(
         "extra": {"foo": "bar"},
     }
 
-    mock_default_cache.get.return_value = data
+    mock_event_processing_store.get.return_value = data
+    mock_event_processing_store.store.return_value = "e:1"
 
     process_event(cache_key="e:1", start_time=1)
 
     # The event mutated, so make sure we save it back
-    ((_, (key, event, duration), _),) = mock_default_cache.set.mock_calls
+    ((_, (event,), _),) = mock_event_processing_store.store.mock_calls
 
-    assert key == "e:1"
     assert "extra" not in event
-    assert duration == 3600
 
     mock_save_event.delay.assert_called_once_with(
         cache_key="e:1", data=None, start_time=1, event_id=EVENT_ID, project_id=default_project.id
@@ -249,7 +222,7 @@ def test_process_event_mutate_and_save(
 
 @pytest.mark.django_db
 def test_process_event_no_mutate_and_save(
-    default_project, mock_default_cache, mock_save_event, register_plugin
+    default_project, mock_event_processing_store, mock_save_event, register_plugin
 ):
     register_plugin(BasicPreprocessorPlugin)
 
@@ -261,12 +234,12 @@ def test_process_event_no_mutate_and_save(
         "extra": {"foo": "bar"},
     }
 
-    mock_default_cache.get.return_value = data
+    mock_event_processing_store.get.return_value = data
 
     process_event(cache_key="e:1", start_time=1)
 
     # The event did not mutate, so we shouldn't reset it in cache
-    assert mock_default_cache.set.call_count == 0
+    assert mock_event_processing_store.store.call_count == 0
 
     mock_save_event.delay.assert_called_once_with(
         cache_key="e:1", data=None, start_time=1, event_id=EVENT_ID, project_id=default_project.id
@@ -275,7 +248,7 @@ def test_process_event_no_mutate_and_save(
 
 @pytest.mark.django_db
 def test_process_event_unprocessed(
-    default_project, mock_default_cache, mock_save_event, register_plugin
+    default_project, mock_event_processing_store, mock_save_event, register_plugin
 ):
     register_plugin(BasicPreprocessorPlugin)
 
@@ -287,14 +260,13 @@ def test_process_event_unprocessed(
         "extra": {"foo": "bar"},
     }
 
-    mock_default_cache.get.return_value = data
+    mock_event_processing_store.get.return_value = data
+    mock_event_processing_store.store.return_value = "e:1"
 
     process_event(cache_key="e:1", start_time=1)
 
-    ((_, (key, event, duration), _),) = mock_default_cache.set.mock_calls
-    assert key == "e:1"
+    ((_, (event,), _),) = mock_event_processing_store.store.mock_calls
     assert event["unprocessed"] is True
-    assert duration == 3600
 
     mock_save_event.delay.assert_called_once_with(
         cache_key="e:1", data=None, start_time=1, event_id=EVENT_ID, project_id=default_project.id
@@ -338,22 +310,14 @@ def test_scrubbing_after_processing(
     default_organization,
     mock_save_event,
     register_plugin,
-    mock_default_cache,
+    mock_event_processing_store,
     setting_method,
     options_model,
 ):
     @register_plugin
     class TestPlugin(Plugin2):
-        def get_event_enhancers(self, data):
-            def more_extra(data):
-                data["extra"]["aaa"] = "remove me"
-                return data
-
-            return [more_extra]
-
         def get_event_preprocessors(self, data):
-            # Right now we do not scrub data from event preprocessors, only
-            # from event enhancers.
+            # Right now we do not scrub data from event preprocessors
             def more_extra(data):
                 data["extra"]["aaa2"] = "event preprocessor"
                 return data
@@ -378,18 +342,19 @@ def test_scrubbing_after_processing(
         "platform": "python",
         "logentry": {"formatted": "test"},
         "event_id": EVENT_ID,
-        "extra": {},
+        "extra": {"aaa": "remove me"},
     }
 
-    mock_default_cache.get.return_value = data
+    mock_event_processing_store.get.return_value = data
+    mock_event_processing_store.store.return_value = "e:1"
 
     with Feature({"organizations:datascrubbers-v2": True}):
-        process_event(cache_key="e:1", start_time=1)
+        # We pass data_has_changed=True to pretend that we've added "extra" attribute
+        # to "data" shortly before (e.g. during symbolication).
+        process_event(cache_key="e:1", start_time=1, data_has_changed=True)
 
-    ((_, (key, event, duration), _),) = mock_default_cache.set.mock_calls
-    assert key == "e:1"
+    ((_, (event,), _),) = mock_event_processing_store.store.mock_calls
     assert event["extra"] == {u"aaa": u"[Filtered]", u"aaa2": u"event preprocessor"}
-    assert duration == 3600
 
     mock_save_event.delay.assert_called_once_with(
         cache_key="e:1", data=None, start_time=1, event_id=EVENT_ID, project_id=default_project.id

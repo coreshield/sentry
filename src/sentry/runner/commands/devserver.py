@@ -18,7 +18,7 @@ _DEFAULT_DAEMONS = {
     ],
     "ingest": ["sentry", "run", "ingest-consumer", "--all-consumer-types"],
     "server": ["sentry", "run", "web"],
-    "storybook": ["./bin/yarn", "storybook"],
+    "storybook": ["yarn", "storybook"],
 }
 
 
@@ -140,7 +140,7 @@ def devserver(
     daemons = []
 
     if experimental_spa:
-        os.environ["SENTRY_EXPERIMENTAL_SPA"] = "1"
+        os.environ["SENTRY_UI_DEV_ONLY"] = "1"
         if not watchers:
             click.secho(
                 "Using experimental SPA mode without watchers enabled has no effect",
@@ -160,12 +160,8 @@ def devserver(
         uwsgi_overrides["protocol"] = "http"
 
         os.environ["FORCE_WEBPACK_DEV_SERVER"] = "1"
-
         os.environ["SENTRY_WEBPACK_PROXY_PORT"] = "%s" % proxy_port
         os.environ["SENTRY_BACKEND_PORT"] = "%s" % port
-
-        os.environ["SENTRY_BACKEND_HOST"] = host
-        os.environ["SENTRY_WEBPACK_PROXY_HOST"] = host
 
         # webpack and/or typescript is causing memory issues
         os.environ["NODE_OPTIONS"] = (
@@ -227,12 +223,18 @@ def devserver(
             ("https", ["https", "-host", https_host, "-listen", host + ":" + https_port, bind])
         ]
 
+    from sentry.runner.commands.devservices import _prepare_containers
+
+    for name, container_options in _prepare_containers("sentry", silent=True).items():
+        if container_options.get("with_devserver", False):
+            daemons += [(name, ["sentry", "devservices", "attach", "--fast", name])]
+
     # A better log-format for local dev when running through honcho,
     # but if there aren't any other daemons, we don't want to override.
     if daemons:
-        uwsgi_overrides["log-format"] = '"%(method) %(uri) %(proto)" %(status) %(size)'
+        uwsgi_overrides["log-format"] = '"%(method) %(status) %(uri) %(proto)" %(size)'
     else:
-        uwsgi_overrides["log-format"] = '[%(ltime)] "%(method) %(uri) %(proto)" %(status) %(size)'
+        uwsgi_overrides["log-format"] = '[%(ltime)] "%(method) %(status) %(uri) %(proto)" %(size)'
 
     server = SentryHTTPServer(host=host, port=port, workers=1, extra_options=uwsgi_overrides)
 

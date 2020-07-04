@@ -1,8 +1,9 @@
 from __future__ import absolute_import
 
-import six
 from rest_framework.exceptions import PermissionDenied, ParseError
 from django.core.cache import cache
+
+import sentry_sdk
 
 from sentry.api.base import Endpoint
 from sentry.api.exceptions import ResourceDoesNotExist
@@ -21,12 +22,8 @@ from sentry.models import (
 )
 from sentry.utils import auth
 from sentry.utils.hashlib import hash_values
-from sentry.utils.sdk import bind_organization_context
+from sentry.utils.sdk import bind_organization_context, configure_scope
 from sentry.utils.compat import map
-
-
-class OrganizationEventsError(Exception):
-    pass
 
 
 class NoProjects(Exception):
@@ -96,15 +93,6 @@ class OrganizationIntegrationsPermission(OrganizationPermission):
         "POST": ["org:write", "org:admin", "org:integrations"],
         "PUT": ["org:write", "org:admin", "org:integrations"],
         "DELETE": ["org:admin", "org:integrations"],
-    }
-
-
-class OrganizationRepositoryPermission(OrganizationPermission):
-    scope_map = {
-        "GET": ["org:read", "org:write", "org:admin", "org:integrations"],
-        "POST": ["org:write", "org:admin", "org:integrations"],
-        "PUT": ["org:write", "org:admin"],
-        "DELETE": ["org:admin"],
     }
 
 
@@ -217,19 +205,26 @@ class OrganizationEndpoint(Endpoint):
         if project_ids:
             qs = qs.filter(id__in=project_ids)
 
-        if force_global_perms:
+        with sentry_sdk.start_span(op="fetch_organization_projects") as span:
             projects = list(qs)
-        else:
-            if (
-                user
-                and is_active_superuser(request)
-                or requested_projects
-                or include_all_accessible
-            ):
-                func = request.access.has_project_access
+            span.set_data("Project Count", len(projects))
+        with sentry_sdk.start_span(op="apply_project_permissions") as span:
+            span.set_data("Project Count", len(projects))
+            if force_global_perms:
+                span.set_tag("mode", "force_global_perms")
             else:
-                func = request.access.has_project_membership
-            projects = [p for p in qs if func(p)]
+                if (
+                    user
+                    and is_active_superuser(request)
+                    or requested_projects
+                    or include_all_accessible
+                ):
+                    span.set_tag("mode", "has_project_access")
+                    func = request.access.has_project_access
+                else:
+                    span.set_tag("mode", "has_project_membership")
+                    func = request.access.has_project_membership
+                projects = [p for p in qs if func(p)]
 
         project_ids = set(p.id for p in projects)
 
@@ -239,7 +234,8 @@ class OrganizationEndpoint(Endpoint):
         return projects
 
     def get_environments(self, request, organization):
-        return get_environments(request, organization)
+        with sentry_sdk.start_span(op="PERF: Org.get_environments"):
+            return get_environments(request, organization)
 
     def get_filter_params(self, request, organization, date_filter_optional=False):
         """
@@ -261,31 +257,45 @@ class OrganizationEndpoint(Endpoint):
         # from the request
         try:
             start, end = get_date_range_from_params(request.GET, optional=date_filter_optional)
+            if start and end:
+                with configure_scope() as scope:
+                    scope.set_tag("query.period", (end - start).total_seconds())
         except InvalidParams as e:
-            raise OrganizationEventsError(six.text_type(e))
+            raise ParseError(detail=u"Invalid date range: {}".format(e))
 
-        try:
-            projects = self.get_projects(request, organization)
-        except ValueError:
-            raise OrganizationEventsError("Invalid project ids")
+        with sentry_sdk.start_span(op="PERF: org.get_filter_params - projects"):
+            try:
+                projects = self.get_projects(request, organization)
+            except ValueError:
+                raise ParseError(detail="Invalid project ids")
 
         if not projects:
             raise NoProjects
 
-        environments = [env.name for env in self.get_environments(request, organization)]
-        params = {"start": start, "end": end, "project_id": [p.id for p in projects]}
+        environments = self.get_environments(request, organization)
+        params = {
+            "start": start,
+            "end": end,
+            "project_id": [p.id for p in projects],
+            "organization_id": organization.id,
+        }
         if environments:
-            params["environment"] = environments
+            params["environment"] = [env.name for env in environments]
+            params["environment_objects"] = environments
 
         return params
 
     def convert_args(self, request, organization_slug, *args, **kwargs):
-        try:
-            organization = Organization.objects.get_from_cache(slug=organization_slug)
-        except Organization.DoesNotExist:
-            raise ResourceDoesNotExist
+        with sentry_sdk.start_span(op="PERF: org.convert_args - organization (cache)"):
+            try:
+                organization = Organization.objects.get_from_cache(slug=organization_slug)
+            except Organization.DoesNotExist:
+                raise ResourceDoesNotExist
 
-        self.check_object_permissions(request, organization)
+        with sentry_sdk.start_span(
+            op="check_object_permissions_on_organization", description=organization_slug
+        ):
+            self.check_object_permissions(request, organization)
 
         bind_organization_context(organization)
 

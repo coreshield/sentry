@@ -16,7 +16,7 @@ import Field from 'app/views/settings/components/forms/field';
 import SettingsPageHeader from 'app/views/settings/components/settingsPageHeader';
 import Switch from 'app/components/switch';
 import Truncate from 'app/components/truncate';
-import {IconAdd} from 'app/icons/iconAdd';
+import {IconAdd} from 'app/icons';
 
 class ServiceHookRow extends React.Component {
   static propTypes = {
@@ -73,7 +73,7 @@ export default class ProjectServiceHooks extends AsyncView {
   onToggleActive = hook => {
     const {orgId, projectId} = this.props.params;
 
-    addLoadingMessage(t('Saving changes..'));
+    addLoadingMessage(t('Saving changes\u2026'));
 
     this.api.request(`/projects/${orgId}/${projectId}/hooks/${hook.id}/`, {
       method: 'PUT',
@@ -155,7 +155,7 @@ export default class ProjectServiceHooks extends AsyncView {
                 to={`/settings/${orgId}/projects/${projectId}/hooks/new/`}
                 size="small"
                 priority="primary"
-                icon={<IconAdd size="xs" circle />}
+                icon={<IconAdd size="xs" isCircled />}
               >
                 {t('Create New Hook')}
               </Button>

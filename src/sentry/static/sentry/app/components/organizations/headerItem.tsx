@@ -6,10 +6,10 @@ import styled from '@emotion/styled';
 import omit from 'lodash/omit';
 
 import InlineSvg from 'app/components/inlineSvg';
+import {IconLock, IconChevron, IconInfo, IconSettings} from 'app/icons';
 import Tooltip from 'app/components/tooltip';
 import space from 'app/styles/space';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
-import {IconInfo} from 'app/icons';
 
 type DefaultProps = {
   allowClear: boolean;
@@ -95,17 +95,21 @@ class HeaderItem extends React.Component<Props> {
         )}
         {settingsLink && (
           <SettingsIconLink to={settingsLink}>
-            <SettingsIcon src="icon-settings" />
+            <IconSettings />
           </SettingsIconLink>
         )}
         {!locked && !loading && (
           <StyledChevron isOpen={isOpen}>
-            <InlineSvg src="icon-chevron-down" />
+            <IconChevron
+              direction="down"
+              color={isOpen ? 'gray700' : 'gray500'}
+              size="sm"
+            />
           </StyledChevron>
         )}
         {locked && (
           <Tooltip title={lockedMessage || 'This selection is locked'} position="bottom">
-            <StyledLock src="icon-lock" />
+            <StyledLock color="gray500" />
           </Tooltip>
         )}
       </StyledHeaderItem>
@@ -116,9 +120,9 @@ class HeaderItem extends React.Component<Props> {
 // Infer props here because of styled/theme
 const getColor = p => {
   if (p.locked) {
-    return p.theme.gray2;
+    return p.theme.gray500;
   }
-  return p.isOpen || p.hasSelected ? p.theme.gray4 : p.theme.gray2;
+  return p.isOpen || p.hasSelected ? p.theme.gray700 : p.theme.gray500;
 };
 
 type ColorProps = {
@@ -183,7 +187,7 @@ const StyledChevron = styled('div')<StyledChevronProps>`
 `;
 
 const SettingsIconLink = styled(Link)`
-  color: ${p => p.theme.gray2};
+  color: ${p => p.theme.gray500};
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -191,19 +195,12 @@ const SettingsIconLink = styled(Link)`
   transition: 0.5s opacity ease-out;
 
   &:hover {
-    color: ${p => p.theme.gray4};
+    color: ${p => p.theme.gray700};
   }
 `;
 
-const SettingsIcon = styled(InlineSvg)`
-  height: 16px;
-  width: 16px;
-`;
-
-const StyledLock = styled(InlineSvg)`
-  color: ${p => p.theme.gray2};
-  width: ${space(2)};
-  height: ${space(2)};
+const StyledLock = styled(IconLock)`
+  margin-top: ${space(0.75)};
   stroke-width: 1.5;
 `;
 

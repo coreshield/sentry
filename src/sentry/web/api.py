@@ -253,6 +253,13 @@ def process_event(event_manager, project, key, remote_addr, helper, attachments,
     # supplied by the user
     cache_key = "ev:%s:%s" % (project_config.project_id, event_id)
 
+    # XXX(markus): I believe this code is extremely broken:
+    #
+    # * it practically uses memcached in prod which has no consistency
+    #   guarantees (no idea how we don't run into issues there)
+    #
+    # * a TTL of 1h basically doesn't guarantee any deduplication at all. It
+    #   just guarantees a good error message... for one hour.
     if cache.get(cache_key) is not None:
         track_outcome(
             project_config.organization_id,
@@ -265,7 +272,7 @@ def process_event(event_manager, project, key, remote_addr, helper, attachments,
         )
         raise APIForbidden("An event with the same ID already exists (%s)" % (event_id,))
 
-    data = scrub_data(project_config, dict(data))
+    data = scrub_data(project, dict(data))
 
     # mutates data (strips a lot of context if not queued)
     helper.insert_data_to_database(data, start_time=start_time, attachments=attachments)

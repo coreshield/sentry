@@ -100,7 +100,7 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                       styled={false}
                     >
                       <div
-                        className="css-120v9s3-Title e1uay4fd1"
+                        className="css-u2ls9d-Title e1uay4fd1"
                       >
                         <HeaderTitle>
                           <h4
@@ -131,7 +131,7 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
               withoutMarginBottom={false}
             >
               <Component
-                className="css-1fqt8dl-StyledLink e1ylhppg0"
+                className="css-1bza080-StyledLink e1ylhppg0"
                 href="https://docs.sentry.io/workflow/integrations/integration-platform/"
                 openInNewTab={false}
                 priority="warning"
@@ -139,12 +139,12 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                 withoutMarginBottom={false}
               >
                 <ForwardRef(ExternalLink)
-                  className="css-1fqt8dl-StyledLink e1ylhppg0"
+                  className="css-1bza080-StyledLink e1ylhppg0"
                   href="https://docs.sentry.io/workflow/integrations/integration-platform/"
                   openInNewTab={false}
                 >
                   <a
-                    className="css-1fqt8dl-StyledLink e1ylhppg0"
+                    className="css-1bza080-StyledLink e1ylhppg0"
                     href="https://docs.sentry.io/workflow/integrations/integration-platform/"
                   >
                     <AlertLinkText>
@@ -158,32 +158,49 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                       <span
                         className="css-1nl5kog-IconWrapper-IconLink e1ylhppg2"
                       >
-                        <ForwardRef(IconChevron)
+                        <IconChevron
                           direction="right"
                         >
-                          <StyledSvg
-                            direction="90"
-                            fill="currentColor"
-                            height="16px"
-                            viewBox="0 0 16 16"
-                            width="16px"
+                          <EmotionCssPropInternal
+                            __EMOTION_LABEL_PLEASE_DO_NOT_USE__="IconChevron"
+                            __EMOTION_TYPE_PLEASE_DO_NOT_USE__={
+                              Object {
+                                "$$typeof": Symbol(react.forward_ref),
+                                "propTypes": Object {
+                                  "color": [Function],
+                                  "size": [Function],
+                                  "viewBox": [Function],
+                                },
+                                "render": [Function],
+                              }
+                            }
+                            css={
+                              Object {
+                                "map": undefined,
+                                "name": "72rehw-IconChevron",
+                                "next": undefined,
+                                "styles": "transform:rotate(90deg);;label:IconChevron;",
+                                "toString": [Function],
+                              }
+                            }
                           >
-                            <svg
-                              className="css-cside3-StyledSvg e1embbem0"
-                              direction="90"
-                              fill="currentColor"
-                              height="16px"
-                              viewBox="0 0 16 16"
-                              width="16px"
+                            <ForwardRef(SvgIcon)
+                              className="css-72rehw-IconChevron"
                             >
-                              <g>
+                              <svg
+                                className="css-72rehw-IconChevron"
+                                fill="currentColor"
+                                height="16px"
+                                viewBox="0 0 16 16"
+                                width="16px"
+                              >
                                 <path
-                                  d="M15.23,12.37a.79.79,0,0,1-.53-.22L8,5.44,1.3,12.15a.77.77,0,0,1-1.07,0,.75.75,0,0,1,0-1.06L7.47,3.85a.75.75,0,0,1,1.06,0l7.24,7.24a.75.75,0,0,1,0,1.06A.79.79,0,0,1,15.23,12.37Z"
+                                  d="M14,11.75a.74.74,0,0,1-.53-.22L8,6.06,2.53,11.53a.75.75,0,0,1-1.06-1.06l6-6a.75.75,0,0,1,1.06,0l6,6a.75.75,0,0,1,0,1.06A.74.74,0,0,1,14,11.75Z"
                                 />
-                              </g>
-                            </svg>
-                          </StyledSvg>
-                        </ForwardRef(IconChevron)>
+                              </svg>
+                            </ForwardRef(SvgIcon)>
+                          </EmotionCssPropInternal>
+                        </IconChevron>
                       </span>
                     </IconLink>
                   </a>
@@ -193,22 +210,22 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
           </AlertLink>
           <Panel>
             <Component
-              className="css-15hwgrz-Panel e119nu470"
+              className="css-ietoyz-Panel e119nu470"
             >
               <div
-                className="css-15hwgrz-Panel e119nu470"
+                className="css-ietoyz-Panel e119nu470"
               >
                 <PanelHeader
                   hasButtons={true}
                 >
                   <div
-                    className="css-yhsu7n-PanelHeader en8g1d30"
+                    className="css-13it3e1-PanelHeader en8g1d30"
                   >
                     Public Integrations
                     <forwardRef<Button>
                       icon={
                         <ForwardRef(IconAdd)
-                          circle={true}
+                          isCircled={true}
                           size="xs"
                         />
                       }
@@ -222,7 +239,7 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                         forwardRef={null}
                         icon={
                           <ForwardRef(IconAdd)
-                            circle={true}
+                            isCircled={true}
                             size="xs"
                           />
                         }
@@ -287,17 +304,19 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                                         className="css-1hbuack-Icon edwq9my2"
                                         size="small"
                                       >
-                                        <ForwardRef(IconAdd)
-                                          circle={true}
+                                        <IconAdd
+                                          isCircled={true}
                                           size="xs"
                                         >
-                                          <svg
-                                            fill="currentColor"
-                                            height="12px"
-                                            viewBox="0 0 16 16"
-                                            width="12px"
+                                          <ForwardRef(SvgIcon)
+                                            size="xs"
                                           >
-                                            <g>
+                                            <svg
+                                              fill="currentColor"
+                                              height="12px"
+                                              viewBox="0 0 16 16"
+                                              width="12px"
+                                            >
                                               <path
                                                 d="M11.28,8.75H4.72a.75.75,0,1,1,0-1.5h6.56a.75.75,0,1,1,0,1.5Z"
                                               />
@@ -307,9 +326,9 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                                               <path
                                                 d="M8,16a8,8,0,1,1,8-8A8,8,0,0,1,8,16ZM8,1.53A6.47,6.47,0,1,0,14.47,8,6.47,6.47,0,0,0,8,1.53Z"
                                               />
-                                            </g>
-                                          </svg>
-                                        </ForwardRef(IconAdd)>
+                                            </svg>
+                                          </ForwardRef(SvgIcon)>
+                                        </IconAdd>
                                       </span>
                                     </Icon>
                                     New Public Integration
@@ -331,14 +350,14 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                     withPadding={false}
                   >
                     <div
-                      className="css-1ehogmz-FlexBox e1vnwt6f0"
+                      className="css-1nto0rx-FlexBox e1vnwt6f0"
                     >
                       <EmptyMessage>
                         <Component
-                          className="css-1scmenn-EmptyMessage e1h3yfdx0"
+                          className="css-1qddu1g-EmptyMessage-EmptyMessage e1h3yfdx0"
                         >
                           <div
-                            className="css-1scmenn-EmptyMessage e1h3yfdx0"
+                            className="css-1qddu1g-EmptyMessage-EmptyMessage e1h3yfdx0"
                             data-test-id="empty-message"
                           >
                             <Description
@@ -361,22 +380,22 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
           </Panel>
           <Panel>
             <Component
-              className="css-15hwgrz-Panel e119nu470"
+              className="css-ietoyz-Panel e119nu470"
             >
               <div
-                className="css-15hwgrz-Panel e119nu470"
+                className="css-ietoyz-Panel e119nu470"
               >
                 <PanelHeader
                   hasButtons={true}
                 >
                   <div
-                    className="css-yhsu7n-PanelHeader en8g1d30"
+                    className="css-13it3e1-PanelHeader en8g1d30"
                   >
                     Internal Integrations
                     <forwardRef<Button>
                       icon={
                         <ForwardRef(IconAdd)
-                          circle={true}
+                          isCircled={true}
                           size="xs"
                         />
                       }
@@ -390,7 +409,7 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                         forwardRef={null}
                         icon={
                           <ForwardRef(IconAdd)
-                            circle={true}
+                            isCircled={true}
                             size="xs"
                           />
                         }
@@ -455,17 +474,19 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                                         className="css-1hbuack-Icon edwq9my2"
                                         size="small"
                                       >
-                                        <ForwardRef(IconAdd)
-                                          circle={true}
+                                        <IconAdd
+                                          isCircled={true}
                                           size="xs"
                                         >
-                                          <svg
-                                            fill="currentColor"
-                                            height="12px"
-                                            viewBox="0 0 16 16"
-                                            width="12px"
+                                          <ForwardRef(SvgIcon)
+                                            size="xs"
                                           >
-                                            <g>
+                                            <svg
+                                              fill="currentColor"
+                                              height="12px"
+                                              viewBox="0 0 16 16"
+                                              width="12px"
+                                            >
                                               <path
                                                 d="M11.28,8.75H4.72a.75.75,0,1,1,0-1.5h6.56a.75.75,0,1,1,0,1.5Z"
                                               />
@@ -475,9 +496,9 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                                               <path
                                                 d="M8,16a8,8,0,1,1,8-8A8,8,0,0,1,8,16ZM8,1.53A6.47,6.47,0,1,0,14.47,8,6.47,6.47,0,0,0,8,1.53Z"
                                               />
-                                            </g>
-                                          </svg>
-                                        </ForwardRef(IconAdd)>
+                                            </svg>
+                                          </ForwardRef(SvgIcon)>
+                                        </IconAdd>
                                       </span>
                                     </Icon>
                                     New Internal Integration
@@ -499,14 +520,14 @@ exports[`Organization Developer Settings when no Apps exist displays empty state
                     withPadding={false}
                   >
                     <div
-                      className="css-1ehogmz-FlexBox e1vnwt6f0"
+                      className="css-1nto0rx-FlexBox e1vnwt6f0"
                     >
                       <EmptyMessage>
                         <Component
-                          className="css-1scmenn-EmptyMessage e1h3yfdx0"
+                          className="css-1qddu1g-EmptyMessage-EmptyMessage e1h3yfdx0"
                         >
                           <div
-                            className="css-1scmenn-EmptyMessage e1h3yfdx0"
+                            className="css-1qddu1g-EmptyMessage-EmptyMessage e1h3yfdx0"
                             data-test-id="empty-message"
                           >
                             <Description

@@ -18,10 +18,23 @@ ignored=(
     # Arbitrary code execution in full_load/SafeLoader - doesn't apply to us.
     38100
 
+    # Pipenv is complaining. We don't use it and it comes with travis by default.
+    38334
+
     # LOW priority: djangorestframework
     # XXX: This is... unfortunately not present in safety's db right now. It is in synk though:
     # https://snyk.io/vuln/SNYK-PYTHON-DJANGORESTFRAMEWORK-450194
     # XSS in the "browsable api" drf < 3.9.1 view templates - doesn't apply to us.
+
+    # LOW priority: Pillow
+    # This doesn't apply to us, these issues are related to decoding of some less popular image
+    # formats (FLI, PCX, TIFF, JPEG 2000, SGI-RLE) which we do not allow to be uploaded anyways.
+    # Additionally, Pillow maintainers do not intend on backporting the fixes to their py2 versions.
+    # https://github.com/python-pillow/Pillow/issues/4750
+    38449
+    38450
+    38451
+    38452
 )
 
 # Take additional ignores from argv.

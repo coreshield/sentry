@@ -4,13 +4,16 @@ import {Color} from 'app/utils/theme';
 import HttpRenderer from 'app/components/events/interfaces/breadcrumbs/httpRenderer';
 import ErrorRenderer from 'app/components/events/interfaces/breadcrumbs/errorRenderer';
 import DefaultRenderer from 'app/components/events/interfaces/breadcrumbs/defaultRenderer';
-import {IconInfo} from 'app/icons/iconInfo';
-import {IconWarning} from 'app/icons/iconWarning';
-import {IconLocation} from 'app/icons/iconLocation';
-import {IconUser} from 'app/icons/iconUser';
-import {IconRefresh} from 'app/icons/iconRefresh';
+import {
+  IconInfo,
+  IconLocation,
+  IconRefresh,
+  IconTerminal,
+  IconUser,
+  IconWarning,
+} from 'app/icons';
 
-import {Breadcrumb} from './types';
+import {Breadcrumb, BreadcrumbType} from './types';
 
 type Output = {
   color: Color;
@@ -21,55 +24,55 @@ type Output = {
 
 function getBreadcrumbDetails(breadcrumb: Breadcrumb): Partial<Output> {
   switch (breadcrumb.type) {
-    case 'user':
-    case 'ui': {
+    case BreadcrumbType.USER:
+    case BreadcrumbType.UI: {
       return {
-        color: 'purple',
+        color: 'purple400',
         icon: <IconUser />,
         renderer: <DefaultRenderer breadcrumb={breadcrumb} />,
       };
     }
-    case 'navigation': {
+    case BreadcrumbType.NAVIGATION: {
       return {
-        color: 'blue',
+        color: 'blue400',
         icon: <IconLocation />,
         renderer: <DefaultRenderer breadcrumb={breadcrumb} />,
       };
     }
-    case 'info': {
+    case BreadcrumbType.INFO: {
       return {
-        color: 'blue',
+        color: 'blue400',
         icon: <IconInfo />,
         renderer: <DefaultRenderer breadcrumb={breadcrumb} />,
       };
     }
-    case 'warning': {
+    case BreadcrumbType.WARNING: {
       return {
-        color: 'yellowOrange',
-        borderColor: 'yellowOrangeDark',
+        color: 'orange300',
+        borderColor: 'orange500',
         icon: <IconWarning />,
         renderer: <ErrorRenderer breadcrumb={breadcrumb} />,
       };
     }
-    case 'exception':
-    case 'message':
-    case 'error': {
+    case BreadcrumbType.EXCEPTION:
+    case BreadcrumbType.MESSAGE:
+    case BreadcrumbType.ERROR: {
       return {
-        color: 'red',
+        color: 'red400',
         icon: <IconWarning />,
         renderer: <ErrorRenderer breadcrumb={breadcrumb} />,
       };
     }
-    case 'http': {
+    case BreadcrumbType.HTTP: {
       return {
-        color: 'green',
+        color: 'green400',
         icon: <IconRefresh />,
         renderer: <HttpRenderer breadcrumb={breadcrumb} />,
       };
     }
     default:
       return {
-        icon: <span className="icon-console" />,
+        icon: <IconTerminal />,
         renderer: <DefaultRenderer breadcrumb={breadcrumb} />,
       };
   }

@@ -33,8 +33,7 @@ class AlertRuleDetailsBase(object):
     @fixture
     def alert_rule_dict(self):
         return {
-            "aggregation": 0,
-            "aggregations": [0],
+            "aggregate": "count()",
             "query": "",
             "timeWindow": "300",
             "projects": [self.project.slug],
@@ -74,7 +73,7 @@ class AlertRuleDetailsBase(object):
             data=data,
         )
 
-        assert serializer.is_valid()
+        assert serializer.is_valid(), serializer.errors
         alert_rule = serializer.save()
         return alert_rule
 
@@ -86,7 +85,12 @@ class AlertRuleDetailsBase(object):
         self.method = "get"
         with self.feature("organizations:incidents"):
             resp = self.get_valid_response(self.organization.slug)
+            assert len(resp.data) >= 1
             serialized_alert_rule = resp.data[0]
+            if serialized_alert_rule["environment"]:
+                serialized_alert_rule["environment"] = serialized_alert_rule["environment"][0]
+            else:
+                serialized_alert_rule.pop("environment", None)
         self.endpoint = original_endpoint
         self.method = original_method
         return serialized_alert_rule
@@ -170,13 +174,13 @@ class AlertRuleDetailsPutEndpointTest(AlertRuleDetailsBase, APITestCase):
                 self.organization.slug, alert_rule.id, **serialized_alert_rule
             )
 
-        existing_sub = self.alert_rule.query_subscriptions.first()
+        existing_sub = self.alert_rule.snuba_query.subscriptions.first()
 
         # Alert rule should be exactly the same
         assert resp.data == serialize(self.alert_rule)
-        # If the aggregation changed we'd have a new subscription, validate that
+        # If the aggregate changed we'd have a new subscription, validate that
         # it hasn't changed explicitly
-        updated_sub = AlertRule.objects.get(id=self.alert_rule.id).query_subscriptions.first()
+        updated_sub = AlertRule.objects.get(id=self.alert_rule.id).snuba_query.subscriptions.first()
         assert updated_sub.subscription_id == existing_sub.subscription_id
 
     def test_update_trigger_label_to_unallowed_value(self):
@@ -195,11 +199,13 @@ class AlertRuleDetailsPutEndpointTest(AlertRuleDetailsBase, APITestCase):
             resp = self.get_valid_response(
                 self.organization.slug, alert_rule.id, status_code=400, **serialized_alert_rule
             )
-            assert resp.data == {
-                "nonFieldErrors": [
-                    'First trigger must be labeled "critical", second trigger must be labeled "warning"'
-                ]
-            }
+            assert resp.data == {"nonFieldErrors": ['Trigger 1 must be labeled "critical"']}
+            serialized_alert_rule["triggers"][0]["label"] = "critical"
+            serialized_alert_rule["triggers"][1]["label"] = "goodbye"
+            resp = self.get_valid_response(
+                self.organization.slug, alert_rule.id, status_code=400, **serialized_alert_rule
+            )
+            assert resp.data == {"nonFieldErrors": ['Trigger 2 must be labeled "warning"']}
 
     def test_update_trigger_alert_threshold(self):
         self.create_member(
@@ -376,6 +382,24 @@ class AlertRuleDetailsPutEndpointTest(AlertRuleDetailsBase, APITestCase):
             )
         serialized_alert_rule["triggers"][0]["thresholdType"] = 0  # Back to normal, valid.
 
+    def test_update_snapshot(self):
+        self.create_member(
+            user=self.user, organization=self.organization, role="owner", teams=[self.team]
+        )
+        self.login_as(self.user)
+        alert_rule = self.alert_rule
+        # We need the IDs to force update instead of create, so we just get the rule using our own API. Like frontend would.
+        serialized_alert_rule = self.get_serialized_alert_rule()
+
+        # Archive the rule so that the endpoint 404's, without this, it should 200 and the test would fail:
+        alert_rule.status = AlertRuleStatus.SNAPSHOT.value
+        alert_rule.save()
+
+        with self.feature("organizations:incidents"):
+            self.get_valid_response(
+                self.organization.slug, alert_rule.id, status_code=404, **serialized_alert_rule
+            )
+
 
 class AlertRuleDetailsDeleteEndpointTest(AlertRuleDetailsBase, APITestCase):
     method = "delete"
@@ -385,6 +409,7 @@ class AlertRuleDetailsDeleteEndpointTest(AlertRuleDetailsBase, APITestCase):
             user=self.user, organization=self.organization, role="owner", teams=[self.team]
         )
         self.login_as(self.user)
+
         with self.feature("organizations:incidents"):
             self.get_valid_response(self.organization.slug, self.alert_rule.id, status_code=204)
 

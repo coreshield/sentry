@@ -12,6 +12,7 @@ import {
   IssueAlertRuleConditionTemplate,
   UnsavedIssueAlertRule,
 } from 'app/types/alerts';
+import {IconWarning} from 'app/icons';
 import {Panel, PanelBody, PanelHeader} from 'app/components/panels';
 import {
   addErrorMessage,
@@ -20,6 +21,7 @@ import {
 } from 'app/actionCreators/indicator';
 import {getDisplayName} from 'app/utils/environment';
 import {t} from 'app/locale';
+import Alert from 'app/components/alert';
 import AsyncView from 'app/views/asyncView';
 import Button from 'app/components/button';
 import Confirm from 'app/components/confirm';
@@ -71,7 +73,7 @@ const POLLING_MAX_TIME_LIMIT = 3 * 60000;
 type ConditionOrAction = string;
 
 type RuleTaskResponse = {
-  status: 'pending' | 'failed' | 'succes';
+  status: 'pending' | 'failed' | 'success';
   rule?: IssueAlertRule;
   error?: string;
 };
@@ -97,7 +99,7 @@ type State = AsyncView['state'] & {
 function isSavedAlertRule(
   rule: UnsavedIssueAlertRule | IssueAlertRule
 ): rule is IssueAlertRule {
-  return rule.hasOwnProperty('id');
+  return rule?.hasOwnProperty('id');
 }
 
 class IssueRuleEditor extends AsyncView<Props, State> {
@@ -176,7 +178,7 @@ class IssueRuleEditor extends AsyncView<Props, State> {
   };
 
   fetchStatus() {
-    // pollHander calls itself until it gets either a sucesss
+    // pollHandler calls itself until it gets either a success
     // or failed status but we don't want to poll forever so we pass
     // in a hard stop time of 3 minutes before we bail.
     const quitTime = Date.now() + POLLING_MAX_TIME_LIMIT;
@@ -224,7 +226,7 @@ class IssueRuleEditor extends AsyncView<Props, State> {
       });
 
       // if we get a 202 back it means that we have an async task
-      // running to lookup and verfity the channel id for Slack.
+      // running to lookup and verify the channel id for Slack.
       if (xhr && xhr.status === 202) {
         this.setState({detailedError: null, loading: true, uuid: resp.uuid});
         this.fetchStatus();
@@ -381,12 +383,22 @@ class IssueRuleEditor extends AsyncView<Props, State> {
     return this.renderBody();
   }
 
+  renderError() {
+    return (
+      <Alert type="error" icon={<IconWarning />}>
+        {t(
+          'Unable to access this alert rule -- check to make sure you have the correct permissions'
+        )}
+      </Alert>
+    );
+  }
+
   renderBody() {
     const {project, organization} = this.props;
     const {environments} = this.state;
     const environmentChoices = [
       [ALL_ENVIRONMENTS_KEY, t('All Environments')],
-      ...environments.map(env => [env.name, getDisplayName(env)]),
+      ...(environments?.map(env => [env.name, getDisplayName(env)]) ?? []),
     ];
 
     const {rule, detailedError} = this.state;
@@ -448,7 +460,7 @@ class IssueRuleEditor extends AsyncView<Props, State> {
 
               <PanelSubHeader>
                 {t(
-                  'Whenever %s of these conditions are met',
+                  'Whenever %s of these conditions are met for an issue',
                   <EmbeddedWrapper>
                     <EmbeddedSelectField
                       className={classNames({

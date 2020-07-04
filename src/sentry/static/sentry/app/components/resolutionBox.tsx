@@ -11,7 +11,6 @@ import {IconCheckmark} from 'app/icons';
 import {t, tct} from 'app/locale';
 import space from 'app/styles/space';
 import {ResolutionStatusDetails} from 'app/types';
-import theme from 'app/utils/theme';
 
 type Props = {
   statusDetails: ResolutionStatusDetails;
@@ -73,7 +72,7 @@ function ResolutionBox({statusDetails, projectId}: Props) {
   return (
     <BannerContainer priority="default">
       <BannerSummary>
-        <IconCheckmark color={theme.green} />
+        <IconCheckmark color="green400" />
         <span>{renderReason(statusDetails, projectId)}</span>
       </BannerSummary>
     </BannerContainer>
@@ -86,7 +85,7 @@ ResolutionBox.propTypes = {
 };
 
 const StyledTimeSince = styled(TimeSince)`
-  color: ${p => p.theme.gray2};
+  color: ${p => p.theme.gray500};
   margin-left: ${space(0.5)};
   font-size: ${p => p.theme.fontSizeSmall};
 `;

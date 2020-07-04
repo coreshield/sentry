@@ -9,6 +9,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.db import transaction
 
+from sentry import features
 from sentry.incidents.logic import create_incident, update_incident_status
 from sentry.incidents.endpoints.serializers import WARNING_TRIGGER_LABEL, CRITICAL_TRIGGER_LABEL
 from sentry.incidents.models import (
@@ -23,7 +24,6 @@ from sentry.incidents.models import (
     TriggerStatus,
 )
 from sentry.incidents.tasks import handle_trigger_action
-from sentry.snuba.models import query_aggregation_to_snuba, QueryAggregations
 from sentry.utils import metrics, redis
 from sentry.utils.dates import to_datetime, to_timestamp
 from sentry.utils.compat import zip
@@ -107,6 +107,20 @@ class SubscriptionProcessor(object):
         return incident_trigger is not None and incident_trigger.status == status.value
 
     def process_update(self, subscription_update):
+        dataset = self.subscription.snuba_query.dataset
+        if dataset == "events" and not features.has(
+            "organizations:incidents", self.subscription.project.organization
+        ):
+            # They have downgraded since these subscriptions have been created. So we just ignore updates for now.
+            metrics.incr("incidents.alert_rules.ignore_update_missing_incidents")
+            return
+        elif dataset == "transactions" and not features.has(
+            "organizations:incidents-performance", self.subscription.project.organization
+        ):
+            # They have downgraded since these subscriptions have been created. So we just ignore updates for now.
+            metrics.incr("incidents.alert_rules.ignore_update_missing_incidents_performance")
+            return
+
         if not hasattr(self, "alert_rule"):
             # If the alert rule has been removed then just skip
             metrics.incr("incidents.alert_rules.no_alert_rule_for_subscription")
@@ -122,19 +136,17 @@ class SubscriptionProcessor(object):
 
         self.last_update = subscription_update["timestamp"]
 
-        aggregation = QueryAggregations(self.alert_rule.aggregation)
-        aggregation_name = query_aggregation_to_snuba[aggregation][2]
         if len(subscription_update["values"]["data"]) > 1:
             logger.warning(
                 "Subscription returned more than 1 row of data",
                 extra={
                     "subscription_id": self.subscription.id,
-                    "dataset": self.subscription.dataset,
+                    "dataset": self.subscription.snuba_query.dataset,
                     "snuba_subscription_id": self.subscription.subscription_id,
                     "result": subscription_update,
                 },
             )
-        aggregation_value = subscription_update["values"]["data"][0][aggregation_name]
+        aggregation_value = subscription_update["values"]["data"][0].values()[0]
 
         for trigger in self.triggers:
             alert_operator, resolve_operator = self.THRESHOLD_TYPE_OPERATORS[
@@ -146,7 +158,7 @@ class SubscriptionProcessor(object):
             ) and not self.check_trigger_status(trigger, TriggerStatus.ACTIVE):
                 metrics.incr("incidents.alert_rules.threshold", tags={"type": "alert"})
                 with transaction.atomic():
-                    self.trigger_alert_threshold(trigger)
+                    self.trigger_alert_threshold(trigger, aggregation_value)
             elif (
                 trigger.resolve_threshold is not None
                 and resolve_operator(aggregation_value, trigger.resolve_threshold)
@@ -154,7 +166,7 @@ class SubscriptionProcessor(object):
             ):
                 metrics.incr("incidents.alert_rules.threshold", tags={"type": "resolve"})
                 with transaction.atomic():
-                    self.trigger_resolve_threshold(trigger)
+                    self.trigger_resolve_threshold(trigger, aggregation_value)
             else:
                 self.trigger_alert_counts[trigger.id] = 0
                 self.trigger_resolve_counts[trigger.id] = 0
@@ -166,7 +178,26 @@ class SubscriptionProcessor(object):
         # before the next one then we might alert twice.
         self.update_alert_rule_stats()
 
-    def trigger_alert_threshold(self, trigger):
+    def calculate_event_date_from_update_date(self, update_date):
+        """
+        Calculates the date that an event actually happened based on the date that we
+        received the update. This takes into account time window and threshold period.
+        :return:
+        """
+        # Subscriptions label buckets by the end of the bucket, whereas discover
+        # labels them by the front. This causes us an off-by-one error with event dates,
+        # so to prevent this we subtract a bucket off of the date.
+        update_date -= timedelta(seconds=self.alert_rule.snuba_query.time_window)
+        # We want to also subtract `frequency * (threshold_period - 1)` from the date.
+        # This allows us to show the actual start of the event, rather than the date
+        # of the last update that we received.
+        return update_date - timedelta(
+            seconds=(
+                self.alert_rule.snuba_query.resolution * (self.alert_rule.threshold_period - 1)
+            )
+        )
+
+    def trigger_alert_threshold(self, trigger, metric_value):
         """
         Called when a subscription update exceeds the value defined in the
         `trigger.alert_threshold`, and the trigger hasn't already been activated.
@@ -180,16 +211,17 @@ class SubscriptionProcessor(object):
             metrics.incr("incidents.alert_rules.trigger", tags={"type": "fire"})
             # Only create a new incident if we don't already have an active one
             if not self.active_incident:
-                detected_at = self.last_update
+                detected_at = self.calculate_event_date_from_update_date(self.last_update)
                 self.active_incident = create_incident(
                     self.alert_rule.organization,
                     IncidentType.ALERT_TRIGGERED,
                     # TODO: Include more info in name?
                     self.alert_rule.name,
                     alert_rule=self.alert_rule,
-                    query=self.subscription.query,
-                    aggregation=QueryAggregations(self.alert_rule.aggregation),
                     date_started=detected_at,
+                    # TODO: This should probably be either the current time or the
+                    # message time. Current time likely makes most sense, since this is
+                    # when we actually noticed the problem.
                     date_detected=detected_at,
                     projects=[self.subscription.project],
                 )
@@ -206,7 +238,7 @@ class SubscriptionProcessor(object):
                     status=TriggerStatus.ACTIVE.value,
                 )
             self.handle_incident_severity_update()
-            self.handle_trigger_actions(incident_trigger)
+            self.handle_trigger_actions(incident_trigger, metric_value)
             self.incident_triggers[trigger.id] = incident_trigger
 
             # TODO: We should create an audit log, and maybe something that keeps
@@ -232,7 +264,7 @@ class SubscriptionProcessor(object):
                 return False
         return True
 
-    def trigger_resolve_threshold(self, trigger):
+    def trigger_resolve_threshold(self, trigger, metric_value):
         """
         Called when a subscription update exceeds the value defined in
         `trigger.resolve_threshold` and the trigger is currently ACTIVE.
@@ -244,7 +276,7 @@ class SubscriptionProcessor(object):
             incident_trigger = self.incident_triggers[trigger.id]
             incident_trigger.status = TriggerStatus.RESOLVED.value
             incident_trigger.save()
-            self.handle_trigger_actions(incident_trigger)
+            self.handle_trigger_actions(incident_trigger, metric_value)
             self.handle_incident_severity_update()
 
             if self.check_triggers_resolved():
@@ -252,12 +284,13 @@ class SubscriptionProcessor(object):
                     self.active_incident,
                     IncidentStatus.CLOSED,
                     status_method=IncidentStatusMethod.RULE_TRIGGERED,
+                    date_closed=self.calculate_event_date_from_update_date(self.last_update),
                 )
                 self.active_incident = None
                 self.incident_triggers.clear()
             self.trigger_resolve_counts[trigger.id] = 0
 
-    def handle_trigger_actions(self, incident_trigger):
+    def handle_trigger_actions(self, incident_trigger, metric_value):
         method = "fire" if incident_trigger.status == TriggerStatus.ACTIVE.value else "resolve"
 
         for action in incident_trigger.alert_rule_trigger.alertruletriggeraction_set.all():
@@ -266,6 +299,7 @@ class SubscriptionProcessor(object):
                     "action_id": action.id,
                     "incident_id": incident_trigger.incident_id,
                     "project_id": self.subscription.project_id,
+                    "metric_value": metric_value,
                     "method": method,
                 },
                 countdown=5,

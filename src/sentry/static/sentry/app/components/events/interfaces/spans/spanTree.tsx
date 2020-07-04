@@ -1,8 +1,9 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
+import {SentryTransactionEvent, Organization} from 'app/types';
 import {t} from 'app/locale';
-import EventView from 'app/utils/discover/eventView';
+import {TableData} from 'app/views/eventsV2/table/types';
 
 import {
   ProcessedSpanType,
@@ -10,7 +11,8 @@ import {
   SpanChildrenLookupType,
   ParsedTraceType,
   GapSpanType,
-  SentryTransactionEvent,
+  TreeDepthType,
+  OrphanTreeDepth,
 } from './types';
 import {
   boundsGenerator,
@@ -22,6 +24,8 @@ import {
   getSpanOperation,
   getSpanTraceID,
   isGapSpan,
+  isOrphanSpan,
+  isEventFromBrowserJavaScriptSDK,
 } from './utils';
 import {DragManagerChildrenProps} from './dragManager';
 import SpanGroup from './spanGroup';
@@ -38,11 +42,12 @@ type RenderedSpanTree = {
 
 type PropType = {
   orgId: string;
-  eventView: EventView;
+  organization: Organization;
   trace: ParsedTraceType;
   dragProps: DragManagerChildrenProps;
   filterSpans: FilterSpans | undefined;
   event: SentryTransactionEvent;
+  spansWithErrors: TableData | null | undefined;
 };
 
 class SpanTree extends React.Component<PropType> {
@@ -126,7 +131,7 @@ class SpanTree extends React.Component<PropType> {
   }: {
     spanNumber: number;
     treeDepth: number;
-    continuingTreeDepths: Array<number>;
+    continuingTreeDepths: Array<TreeDepthType>;
     isLast: boolean;
     isRoot?: boolean;
     numOfSpansOutOfViewAbove: number;
@@ -136,7 +141,7 @@ class SpanTree extends React.Component<PropType> {
     generateBounds: (bounds: SpanBoundsType) => SpanGeneratedBoundsType;
     previousSiblingEndTimestamp: undefined | number;
   }): RenderedSpanTree => {
-    const {orgId, eventView, event} = this.props;
+    const {orgId, event, spansWithErrors, organization} = this.props;
 
     const spanBarColour: string = pickSpanBarColour(getSpanOperation(span));
     const spanChildren: Array<RawSpanType> = childSpans?.[getSpanID(span)] ?? [];
@@ -155,7 +160,7 @@ class SpanTree extends React.Component<PropType> {
 
     // hide gap spans (i.e. "missing instrumentation" spans) for browser js transactions,
     // since they're not useful to indicate
-    const shouldIncludeGap = !isJavaScriptSDK(event.sdk?.name);
+    const shouldIncludeGap = !isEventFromBrowserJavaScriptSDK(event);
 
     const isValidGap =
       typeof previousSiblingEndTimestamp === 'number' &&
@@ -174,7 +179,13 @@ class SpanTree extends React.Component<PropType> {
       previousSiblingEndTimestamp: undefined | number;
     };
 
-    const treeArr = isLast ? continuingTreeDepths : [...continuingTreeDepths, treeDepth];
+    const treeDepthEntry = isOrphanSpan(span)
+      ? ({type: 'orphan', depth: treeDepth} as OrphanTreeDepth)
+      : treeDepth;
+
+    const treeArr = isLast
+      ? continuingTreeDepths
+      : [...continuingTreeDepths, treeDepthEntry];
 
     const reduced: AccType = spanChildren.reduce(
       (acc: AccType, spanChild, index) => {
@@ -231,13 +242,15 @@ class SpanTree extends React.Component<PropType> {
       start_timestamp: previousSiblingEndTimestamp || span.start_timestamp,
       timestamp: span.start_timestamp, // this is essentially end_timestamp
       description: t('Missing instrumentation'),
+      isOrphan: isOrphanSpan(span),
     };
 
     const spanGapComponent =
       isValidGap && isSpanDisplayed ? (
         <SpanGroup
-          eventView={eventView}
           orgId={orgId}
+          organization={organization}
+          event={event}
           spanNumber={spanNumber}
           isLast={false}
           continuingTreeDepths={continuingTreeDepths}
@@ -249,6 +262,7 @@ class SpanTree extends React.Component<PropType> {
           numOfSpanChildren={0}
           renderedSpanChildren={[]}
           isCurrentSpanFilteredOut={isCurrentSpanFilteredOut}
+          spansWithErrors={spansWithErrors}
           spanBarHatch
         />
       ) : null;
@@ -262,8 +276,9 @@ class SpanTree extends React.Component<PropType> {
           {infoMessage}
           {spanGapComponent}
           <SpanGroup
-            eventView={eventView}
             orgId={orgId}
+            organization={organization}
+            event={event}
             spanNumber={spanGroupNumber}
             isLast={isLast}
             continuingTreeDepths={continuingTreeDepths}
@@ -277,6 +292,7 @@ class SpanTree extends React.Component<PropType> {
             spanBarColour={spanBarColour}
             isCurrentSpanFilteredOut={isCurrentSpanFilteredOut}
             spanBarHatch={false}
+            spansWithErrors={spansWithErrors}
           />
         </React.Fragment>
       ),
@@ -340,13 +356,5 @@ const TraceViewContainer = styled('div')`
   border-bottom-left-radius: 3px;
   border-bottom-right-radius: 3px;
 `;
-
-function isJavaScriptSDK(sdkName?: string): boolean {
-  if (!sdkName) {
-    return false;
-  }
-  // based on https://github.com/getsentry/sentry-javascript/blob/master/packages/browser/src/version.ts
-  return sdkName.toLowerCase() === 'sentry.javascript.browser';
-}
 
 export default SpanTree;

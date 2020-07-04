@@ -1,8 +1,8 @@
 import {browserHistory} from 'react-router';
 import PropTypes from 'prop-types';
 import React from 'react';
-import * as Sentry from '@sentry/browser';
 import styled from '@emotion/styled';
+import * as Sentry from '@sentry/react';
 
 import {inputStyles} from 'app/styles/input';
 import {openCreateTeamModal} from 'app/actionCreators/modal';
@@ -23,7 +23,7 @@ import withOrganization from 'app/utils/withOrganization';
 import withTeams from 'app/utils/withTeams';
 import IssueAlertOptions from 'app/views/projectInstall/issueAlertOptions';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
-import {IconAdd} from 'app/icons/iconAdd';
+import {IconAdd} from 'app/icons';
 import withExperiment from 'app/utils/withExperiment';
 
 class CreateProject extends React.Component {
@@ -130,7 +130,7 @@ class CreateProject extends React.Component {
                 borderless
                 data-test-id="create-team"
                 type="button"
-                icon={<IconAdd circle />}
+                icon={<IconAdd isCircled />}
                 onClick={() =>
                   openCreateTeamModal({
                     organization,
@@ -378,7 +378,7 @@ const TeamSelectInput = styled('div')`
 `;
 
 const HelpText = styled('p')`
-  color: ${p => p.theme.gray3};
+  color: ${p => p.theme.gray600};
   max-width: 700px;
 `;
 

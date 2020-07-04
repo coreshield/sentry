@@ -1,5 +1,7 @@
 import {browserHistory} from 'react-router';
 import React from 'react';
+import styled from '@emotion/styled';
+import {withProfiler} from '@sentry/react';
 
 import {ALL_ACCESS_PROJECTS} from 'app/constants/globalSelectionHeader';
 import {PageContent, PageHeader} from 'app/styles/organization';
@@ -14,11 +16,12 @@ import PageHeading from 'app/components/pageHeading';
 import Pagination from 'app/components/pagination';
 import SearchBar from 'app/components/searchBar';
 import SentryTypes from 'app/sentryTypes';
-import withProfiler from 'app/utils/withProfiler';
 import withGlobalSelection from 'app/utils/withGlobalSelection';
 import withOrganization from 'app/utils/withOrganization';
 import Feature from 'app/components/acl/feature';
 import SwitchReleasesButton from 'app/views/releasesV2/utils/switchReleasesButton';
+import {defined} from 'app/utils';
+import space from 'app/styles/space';
 
 import {getQuery} from './utils';
 import ReleaseLanding from './releaseLanding';
@@ -27,11 +30,11 @@ import ReleaseListHeader from './releaseListHeader';
 import ReleaseProgress from './releaseProgress';
 
 const ReleasesContainer = props => {
-  const {organization} = props;
   return (
     <React.Fragment>
-      <GlobalSelectionHeader organization={organization} />
-      <OrganizationReleases {...props} />
+      <GlobalSelectionHeader>
+        <OrganizationReleases {...props} />
+      </GlobalSelectionHeader>
     </React.Fragment>
   );
 };
@@ -51,11 +54,19 @@ class OrganizationReleases extends AsyncView {
 
   getEndpoints() {
     const {organization, location} = this.props;
+    const {query} = location;
+
+    const allowedQuery = getQuery(query);
+    if (!defined(query.start) && !defined(query.end)) {
+      // send 14d as default to api
+      allowedQuery.statsPeriod = query.statsPeriod || '14d';
+    }
+
     return [
       [
         'releaseList',
         `/organizations/${organization.slug}/releases/`,
-        {query: getQuery(location.query)},
+        {query: allowedQuery},
       ],
     ];
   }
@@ -170,14 +181,17 @@ class OrganizationReleases extends AsyncView {
         <LightWeightNoProjectMessage organization={organization}>
           <PageHeader>
             <PageHeading>{t('Releases')}</PageHeading>
-            <div>
+            <Wrapper>
+              <Feature features={['releases-v2']} organization={organization}>
+                <SwitchReleasesButton version="2" orgId={organization.id} />
+              </Feature>
               <SearchBar
                 defaultQuery=""
                 placeholder={t('Search for a release')}
                 query={location.query.query}
                 onSearch={this.onSearch}
               />
-            </div>
+            </Wrapper>
           </PageHeader>
           <div>
             <Panel>
@@ -185,14 +199,18 @@ class OrganizationReleases extends AsyncView {
               <PanelBody>{this.renderStreamBody()}</PanelBody>
             </Panel>
             <Pagination pageLinks={this.state.releaseListPageLinks} />
-            <Feature features={['releases-v2']} organization={organization}>
-              <SwitchReleasesButton version="2" orgId={organization.id} />
-            </Feature>
           </div>
         </LightWeightNoProjectMessage>
       </PageContent>
     );
   }
 }
+
+const Wrapper = styled('div')`
+  display: grid;
+  grid-gap: ${space(1)};
+  margin-left: ${space(2)};
+  grid-template-columns: auto auto;
+`;
 
 export default withOrganization(withGlobalSelection(withProfiler(ReleasesContainer)));

@@ -1,38 +1,44 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import {t} from 'app/locale';
+import {t, tn} from 'app/locale';
 import space from 'app/styles/space';
-import overflowEllipsis from 'app/styles/overflowEllipsis';
-import {Release} from 'app/types';
+import {ReleaseWithHealth, ReleaseMeta} from 'app/types';
 import Version from 'app/components/version';
 import TimeSince from 'app/components/timeSince';
+import DateTime from 'app/components/dateTime';
+import Link from 'app/components/links/link';
+import Count from 'app/components/count';
+import Feature from 'app/components/acl/feature';
 
 import {SectionHeading, Wrapper} from './styles';
 
 type Props = {
-  release: Release;
+  release: ReleaseWithHealth;
+  releaseMeta: ReleaseMeta;
+  orgSlug: string;
+  projectSlug: string;
 };
 
-// TODO(releasesV2): TagValues should probably be links
-const ProjectReleaseDetails = ({release}: Props) => {
+const ProjectReleaseDetails = ({release, releaseMeta, orgSlug, projectSlug}: Props) => {
   const {version, dateCreated, firstEvent, lastEvent} = release;
+
   return (
     <Wrapper>
       <SectionHeading>{t('Project Release Details')}</SectionHeading>
       <StyledTable>
         <tbody>
           <StyledTr>
-            <TagKey>{t('Version')}</TagKey>
+            <TagKey>{t('Created')}</TagKey>
             <TagValue>
-              <Version version={version} anchor={false} />
+              <DateTime date={dateCreated} seconds={false} />
             </TagValue>
           </StyledTr>
 
           <StyledTr>
-            <TagKey>{t('Created')}</TagKey>
+            <TagKey>{t('Version')}</TagKey>
             <TagValue>
-              <TimeSince date={dateCreated} />
+              <Version version={version} anchor={false} />
             </TagValue>
           </StyledTr>
 
@@ -45,6 +51,22 @@ const ProjectReleaseDetails = ({release}: Props) => {
             <TagKey>{t('Last Event')}</TagKey>
             <TagValue>{lastEvent ? <TimeSince date={lastEvent} /> : '-'}</TagValue>
           </StyledTr>
+
+          <Feature features={['artifacts-in-settings']}>
+            <StyledTr>
+              <TagKey>{t('Source Maps')}</TagKey>
+              <TagValue>
+                <Link
+                  to={`/settings/${orgSlug}/projects/${projectSlug}/source-maps/${encodeURIComponent(
+                    version
+                  )}/`}
+                >
+                  <Count value={releaseMeta.releaseFileCount} />{' '}
+                  {tn('file uploaded', 'files uploaded', releaseMeta.releaseFileCount)}
+                </Link>
+              </TagValue>
+            </StyledTr>
+          </Feature>
         </tbody>
       </StyledTable>
     </Wrapper>
@@ -55,18 +77,18 @@ const StyledTable = styled('table')`
   table-layout: fixed;
   width: 100%;
   max-width: 100%;
-  font-size: ${p => p.theme.fontSizeSmall};
 `;
 
 const StyledTr = styled('tr')`
   &:nth-child(2n + 1) td {
-    background-color: ${p => p.theme.offWhite};
+    background-color: ${p => p.theme.gray100};
   }
 `;
 
 const TagKey = styled('td')`
-  color: ${p => p.theme.gray3};
+  color: ${p => p.theme.gray700};
   padding: ${space(0.5)} ${space(1)};
+  font-size: ${p => p.theme.fontSizeMedium};
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -74,7 +96,10 @@ const TagKey = styled('td')`
 
 const TagValue = styled(TagKey)`
   text-align: right;
-  ${overflowEllipsis};
+  color: ${p => p.theme.gray600};
+  @media (min-width: ${p => p.theme.breakpoints[0]}) {
+    width: 160px;
+  }
 `;
 
 export default ProjectReleaseDetails;

@@ -2,15 +2,13 @@ import DocumentTitle from 'react-document-title';
 import PropTypes from 'prop-types';
 import React from 'react';
 import * as ReactRouter from 'react-router';
-import * as Sentry from '@sentry/browser';
+import * as Sentry from '@sentry/react';
 
 import {Client} from 'app/api';
 import {Group, Organization, Project} from 'app/types';
-import {IconInfo} from 'app/icons';
 import {PageContent} from 'app/styles/organization';
 import {callIfFunction} from 'app/utils/callIfFunction';
 import {t} from 'app/locale';
-import Alert from 'app/components/alert';
 import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
 import GroupStore from 'app/stores/groupStore';
 import LoadingError from 'app/components/loadingError';
@@ -19,7 +17,6 @@ import Projects from 'app/utils/projects';
 import SentryTypes from 'app/sentryTypes';
 import recreateRoute from 'app/utils/recreateRoute';
 import withApi from 'app/utils/withApi';
-import withProfiler from 'app/utils/withProfiler';
 
 import {ERROR_TYPES} from './constants';
 import GroupHeader from './header';
@@ -31,7 +28,7 @@ type Props = {
   organization: Organization;
   environments: string[];
   children: React.ReactNode;
-  finishProfile: () => void;
+  isGlobalSelectionReady: boolean;
 } & ReactRouter.RouteComponentProps<{orgId: string; groupId: string}, {}>;
 
 type State = {
@@ -39,7 +36,7 @@ type State = {
   loading: boolean;
   error: boolean;
   errorType: Error;
-  project: null | Pick<Project, 'platform' | 'id' | 'slug'>;
+  project: null | (Pick<Project, 'id' | 'slug'> & Partial<Pick<Project, 'platform'>>);
 };
 
 class GroupDetails extends React.Component<Props, State> {
@@ -61,9 +58,9 @@ class GroupDetails extends React.Component<Props, State> {
     this.fetchData();
   }
 
-  componentDidUpdate(_prevProps, prevState: State) {
-    if (prevState.loading && !this.state.loading) {
-      callIfFunction(this.props.finishProfile);
+  componentDidUpdate(prevProps: Props) {
+    if (prevProps.isGlobalSelectionReady !== this.props.isGlobalSelectionReady) {
+      this.fetchData();
     }
   }
 
@@ -81,16 +78,22 @@ class GroupDetails extends React.Component<Props, State> {
     };
   }
 
-  remountComponent() {
+  remountComponent = () => {
     this.setState(this.initialState);
-  }
+    this.fetchData();
+  };
 
   get groupDetailsEndpoint() {
     return `/issues/${this.props.params.groupId}/`;
   }
 
   async fetchData() {
-    const {environments, api} = this.props;
+    const {environments, api, isGlobalSelectionReady} = this.props;
+
+    // Need to wait for global selection store to be ready before making request
+    if (!isGlobalSelectionReady) {
+      return;
+    }
 
     try {
       const data = await api.requestPromise(this.groupDetailsEndpoint, {
@@ -230,9 +233,7 @@ class GroupDetails extends React.Component<Props, State> {
     switch (this.state.errorType) {
       case ERROR_TYPES.GROUP_NOT_FOUND:
         return (
-          <Alert type="error" icon={<IconInfo size="lg" />}>
-            {t('The issue you were looking for was not found.')}
-          </Alert>
+          <LoadingError message={t('The issue you were looking for was not found.')} />
         );
       default:
         return <LoadingError onRetry={this.remountComponent} />;
@@ -249,43 +250,43 @@ class GroupDetails extends React.Component<Props, State> {
     return (
       <DocumentTitle title={this.getTitle()}>
         <React.Fragment>
-          {!isLoading && !isError ? (
-            <GlobalSelectionHeader
-              organization={organization}
-              forceProject={project}
-              showDateSelector={false}
-              shouldForceProject
-              lockedMessageSubject={t('issue')}
-              showIssueStreamLink
-              showProjectSettingsLink
-            />
-          ) : null}
-
-          <PageContent>
-            {isLoading ? (
-              <LoadingIndicator />
-            ) : isError ? (
-              this.renderError()
-            ) : (
-              <Projects orgId={organization.slug} slugs={[project!.slug]}>
-                {({projects, initiallyLoaded, fetchError}) =>
-                  initiallyLoaded ? (
-                    fetchError ? (
-                      <LoadingError message={t('Error loading the specified project')} />
+          <GlobalSelectionHeader
+            skipLoadLastUsed
+            forceProject={project}
+            showDateSelector={false}
+            shouldForceProject
+            lockedMessageSubject={t('issue')}
+            showIssueStreamLink
+            showProjectSettingsLink
+          >
+            <PageContent>
+              {isLoading ? (
+                <LoadingIndicator />
+              ) : isError ? (
+                this.renderError()
+              ) : (
+                <Projects orgId={organization.slug} slugs={[project!.slug]}>
+                  {({projects, initiallyLoaded, fetchError}) =>
+                    initiallyLoaded ? (
+                      fetchError ? (
+                        <LoadingError
+                          message={t('Error loading the specified project')}
+                        />
+                      ) : (
+                        this.renderContent(projects[0])
+                      )
                     ) : (
-                      this.renderContent(projects[0])
+                      <LoadingIndicator />
                     )
-                  ) : (
-                    <LoadingIndicator />
-                  )
-                }
-              </Projects>
-            )}
-          </PageContent>
+                  }
+                </Projects>
+              )}
+            </PageContent>
+          </GlobalSelectionHeader>
         </React.Fragment>
       </DocumentTitle>
     );
   }
 }
 
-export default withApi(withProfiler(GroupDetails));
+export default withApi(Sentry.withProfiler(GroupDetails));

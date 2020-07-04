@@ -2,7 +2,7 @@ import React from 'react';
 
 import {t} from 'app/locale';
 import Button from 'app/components/button';
-import {IconDelete} from 'app/icons/iconDelete';
+import {IconDelete} from 'app/icons';
 
 type Props = Omit<React.ComponentProps<typeof Button>, 'onClick'> & {
   index: number;
@@ -18,7 +18,7 @@ export default function DeleteActionButton(props: Props) {
   return (
     <Button
       type="button"
-      size="xsmall"
+      size="small"
       icon={<IconDelete size="xs" />}
       aria-label={t('Remove action')}
       {...props}

@@ -1,19 +1,23 @@
+import keyBy from 'lodash/keyBy';
 import React from 'react';
 import styled from '@emotion/styled';
-import keyBy from 'lodash/keyBy';
 
-import {Integration, IntegrationProvider} from 'app/types';
-import {RequestOptions} from 'app/api';
 import {addErrorMessage} from 'app/actionCreators/indicator';
+import {RequestOptions} from 'app/api';
+import Feature from 'app/components/acl/feature';
+import Alert from 'app/components/alert';
+import Button from 'app/components/button';
+import {IconWarning} from 'app/icons';
 import {t} from 'app/locale';
 import space from 'app/styles/space';
-import AddIntegrationButton from 'app/views/organizationIntegrations/addIntegrationButton';
-import Button from 'app/components/button';
-import InstalledIntegration from 'app/views/organizationIntegrations/installedIntegrationInDirectory';
-import withOrganization from 'app/utils/withOrganization';
+import {Integration, IntegrationProvider} from 'app/types';
 import {sortArray} from 'app/utils';
+import {isSlackWorkspaceApp, getReauthAlertText} from 'app/utils/integrationUtil';
+import withOrganization from 'app/utils/withOrganization';
 
 import AbstractIntegrationDetailedView from './abstractIntegrationDetailedView';
+import AddIntegrationButton from './addIntegrationButton';
+import InstalledIntegration from './installedIntegration';
 
 type State = {
   configurations: Integration[];
@@ -163,9 +167,13 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
       size,
       priority,
       'data-test-id': 'install-button',
-      disabled: disabledFromFeatures || !userHasAccess,
+      disabled: disabledFromFeatures,
       organization,
     };
+
+    if (!userHasAccess) {
+      return this.renderRequestIntegrationButton();
+    }
 
     if (provider.canAdd) {
       return (
@@ -193,8 +201,9 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
         </Button>
       );
     }
-    // should never happen but we can't return undefined without some refactoring
-    return <span />;
+
+    // This should never happen but we can't return undefined without some refactoring.
+    return <React.Fragment />;
   }
 
   renderConfigurations() {
@@ -202,23 +211,36 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
     const {organization} = this.props;
     const provider = this.provider;
     if (configurations.length) {
+      // check if we have a workspace app to render the alert
+      const hasWorkspaceApp = configurations.some(isSlackWorkspaceApp);
+
       return (
-        <div>
-          {configurations.map(integration => (
-            <InstallWrapper key={integration.id}>
-              <InstalledIntegration
-                organization={organization}
-                provider={provider}
-                integration={integration}
-                onRemove={this.onRemove}
-                onDisable={this.onDisable}
-                onReinstallIntegration={this.onInstall}
-                data-test-id={integration.id}
-                trackIntegrationEvent={this.trackIntegrationEvent}
-              />
-            </InstallWrapper>
-          ))}
-        </div>
+        <Feature organization={organization} features={['slack-migration']}>
+          {({hasFeature}) => (
+            <div>
+              {hasFeature && hasWorkspaceApp && (
+                <Alert type="warning" icon={<IconWarning size="sm" />}>
+                  {getReauthAlertText(provider)}
+                </Alert>
+              )}
+              {configurations.map(integration => (
+                <InstallWrapper key={integration.id}>
+                  <InstalledIntegration
+                    organization={organization}
+                    provider={provider}
+                    integration={integration}
+                    onRemove={this.onRemove}
+                    onDisable={this.onDisable}
+                    onReAuthIntegration={this.onInstall}
+                    data-test-id={integration.id}
+                    trackIntegrationEvent={this.trackIntegrationEvent}
+                    showReauthMessage={hasFeature && isSlackWorkspaceApp(integration)}
+                  />
+                </InstallWrapper>
+              ))}
+            </div>
+          )}
+        </Feature>
       );
     }
     return this.renderEmptyConfigurations();

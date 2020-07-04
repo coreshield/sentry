@@ -5,6 +5,12 @@
 import {t} from 'app/locale';
 import {Scope} from 'app/types';
 
+// This is considered the "default" route/view that users should be taken
+// to when the application does not have any further context
+//
+// e.g. loading app root or switching organization
+export const DEFAULT_APP_ROUTE = '/organizations/:orgSlug/issues/';
+
 export const API_ACCESS_SCOPES = [
   'project:read',
   'project:write',
@@ -209,10 +215,6 @@ export const ALGOLIA_DOCS_INDEX = 'sentry-docs';
 export const ALGOLIA_ZENDESK_INDEX = 'zendesk_sentry_articles';
 
 // SmartSearchBar settings
-export const SEARCH_TYPES = {
-  ISSUE: 0,
-  EVENT: 1,
-};
 export const MAX_AUTOCOMPLETE_RECENT_SEARCHES = 3;
 export const MAX_AUTOCOMPLETE_RELEASES = 5;
 
@@ -247,4 +249,5 @@ export const ORGANIZATION_FETCH_ERROR_TYPES = {
 };
 
 export const CONFIG_DOCS_URL = 'https://docs.sentry.io/server/config/';
-export const DISCOVER2_DOCS_URL = 'https://docs.sentry.io/performance/discover/';
+export const DISCOVER2_DOCS_URL =
+  'https://docs.sentry.io/performance-monitoring/discover-queries/';

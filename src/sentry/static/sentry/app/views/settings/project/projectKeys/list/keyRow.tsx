@@ -10,7 +10,7 @@ import {t} from 'app/locale';
 import Button from 'app/components/button';
 import ClippedBox from 'app/components/clippedBox';
 import Confirm from 'app/components/confirm';
-import {IconDelete} from 'app/icons/iconDelete';
+import {IconDelete} from 'app/icons';
 import ProjectKeyCredentials from 'app/views/settings/project/projectKeys/projectKeyCredentials';
 import recreateRoute from 'app/utils/recreateRoute';
 import space from 'app/styles/space';
@@ -116,7 +116,7 @@ const ClientKeyItemPanel = styled(Panel)`
 `;
 
 const PanelHeaderLink = styled(Link)`
-  color: ${p => p.theme.gray3};
+  color: ${p => p.theme.gray600};
 `;
 
 const Title = styled('div')<{disabled: boolean}>`

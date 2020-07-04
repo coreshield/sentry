@@ -1,25 +1,30 @@
 import React from 'react';
 import {Location} from 'history';
 import partial from 'lodash/partial';
+import styled from '@emotion/styled';
 
 import {Organization} from 'app/types';
 import {t} from 'app/locale';
 import Count from 'app/components/count';
+import Duration from 'app/components/duration';
 import ProjectBadge from 'app/components/idBadge/projectBadge';
 import UserBadge from 'app/components/idBadge/userBadge';
-import getDynamicText from 'app/utils/getDynamicText';
-import Duration from 'app/components/duration';
-import ShortId from 'app/components/shortId';
-import {formatFloat, formatPercentage} from 'app/utils/formatters';
+import UserMisery from 'app/components/userMisery';
 import Version from 'app/components/version';
-import {getAggregateAlias} from 'app/utils/discover/fields';
+import {defined} from 'app/utils';
+import getDynamicText from 'app/utils/getDynamicText';
+import {formatFloat, formatPercentage} from 'app/utils/formatters';
+import {getAggregateAlias, AGGREGATIONS} from 'app/utils/discover/fields';
 import Projects from 'app/utils/projects';
 
 import {
+  BarContainer,
   Container,
+  EventId,
   NumberContainer,
   OverflowLink,
   StyledDateTime,
+  StyledShortId,
   VersionContainer,
 } from './styles';
 import {MetaType, EventData} from './eventView';
@@ -44,7 +49,7 @@ export type FieldFormatterRenderFunctionPartial = (
 ) => React.ReactNode;
 
 type FieldFormatter = {
-  sortField: boolean;
+  isSortable: boolean;
   renderFunc: FieldFormatterRenderFunction;
 };
 
@@ -60,7 +65,10 @@ type FieldFormatters = {
 
 export type FieldTypes = keyof FieldFormatters;
 
-const emptyValue = <span>{t('n/a')}</span>;
+const EmptyValueContainer = styled('span')`
+  color: ${p => p.theme.gray500};
+`;
+const emptyValue = <EmptyValueContainer>{t('n/a')}</EmptyValueContainer>;
 
 /**
  * A mapping of field types to their rendering function.
@@ -71,14 +79,14 @@ const emptyValue = <span>{t('n/a')}</span>;
  */
 const FIELD_FORMATTERS: FieldFormatters = {
   boolean: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => {
       const value = data[field] ? t('yes') : t('no');
       return <Container>{value}</Container>;
     },
   },
   date: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => (
       <Container>
         {data[field]
@@ -91,7 +99,7 @@ const FIELD_FORMATTERS: FieldFormatters = {
     ),
   },
   duration: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => (
       <NumberContainer>
         {typeof data[field] === 'number' ? (
@@ -103,7 +111,7 @@ const FIELD_FORMATTERS: FieldFormatters = {
     ),
   },
   integer: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => (
       <NumberContainer>
         {typeof data[field] === 'number' ? <Count value={data[field]} /> : emptyValue}
@@ -111,7 +119,7 @@ const FIELD_FORMATTERS: FieldFormatters = {
     ),
   },
   number: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => (
       <NumberContainer>
         {typeof data[field] === 'number' ? formatFloat(data[field], 4) : emptyValue}
@@ -119,7 +127,7 @@ const FIELD_FORMATTERS: FieldFormatters = {
     ),
   },
   percentage: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => (
       <NumberContainer>
         {typeof data[field] === 'number' ? formatPercentage(data[field]) : emptyValue}
@@ -127,10 +135,14 @@ const FIELD_FORMATTERS: FieldFormatters = {
     ),
   },
   string: {
-    sortField: true,
+    isSortable: true,
     renderFunc: (field, data) => {
       // Some fields have long arrays in them, only show the tail of the data.
-      const value = Array.isArray(data[field]) ? data[field].slice(-1) : data[field];
+      const value = Array.isArray(data[field])
+        ? data[field].slice(-1)
+        : defined(data[field])
+        ? data[field]
+        : emptyValue;
       return <Container>{value}</Container>;
     },
   },
@@ -147,6 +159,7 @@ type SpecialField = {
 };
 
 type SpecialFields = {
+  id: SpecialField;
   project: SpecialField;
   user: SpecialField;
   'issue.id': SpecialField;
@@ -155,11 +168,24 @@ type SpecialFields = {
 };
 
 /**
- * "Special fields" do not map 1:1 to an single column in the event database,
- * they are a UI concept that combines the results of multiple fields and
- * displays with a custom render function.
+ * "Special fields" either do not map 1:1 to an single column in the event database,
+ * or they require custom UI formatting that can't be handled by the datatype formatters.
  */
 const SPECIAL_FIELDS: SpecialFields = {
+  id: {
+    sortField: 'id',
+    renderFunc: data => {
+      const id: string | unknown = data?.id;
+      if (typeof id !== 'string') {
+        return null;
+      }
+      return (
+        <Container>
+          <EventId value={id} />
+        </Container>
+      );
+    },
+  },
   'issue.id': {
     sortField: 'issue.id',
     renderFunc: (data, {organization}) => {
@@ -181,7 +207,7 @@ const SPECIAL_FIELDS: SpecialFields = {
       if (!issueID) {
         return (
           <Container>
-            <ShortId shortId={`${data.issue}`} />
+            <StyledShortId shortId={`${data.issue}`} />
           </Container>
         );
       }
@@ -190,7 +216,7 @@ const SPECIAL_FIELDS: SpecialFields = {
       return (
         <Container>
           <OverflowLink to={target} aria-label={issueID}>
-            <ShortId shortId={`${data.issue}`} />
+            <StyledShortId shortId={`${data.issue}`} />
           </OverflowLink>
         </Container>
       );
@@ -227,9 +253,12 @@ const SPECIAL_FIELDS: SpecialFields = {
         ip_address: '',
       };
 
-      const badge = <UserBadge user={userObj} hideEmail avatarSize={16} />;
+      if (data.user) {
+        const badge = <UserBadge user={userObj} hideEmail avatarSize={16} />;
+        return <Container>{badge}</Container>;
+      }
 
-      return <Container>{badge}</Container>;
+      return <Container>{emptyValue}</Container>;
     },
   },
   release: {
@@ -240,6 +269,52 @@ const SPECIAL_FIELDS: SpecialFields = {
           <Version version={data.release} anchor={false} tooltipRawVersion truncate />
         </VersionContainer>
       ),
+  },
+};
+
+type SpecialFunctions = {
+  user_misery: SpecialFieldRenderFunc;
+};
+
+/**
+ * "Special functions" are functions whose values either do not map 1:1 to a single column,
+ * or they require custom UI formatting that can't be handled by the datatype formatters.
+ */
+const SPECIAL_FUNCTIONS: SpecialFunctions = {
+  user_misery: data => {
+    const uniqueUsers = data.count_unique_user;
+    let userMiseryField: string = '';
+    for (const field in data) {
+      if (field.startsWith('user_misery')) {
+        userMiseryField = field;
+      }
+    }
+    if (!userMiseryField) {
+      return <NumberContainer>{emptyValue}</NumberContainer>;
+    }
+
+    const userMisery = data[userMiseryField];
+    if (!uniqueUsers && uniqueUsers !== 0) {
+      return (
+        <NumberContainer>
+          {typeof userMisery === 'number' ? formatFloat(userMisery, 4) : emptyValue}
+        </NumberContainer>
+      );
+    }
+
+    const miseryLimit = parseInt(userMiseryField.split('_').pop() || '', 10);
+
+    return (
+      <BarContainer>
+        <UserMisery
+          bars={10}
+          barHeight={20}
+          miseryLimit={miseryLimit}
+          totalUsers={uniqueUsers}
+          miserableUsers={userMisery}
+        />
+      </BarContainer>
+    );
   },
 };
 
@@ -259,9 +334,15 @@ export function getSortField(
     return field;
   }
 
+  for (const alias in AGGREGATIONS) {
+    if (field.startsWith(alias)) {
+      return AGGREGATIONS[alias].isSortable ? field : null;
+    }
+  }
+
   const fieldType = tableMeta[field];
   if (FIELD_FORMATTERS.hasOwnProperty(fieldType)) {
-    return FIELD_FORMATTERS[fieldType as keyof typeof FIELD_FORMATTERS].sortField
+    return FIELD_FORMATTERS[fieldType as keyof typeof FIELD_FORMATTERS].isSortable
       ? field
       : null;
   }
@@ -285,6 +366,12 @@ export function getFieldRenderer(
   }
   const fieldName = getAggregateAlias(field);
   const fieldType = meta[fieldName];
+
+  for (const alias in SPECIAL_FUNCTIONS) {
+    if (fieldName.startsWith(alias)) {
+      return SPECIAL_FUNCTIONS[alias];
+    }
+  }
 
   if (FIELD_FORMATTERS.hasOwnProperty(fieldType)) {
     return partial(FIELD_FORMATTERS[fieldType].renderFunc, fieldName);

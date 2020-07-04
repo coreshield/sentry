@@ -1,4 +1,4 @@
-import {SpanEntry} from 'app/components/events/interfaces/spans/types';
+import {SpanEntry, TraceContextType} from 'app/components/events/interfaces/spans/types';
 import {API_ACCESS_SCOPES} from 'app/constants';
 import {Field} from 'app/views/settings/components/forms/type';
 import {PlatformKey} from 'app/data/platformCategories';
@@ -8,6 +8,9 @@ import {
   NOT_INSTALLED,
   PENDING,
 } from 'app/views/organizationIntegrations/constants';
+import {WIDGET_DISPLAY} from 'app/views/dashboards/constants';
+import {Props as AlertProps} from 'app/components/alert';
+import {Query as DiscoverQuery} from 'app/views/discover/types';
 
 declare global {
   interface Window {
@@ -63,15 +66,13 @@ export type Avatar = {
   avatarType: 'letter_avatar' | 'upload' | 'gravatar';
 };
 
-export type Actor = {
-  id: string;
+export type Actor = User & {
   type: 'user' | 'team';
-  name: string;
 };
 
 /**
  * Organization summaries are sent when you request a
- * list of all organiations
+ * list of all organizations
  */
 export type OrganizationSummary = {
   status: {
@@ -89,14 +90,24 @@ export type OrganizationSummary = {
   slug: string;
 };
 
+export type Relay = {
+  publicKey: string;
+  name: string;
+  created?: string;
+  lastModified?: string;
+  description?: string;
+};
+
 /**
  * Detailed organization (e.g. when requesting details for a single org)
  *
  * Lightweight in this case means it does not contain `projects` or `teams`
  */
 export type LightWeightOrganization = OrganizationSummary & {
+  relayPiiConfig: string;
   scrubIPAddresses: boolean;
   attachmentsRole: string;
+  eventsMemberAdmin: boolean;
   sensitiveFields: string[];
   openMembership: boolean;
   quota: {
@@ -119,9 +130,9 @@ export type LightWeightOrganization = OrganizationSummary & {
   allowSharedIssues: boolean;
   dataScrubberDefaults: boolean;
   dataScrubber: boolean;
-  role?: string;
   onboardingTasks: OnboardingTaskStatus[];
-  trustedRelays: string[];
+  trustedRelays: Relay[];
+  role?: string;
 };
 
 /**
@@ -148,22 +159,16 @@ export type Project = {
   hasUserReports?: boolean;
   hasAccess: boolean;
   firstEvent: 'string' | null;
+  firstTransactionEvent: boolean;
 
   // XXX: These are part of the DetailedProject serializer
   plugins: Plugin[];
   processingIssues: number;
+  relayPiiConfig: string;
+  builtinSymbolSources?: string[];
 } & AvatarProject;
 
-export type ProjectRelease = {
-  version: string;
-  dateCreated: string;
-  dateReleased: string | null;
-  commitCount: number;
-  authors: User[];
-  newGroups: number;
-  healthData: Health | null;
-  project: ReleaseProject;
-};
+export type MinimalProject = Pick<Project, 'id' | 'slug'>;
 
 export type Health = {
   totalUsers: number;
@@ -240,18 +245,9 @@ type RuntimeContext = {
   name?: string;
 };
 
-type TraceContext = {
-  type: 'trace';
-  op: string;
-  description: string;
-  parent_span_id: string;
-  span_id: string;
-  trace_id: string;
-};
-
 type EventContexts = {
   runtime?: RuntimeContext;
-  trace?: TraceContext;
+  trace?: TraceContextType;
 };
 
 type SentryEventBase = {
@@ -263,11 +259,13 @@ type SentryEventBase = {
   metadata: EventMetadata;
   contexts: EventContexts;
   context?: {[key: string]: any};
+  device?: {[key: string]: any};
   packages?: {[key: string]: string};
   user: EventUser;
   message: string;
   platform?: PlatformKey;
   dateCreated?: string;
+  dateReceived?: string;
   endTimestamp?: number;
   entries: EntryType[];
 
@@ -284,28 +282,41 @@ type SentryEventBase = {
 
   oldestEventID: string | null;
   latestEventID: string | null;
+
+  groupingConfig: {
+    id: string;
+    enhancements: string;
+  };
 };
 
+export type SentryTransactionEvent = {
+  type: 'transaction';
+  title?: string;
+  entries: SpanEntry[];
+  startTimestamp: number;
+  endTimestamp: number;
+  sdk?: {
+    name?: string;
+  };
+  contexts?: {
+    trace?: TraceContextType;
+  };
+} & SentryEventBase;
+
 // This type is incomplete
-export type Event =
-  | ({type: string} & SentryEventBase)
-  | ({
-      type: 'transaction';
-      entries: SpanEntry[];
-      startTimestamp: number;
-      endTimestamp: number;
-    } & SentryEventBase);
+export type Event = ({type: string} & SentryEventBase) | SentryTransactionEvent;
 
 export type EventsStatsData = [number, {count: number}[]][];
 
+// API response format for a single series
 export type EventsStats = {
   data: EventsStatsData;
   totals?: {count: number};
+  order?: number;
 };
 
-export type YAxisEventsStats = {
-  [yAxisName: string]: EventsStats;
-};
+// API response format for multiple series
+export type MultiSeriesEventsStats = {[seriesName: string]: EventsStats};
 
 /**
  * Avatars are a more primitive version of User.
@@ -336,9 +347,10 @@ type UserEnrolledAuthenticator = {
   id: EnrolledAuthenticator['authId'];
 };
 
-export type User = AvatarUser & {
+export type User = Omit<AvatarUser, 'options'> & {
   lastLogin: string;
   isSuperuser: boolean;
+  isAuthenticated: boolean;
   emails: {
     is_verified: boolean;
     id: string;
@@ -378,7 +390,9 @@ export type Environment = {
 };
 
 // TODO(ts): This type is incomplete
-export type SavedSearch = {};
+export type SavedSearch = {
+  query?: string;
+};
 
 export type PluginNoProject = {
   id: string;
@@ -426,6 +440,8 @@ export type AppOrProviderOrPlugin =
   | PluginWithProjectList
   | DocumentIntegration;
 
+export type IntegrationType = 'document' | 'plugin' | 'first_party' | 'sentry_app';
+
 export type DocumentIntegration = {
   slug: string;
   name: string;
@@ -436,13 +452,14 @@ export type DocumentIntegration = {
   resourceLinks: Array<{title: string; url: string}>;
 };
 
+export type DateString = Date | string | null;
+
 export type GlobalSelection = {
   projects: number[];
   environments: string[];
-  forceUrlSync?: boolean;
   datetime: {
-    start: Date | null;
-    end: Date | null;
+    start: DateString;
+    end: DateString;
     period: string;
     utc: boolean;
   };
@@ -518,7 +535,11 @@ export type Config = {
   isOnPremise: boolean;
   lastOrganization: string | null;
   gravatarBaseUrl: string;
-  messages: string[];
+
+  /**
+   * This comes from django (django.contrib.messages)
+   */
+  messages: {message: string; level: string}[];
   dsn: string;
   userIdentity: {ip_address: string; email: string; id: string; isStaff: boolean};
   termsUrl: string | null;
@@ -649,6 +670,26 @@ export type PullRequest = {
   externalUrl: string;
 };
 
+type IntegrationDialog = {
+  actionText: string;
+  body: string;
+};
+
+type IntegrationAspects = {
+  alerts?: Array<AlertProps & {text: string}>;
+  reauthentication_alert?: {alertText: string};
+  disable_dialog?: IntegrationDialog;
+  removal_dialog?: IntegrationDialog;
+  externalInstall?: {
+    url: string;
+    buttonText: string;
+    noticeText: string;
+  };
+  configure_integration?: {
+    title: string;
+  };
+};
+
 type BaseIntegrationProvider = {
   key: string;
   slug: string;
@@ -667,7 +708,7 @@ export type IntegrationProvider = BaseIntegrationProvider & {
     noun: string;
     issue_url: string;
     source_url: string;
-    aspects: any; //TODO(ts)
+    aspects: IntegrationAspects;
   };
 };
 
@@ -697,6 +738,8 @@ export type SentryAppSchemaIssueLink = {
 export type SentryAppSchemaStacktraceLink = {
   type: 'stacktrace-link';
   uri: string;
+  url: string;
+  params?: Array<string>;
 };
 
 export type SentryAppSchemaElement =
@@ -738,10 +781,17 @@ export type Integration = {
   domainName: string;
   accountType: string;
   status: ObjectStatus;
-  provider: BaseIntegrationProvider & {aspects: any};
+  provider: BaseIntegrationProvider & {aspects: IntegrationAspects};
   configOrganization: Field[];
   //TODO(ts): This includes the initial data that is passed into the integration's configuration form
-  configData: object;
+  configData: object & {
+    //installationType is only for Slack migration and can be removed after migrations are done
+    installationType?:
+      | 'workspace_app'
+      | 'classic_bot'
+      | 'born_as_bot'
+      | 'migrated_to_bot';
+  };
 };
 
 export type IntegrationExternalIssue = {
@@ -842,7 +892,17 @@ export type UserReport = {
   email: string;
 };
 
-export type Release = {
+export type Release = BaseRelease &
+  ReleaseData & {
+    projects: ReleaseProject[];
+  };
+
+export type ReleaseWithHealth = BaseRelease &
+  ReleaseData & {
+    projects: Required<ReleaseProject>[];
+  };
+
+type ReleaseData = {
   commitCount: number;
   data: {};
   lastDeploy?: Deploy;
@@ -853,25 +913,44 @@ export type Release = {
   authors: User[];
   owner?: any; // TODO(ts)
   newGroups: number;
-  projects: ReleaseProject[];
-} & BaseRelease;
-
-export type ReleaseProject = {
-  slug: string;
-  name: string;
-  id: number;
-  platform: string;
-  platforms: string[];
-  healthData: Health;
+  versionInfo: VersionInfo;
+  fileCount: number | null;
 };
 
-export type BaseRelease = {
+type BaseRelease = {
   dateReleased: string;
   url: string;
   dateCreated: string;
   version: string;
   shortVersion: string;
   ref: string;
+};
+
+export type ReleaseProject = {
+  slug: string;
+  name: string;
+  id: number;
+  platform: PlatformKey;
+  platforms: PlatformKey[];
+  newGroups: number;
+  healthData?: Health;
+};
+
+export type ReleaseMeta = {
+  commitCount: number;
+  commitFilesChanged: number;
+  deployCount: number;
+  releaseFileCount: number;
+  version: string;
+  projects: ReleaseProject[];
+  versionInfo: VersionInfo;
+};
+
+export type VersionInfo = {
+  buildHash: string | null;
+  description: string;
+  package: string | null;
+  version: {raw: string};
 };
 
 export type Deploy = {
@@ -913,10 +992,10 @@ export type MemberRole = {
 export type SentryAppComponent = {
   uuid: string;
   type: 'issue-link' | 'alert-rule-action' | 'issue-media' | 'stacktrace-link';
-  schema: SentryAppSchemaIssueLink;
+  schema: SentryAppSchemaStacktraceLink;
   sentryApp: {
     uuid: string;
-    slug: string;
+    slug: 'clickup' | 'clubhouse' | 'rookout';
     name: string;
   };
 };
@@ -927,19 +1006,24 @@ export type NewQuery = {
   id: string | undefined;
   version: SavedQueryVersions;
   name: string;
-  projects: Readonly<number[]>;
+  createdBy?: User;
+
+  // Query and Table
+  query: string;
   fields: Readonly<string[]>;
   widths?: Readonly<string[]>;
-  query: string;
   orderby?: string;
+
+  // GlobalSelectionHeader
+  projects: Readonly<number[]>;
+  environment?: Readonly<string[]>;
   range?: string;
   start?: string;
   end?: string;
-  environment?: Readonly<string[]>;
-  tags?: Readonly<string[]>;
+
+  // Graph
   yAxis?: string;
   display?: string;
-  createdBy?: User;
 };
 
 export type SavedQuery = NewQuery & {
@@ -957,6 +1041,7 @@ export type SavedQueryState = {
 export type SelectValue<T> = {
   label: string;
   value: T;
+  disabled?: boolean;
 };
 
 /**
@@ -1059,6 +1144,8 @@ export type Tag = {
   predefined?: boolean;
 };
 
+export type TagCollection = {[key: string]: Tag};
+
 export type TagValue = {
   count: number;
   name: string;
@@ -1078,9 +1165,12 @@ export type Level = 'error' | 'fatal' | 'info' | 'warning' | 'sample';
 export type Meta = {
   chunks: Array<Chunks>;
   len: number;
-  rem: Array<Array<string | number>>;
-  err: Array<any>;
+  rem: Array<MetaRemark>;
+  err: Array<MetaError>;
 };
+
+export type MetaError = [string, any];
+export type MetaRemark = Array<string | number>;
 
 export type Chunks = {
   text: string;
@@ -1155,3 +1245,80 @@ export type Activity = {
   project: Project;
   user?: User;
 };
+
+export type PlatformIntegration = {
+  id: string;
+  type: string;
+  language: string;
+  link: string | null;
+  name: string;
+};
+
+export type EventGroupComponent = {
+  contributes: boolean;
+  hint: string | null;
+  id: string;
+  name: string | null;
+  values: EventGroupComponent[] | string[];
+};
+export type EventGroupingConfig = {
+  base: string | null;
+  changelog: string;
+  delegates: string[];
+  hidden: boolean;
+  id: string;
+  latest: boolean;
+  risk: number;
+  strategies: string[];
+};
+
+type EventGroupVariantKey = 'custom-fingerprint' | 'app' | 'default' | 'system';
+
+export enum EventGroupVariantType {
+  CUSTOM_FINGERPRINT = 'custom-fingerprint',
+  COMPONENT = 'component',
+  SALTED_COMPONENT = 'salted-component',
+}
+
+export type EventGroupVariant = {
+  description: string | null;
+  hash: string | null;
+  hashMismatch: boolean;
+  key: EventGroupVariantKey;
+  type: EventGroupVariantType;
+  values?: string;
+  component?: EventGroupComponent;
+  config?: EventGroupingConfig;
+};
+
+export type SourceMapsArchive = {
+  id: number;
+  type: 'release';
+  name: string;
+  date: string;
+  fileCount: number;
+};
+
+export type Artifact = {
+  dateCreated: string;
+  dist: string | null;
+  id: string;
+  name: string;
+  sha1: string;
+  size: number;
+  headers: {'Content-Type': string};
+};
+
+export type Widget = {
+  queries: {
+    discover: DiscoverQuery[];
+  };
+  title: React.ReactNode;
+  type: WIDGET_DISPLAY;
+  fieldLabelMap?: object;
+  yAxisMapping?: [number[], number[]];
+  includeReleases?: boolean;
+  includePreviousPeriod?: boolean;
+};
+
+export type EventGroupInfo = Record<EventGroupVariantKey, EventGroupVariant>;

@@ -17,12 +17,12 @@ import LinkWithConfirmation from 'app/components/links/linkWithConfirmation';
 import LoadingError from 'app/components/loadingError';
 import LoadingIndicator from 'app/components/loadingIndicator';
 import Pagination from 'app/components/pagination';
-import {IconDelete} from 'app/icons/iconDelete';
 import SentryTypes from 'app/sentryTypes';
 import Tooltip from 'app/components/tooltip';
 import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
 import space from 'app/styles/space';
+import {IconDelete} from 'app/icons';
 
 class ReleaseArtifacts extends React.Component {
   static propTypes = {
@@ -65,7 +65,7 @@ class ReleaseArtifacts extends React.Component {
     this.props.api.request(this.getFilesEndpoint(), {
       method: 'GET',
       // We need to omit global selection header url params because they are not supported
-      data: omit(this.props.location.query, Object.values(URL_PARAM)),
+      data: omit(this.props.location.query, [...Object.values(URL_PARAM), 'query']),
       success: (data, _, jqXHR) => {
         this.setState({
           error: false,
@@ -84,7 +84,7 @@ class ReleaseArtifacts extends React.Component {
   };
 
   handleRemove(id) {
-    addLoadingMessage(t('Removing artifact..'));
+    addLoadingMessage(t('Removing artifact\u2026'));
 
     this.props.api.request(this.getFilesEndpoint() + `${id}/`, {
       method: 'DELETE',

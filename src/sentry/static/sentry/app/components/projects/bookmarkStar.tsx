@@ -75,10 +75,10 @@ BookmarkStar.propTypes = {
 };
 
 const Star = styled(InlineSvg)<{isBookmarked: boolean}>`
-  color: ${p => (p.isBookmarked ? p.theme.yellowOrange : p.theme.gray1)};
+  color: ${p => (p.isBookmarked ? p.theme.orange300 : p.theme.gray400)};
 
   &:hover {
-    color: ${p => (p.isBookmarked ? p.theme.yellowOrangeLight : p.theme.gray2)};
+    color: ${p => (p.isBookmarked ? p.theme.orange200 : p.theme.gray500)};
   }
 `;
 

@@ -330,7 +330,6 @@ INSTALLED_APPS = (
     "sentry.lang.javascript.apps.Config",
     "sentry.lang.native.apps.Config",
     "sentry.plugins.sentry_interface_types.apps.Config",
-    "sentry.plugins.sentry_mail.apps.Config",
     "sentry.plugins.sentry_urls.apps.Config",
     "sentry.plugins.sentry_useragents.apps.Config",
     "sentry.plugins.sentry_webhooks.apps.Config",
@@ -566,6 +565,7 @@ CELERY_QUEUES = [
     Queue("events.save_event", routing_key="events.save_event"),
     Queue("files.delete", routing_key="files.delete"),
     Queue("incidents", routing_key="incidents"),
+    Queue("incident_snapshots", routing_key="incident_snapshots"),
     Queue("integrations", routing_key="integrations"),
     Queue("merge", routing_key="merge"),
     Queue("options", routing_key="options"),
@@ -682,6 +682,11 @@ CELERYBEAT_SCHEDULE = {
         "schedule": timedelta(hours=6),
         "options": {"expires": 60 * 25},
     },
+    "process_pending_incident_snapshots": {
+        "task": "sentry.incidents.tasks.process_pending_incident_snapshots",
+        "schedule": timedelta(hours=1),
+        "options": {"expires": 3600, "queue": "incidents"},
+    },
 }
 
 BGTASKS = {
@@ -737,6 +742,7 @@ LOGGING = {
     "loggers": {
         "celery": {"level": "WARNING"},
         "sentry": {"level": "INFO"},
+        "sentry_plugins": {"level": "INFO"},
         "sentry.files": {"level": "WARNING"},
         "sentry.minidumps": {"handlers": ["internal"], "propagate": False},
         "sentry.interfaces": {"handlers": ["internal"], "propagate": False},
@@ -794,8 +800,12 @@ SENTRY_FEATURES = {
     "auth:register": True,
     # Enable advanced search features, like negation and wildcard matching.
     "organizations:advanced-search": True,
+    # Enable android mappings in processing section of settings.
+    "organizations:android-mappings": False,
     # Enable obtaining and using API keys.
     "organizations:api-keys": False,
+    # Move release artifacts to settings.
+    "organizations:artifacts-in-settings": False,
     # Enable explicit use of AND and OR in search.
     "organizations:boolean-search": False,
     # Enable creating organizations within sentry (if SENTRY_SINGLE_ORGANIZATION
@@ -813,12 +823,12 @@ SENTRY_FEATURES = {
     "organizations:custom-symbol-sources": True,
     # Enable the events stream interface.
     "organizations:events": False,
-    # Enable events v2 instead of the events stream
-    "organizations:events-v2": False,
     # Enable discover 2 basic functions
-    "organizations:discover-basic": False,
+    "organizations:discover-basic": True,
     # Enable discover 2 custom queries and saved queries
-    "organizations:discover-query": False,
+    "organizations:discover-query": True,
+    # Enable create alert rule on the discover page
+    "organizations:create-from-discover": False,
     # Enable Performance view
     "organizations:performance-view": False,
     # Enable multi project selection
@@ -830,11 +840,13 @@ SENTRY_FEATURES = {
     # Lets organizations manage grouping configs
     "organizations:set-grouping-config": False,
     # Enable Releases v2 feature
-    "organizations:releases-v2": False,
+    "organizations:releases-v2": True,
     # Enable rule page.
     "organizations:rule-page": False,
     # Enable incidents feature
     "organizations:incidents": False,
+    # Enable incidents performance feature
+    "organizations:incidents-performance": False,
     # Enable integration functionality to create and link groups to issues on
     # external services.
     "organizations:integrations-issue-basic": True,
@@ -843,6 +855,8 @@ SENTRY_FEATURES = {
     "organizations:integrations-issue-sync": True,
     # Enable interface functionality to receive event hooks.
     "organizations:integrations-event-hooks": False,
+    # Enable the Vercel integration
+    "organizations:integrations-vercel": False,
     # Enable data forwarding functionality for organizations.
     "organizations:data-forwarding": True,
     # Enable experimental performance improvements.
@@ -858,7 +872,9 @@ SENTRY_FEATURES = {
     # customized with SENTRY_ORG_SUBDOMAIN_TEMPLATE)
     "organizations:org-subdomains": False,
     # Enable access to more advanced (alpha) datascrubbing settings.
-    "organizations:datascrubbers-v2": False,
+    "organizations:datascrubbers-v2": True,
+    # Enable the new version of interface/breadcrumbs
+    "organizations:breadcrumbs-v2": False,
     # Enable usage of external relays, for use with Relay. See
     # https://github.com/getsentry/relay.
     "organizations:relay": False,
@@ -939,8 +955,28 @@ SENTRY_FRONTEND_REQUESTS_DSN = None
 # Configuration for JavaScript's whitelistUrls - defaults to ALLOWED_HOSTS
 SENTRY_FRONTEND_WHITELIST_URLS = None
 
-# Sample rate for Sentry transactions
+# ----
+# APM config
+# ----
+
+# sample rate for transactions initiated from the frontend
 SENTRY_APM_SAMPLING = 0
+
+# Sample rate for symbolicate_event task transactions
+SENTRY_SYMBOLICATE_EVENT_APM_SAMPLING = 0
+
+# Sample rate for the process_event task transactions
+SENTRY_PROCESS_EVENT_APM_SAMPLING = 0
+
+# sample rate for the relay projectconfig endpoint
+SENTRY_RELAY_ENDPOINT_APM_SAMPLING = 0
+
+# sample rate for ingest consumer processing functions
+SENTRY_INGEST_CONSUMER_APM_SAMPLING = 0
+
+# ----
+# end APM config
+# ----
 
 # DSN to use for Sentry monitors
 SENTRY_MONITOR_DSN = None
@@ -1036,6 +1072,10 @@ SENTRY_CACHE_OPTIONS = {}
 SENTRY_ATTACHMENTS = "sentry.attachments.default.DefaultAttachmentCache"
 SENTRY_ATTACHMENTS_OPTIONS = {}
 
+# Events blobs processing backend
+SENTRY_EVENT_PROCESSING_STORE = "sentry.eventstore.processing.default.DefaultEventProcessingStore"
+SENTRY_EVENT_PROCESSING_STORE_OPTIONS = {}
+
 # The internal Django cache is still used in many places
 # TODO(dcramer): convert uses over to Sentry's backend
 CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
@@ -1056,6 +1096,12 @@ SENTRY_QUOTA_OPTIONS = {}
 # Cache for Relay project configs
 SENTRY_RELAY_PROJECTCONFIG_CACHE = "sentry.relay.projectconfig_cache.base.ProjectConfigCache"
 SENTRY_RELAY_PROJECTCONFIG_CACHE_OPTIONS = {}
+
+# Which cache to use for debouncing cache updates to the projectconfig cache
+SENTRY_RELAY_PROJECTCONFIG_DEBOUNCE_CACHE = (
+    "sentry.relay.projectconfig_debounce_cache.base.ProjectConfigDebounceCache"
+)
+SENTRY_RELAY_PROJECTCONFIG_DEBOUNCE_CACHE_OPTIONS = {}
 
 # Rate limiting backend
 SENTRY_RATELIMITER = "sentry.ratelimits.base.RateLimiter"
@@ -1339,6 +1385,7 @@ SENTRY_WATCHERS = (
         "webpack",
         [
             os.path.join(NODE_MODULES_ROOT, ".bin", "webpack"),
+            "--color",
             "--output-pathinfo",
             "--watch",
             u"--config={}".format(
@@ -1427,7 +1474,7 @@ SENTRY_DEVSERVICES = {
         ),
     },
     "clickhouse": {
-        "image": "yandex/clickhouse-server:19.11",
+        "image": "yandex/clickhouse-server:19.17.4.11",
         "ports": {"9000/tcp": 9000, "9009/tcp": 9009, "8123/tcp": 8123},
         "ulimits": [{"name": "nofile", "soft": 262144, "hard": 262144}],
         "volumes": {"clickhouse": {"bind": "/var/lib/clickhouse"}},
@@ -1474,11 +1521,15 @@ SENTRY_DEVSERVICES = {
         "command": ["run"],
         "only_if": lambda settings, options: options.get("symbolicator.enabled"),
     },
-    "reverse_proxy": {
+    "proxy": {
         "image": "nginx:1.16.1",
         "ports": {"80/tcp": SENTRY_REVERSE_PROXY_PORT},
         "volumes": {REVERSE_PROXY_CONFIG: {"bind": "/etc/nginx/nginx.conf"}},
         "only_if": lambda settings, options: settings.SENTRY_USE_RELAY,
+        # This directive tells `devservices up` that the reverse_proxy is not to be
+        # started up, only pulled and made available for `devserver` which will start
+        # it with `devservices attach --is-devserver reverse_proxy`.
+        "with_devserver": True,
     },
     "relay": {
         "image": "us.gcr.io/sentryio/relay:latest",
@@ -1487,6 +1538,7 @@ SENTRY_DEVSERVICES = {
         "volumes": {RELAY_CONFIG_DIR: {"bind": "/etc/relay"}},
         "command": ["run", "--config", "/etc/relay"],
         "only_if": lambda settings, options: settings.SENTRY_USE_RELAY,
+        "with_devserver": True,
     },
 }
 
@@ -1518,6 +1570,7 @@ SENTRY_DEFAULT_INTEGRATIONS = (
     "sentry.integrations.vsts.VstsIntegrationProvider",
     "sentry.integrations.vsts_extension.VstsExtensionIntegrationProvider",
     "sentry.integrations.pagerduty.integration.PagerDutyIntegrationProvider",
+    "sentry.integrations.vercel.VercelIntegrationProvider",
 )
 
 
@@ -1710,7 +1763,7 @@ SENTRY_BUILTIN_SOURCES = {
 }
 
 # Relay
-# List of PKs whitelisted by Sentry.  All relays here are always
+# List of PKs explicitly allowed by Sentry.  All relays here are always
 # registered as internal relays.
 SENTRY_RELAY_WHITELIST_PK = [
     # NOTE (RaduW) This is the relay key for the relay instance used by devservices.
@@ -1720,7 +1773,7 @@ SENTRY_RELAY_WHITELIST_PK = [
 ]
 
 # When open registration is not permitted then only relays in the
-# whitelist can register.
+# list of explicitly allowed relays can register.
 SENTRY_RELAY_OPEN_REGISTRATION = False
 
 # GeoIP
@@ -1757,6 +1810,7 @@ KAFKA_CLUSTERS = {
 KAFKA_EVENTS = "events"
 KAFKA_OUTCOMES = "outcomes"
 KAFKA_EVENTS_SUBSCRIPTIONS_RESULTS = "events-subscription-results"
+KAFKA_TRANSACTIONS_SUBSCRIPTIONS_RESULTS = "transactions-subscription-results"
 KAFKA_INGEST_EVENTS = "ingest-events"
 KAFKA_INGEST_ATTACHMENTS = "ingest-attachments"
 KAFKA_INGEST_TRANSACTIONS = "ingest-transactions"
@@ -1768,6 +1822,10 @@ KAFKA_TOPICS = {
         "cluster": "default",
         "topic": KAFKA_EVENTS_SUBSCRIPTIONS_RESULTS,
     },
+    KAFKA_TRANSACTIONS_SUBSCRIPTIONS_RESULTS: {
+        "cluster": "default",
+        "topic": KAFKA_TRANSACTIONS_SUBSCRIPTIONS_RESULTS,
+    },
     # Topic for receiving simple events (error events without attachments) from Relay
     KAFKA_INGEST_EVENTS: {"cluster": "default", "topic": KAFKA_INGEST_EVENTS},
     # Topic for receiving 'complex' events (error events with attachments) from Relay
@@ -1776,10 +1834,10 @@ KAFKA_TOPICS = {
     KAFKA_INGEST_TRANSACTIONS: {"cluster": "default", "topic": KAFKA_INGEST_TRANSACTIONS},
 }
 
-# Enable this to use the legacy Slack Workspace Token apps. You will likely
-# never need to switch this unless you created a workspace app before slack
-# disabled them.
-SLACK_INTEGRATION_USE_WST = False
+# For Jira, only approved apps can use the access_email_addresses scope
+# This scope allows Sentry to use the email endpoint (https://developer.atlassian.com/cloud/jira/platform/rest/v3/#api-rest-api-3-user-email-get)
+# We use the email with Jira 2-way sync in order to match the user
+JIRA_USE_EMAIL_SCOPE = False
 
 """
 Fields are:
@@ -1861,3 +1919,4 @@ SENTRY_REQUEST_METRIC_ALLOWED_PATHS = (
     "sentry.discover.endpoints",
     "sentry.incidents.endpoints",
 )
+SENTRY_MAIL_ADAPTER_BACKEND = "sentry.mail.adapter.MailAdapter"

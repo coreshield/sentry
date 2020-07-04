@@ -3,6 +3,7 @@ import {Location} from 'history';
 import styled from '@emotion/styled';
 
 import {Client} from 'app/api';
+import {t} from 'app/locale';
 import {Organization, Tag} from 'app/types';
 import {metric} from 'app/utils/analytics';
 import withApi from 'app/utils/withApi';
@@ -18,9 +19,12 @@ type TableProps = {
   location: Location;
   eventView: EventView;
   organization: Organization;
+  showTags: boolean;
   tags: {[key: string]: Tag};
-  setError: (msg: string | undefined) => void;
+  setError: (msg: string, code: number) => void;
   title: string;
+  onChangeShowTags: () => void;
+  confirmedQuery: boolean;
 };
 
 type TableState = {
@@ -58,7 +62,8 @@ class Table extends React.PureComponent<TableProps, TableState> {
     // from an invalid view state to a valid one.
     if (
       (!this.state.isLoading && this.shouldRefetchData(prevProps)) ||
-      (prevProps.eventView.isValid() === false && this.props.eventView.isValid())
+      (prevProps.eventView.isValid() === false && this.props.eventView.isValid()) ||
+      prevProps.confirmedQuery !== this.props.confirmedQuery
     ) {
       this.fetchData();
     }
@@ -72,19 +77,25 @@ class Table extends React.PureComponent<TableProps, TableState> {
   };
 
   fetchData = () => {
-    const {eventView, organization, location, setError} = this.props;
+    const {eventView, organization, location, setError, confirmedQuery} = this.props;
 
-    if (!eventView.isValid()) {
+    if (!eventView.isValid() || !confirmedQuery) {
       return;
     }
+
+    // note: If the eventView has no aggregates, the endpoint will automatically add the event id in
+    // the API payload response
+
     const url = `/organizations/${organization.slug}/eventsv2/`;
     const tableFetchID = Symbol('tableFetchID');
     const apiPayload = eventView.getEventsAPIPayload(location);
-    setError(undefined);
+
+    setError('', 200);
 
     this.setState({isLoading: true, tableFetchID});
-    metric.mark(`discover-events-start-${apiPayload.query}`);
+    metric.mark({name: `discover-events-start-${apiPayload.query}`});
 
+    this.props.api.clear();
     this.props.api
       .requestPromise(url, {
         method: 'GET',
@@ -121,14 +132,15 @@ class Table extends React.PureComponent<TableProps, TableState> {
             status: err.status,
           },
         });
+        const message = err?.responseJSON?.detail || t('An unknown error occurred.');
         this.setState({
           isLoading: false,
           tableFetchID: undefined,
-          error: err.responseJSON.detail,
+          error: message,
           pageLinks: null,
           tableData: null,
         });
-        setError(err.responseJSON.detail);
+        setError(message, err.status);
       });
   };
 

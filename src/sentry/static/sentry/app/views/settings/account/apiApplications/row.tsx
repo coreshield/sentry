@@ -12,7 +12,7 @@ import {
 } from 'app/actionCreators/indicator';
 import {t} from 'app/locale';
 import Button from 'app/components/button';
-import {IconDelete} from 'app/icons/iconDelete';
+import {IconDelete} from 'app/icons';
 import getDynamicText from 'app/utils/getDynamicText';
 import space from 'app/styles/space';
 
@@ -105,7 +105,7 @@ const ApplicationName = styled(Link)`
 `;
 
 const ClientId = styled('div')`
-  color: ${p => p.theme.gray1};
+  color: ${p => p.theme.gray400};
   font-size: ${p => p.theme.fontSizeMedium};
 `;
 

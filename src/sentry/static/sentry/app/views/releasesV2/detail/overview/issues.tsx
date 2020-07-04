@@ -6,7 +6,8 @@ import {Location} from 'history';
 import {t, tct} from 'app/locale';
 import DropdownControl, {DropdownItem} from 'app/components/dropdownControl';
 import Button from 'app/components/button';
-import GroupList from 'app/views/releases/detail/groupList';
+import DiscoverButton from 'app/components/discoverButton';
+import GroupList from 'app/components/issues/groupList';
 import space from 'app/styles/space';
 import {Panel, PanelBody} from 'app/components/panels';
 import EventView from 'app/utils/discover/eventView';
@@ -17,7 +18,8 @@ import {GlobalSelection} from 'app/types';
 import Feature from 'app/components/acl/feature';
 import {URL_PARAM} from 'app/constants/globalSelectionHeader';
 import {getUtcDateString} from 'app/utils/dates';
-import DropdownButton from 'app/components/dropdownButton';
+import ButtonBar from 'app/components/buttonBar';
+import {stringifyQueryObject, QueryResults} from 'app/utils/tokenizeSearch';
 
 enum IssuesType {
   NEW = 'new',
@@ -70,6 +72,27 @@ class Issues extends React.Component<Props, State> {
     return discoverView.getResultsViewUrlTarget(orgId);
   }
 
+  getIssuesUrl() {
+    const {version, orgId} = this.props;
+    const {issuesType} = this.state;
+    const {queryParams} = this.getIssuesEndpoint();
+    const query: QueryResults = {query: []};
+
+    if (issuesType === IssuesType.NEW) {
+      query.firstRelease = [version];
+    } else {
+      query.release = [version];
+    }
+
+    return {
+      pathname: `/organizations/${orgId}/issues/`,
+      query: {
+        ...queryParams,
+        query: stringifyQueryObject(query),
+      },
+    };
+  }
+
   getIssuesEndpoint(): {path: string; queryParams: IssuesQueryParams} {
     const {version, orgId, location} = this.props;
     const {issuesType} = this.state;
@@ -102,15 +125,6 @@ class Issues extends React.Component<Props, State> {
   handleIssuesTypeSelection = (issuesType: IssuesType) => {
     this.setState({issuesType});
   };
-
-  renderFilterLabel(label: string | undefined) {
-    return (
-      <React.Fragment>
-        <LabelText>{t('Filter')}: &nbsp; </LabelText>
-        {label}
-      </React.Fragment>
-    );
-  }
 
   renderEmptyMessage = () => {
     const {selection} = this.props;
@@ -155,31 +169,32 @@ class Issues extends React.Component<Props, State> {
       <React.Fragment>
         <ControlsWrapper>
           <DropdownControl
-            button={({getActorProps}) => (
-              <FilterButton {...getActorProps()} isOpen={false}>
-                {this.renderFilterLabel(
-                  issuesTypes.find(i => i.value === issuesType)?.label
-                )}
-              </FilterButton>
-            )}
+            buttonProps={{prefix: t('Filter'), size: 'small'}}
+            label={issuesTypes.find(i => i.value === issuesType)?.label}
           >
             {issuesTypes.map(({value, label}) => (
-              <DropdownItem
+              <StyledDropdownItem
                 key={value}
                 onSelect={this.handleIssuesTypeSelection}
                 eventKey={value}
                 isActive={value === issuesType}
               >
                 {label}
-              </DropdownItem>
+              </StyledDropdownItem>
             ))}
           </DropdownControl>
 
-          <Feature features={['discover-basic']}>
-            <DiscoverButton to={this.getDiscoverUrl()}>
-              {t('Open in Discover')}
-            </DiscoverButton>
-          </Feature>
+          <OpenInButtonBar gap={1}>
+            <Feature features={['discover-basic']}>
+              <DiscoverButton to={this.getDiscoverUrl()} size="small">
+                {t('Open in Discover')}
+              </DiscoverButton>
+            </Feature>
+
+            <Button to={this.getIssuesUrl()} size="small">
+              {t('Open in Issues')}
+            </Button>
+          </OpenInButtonBar>
         </ControlsWrapper>
 
         <TableWrapper>
@@ -198,19 +213,24 @@ class Issues extends React.Component<Props, State> {
   }
 }
 
-const FilterButton = styled(DropdownButton)``;
-const DiscoverButton = styled(Button)``;
-
 const ControlsWrapper = styled('div')`
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: ${space(1)};
   @media (max-width: ${p => p.theme.breakpoints[0]}) {
-    ${FilterButton}, ${DiscoverButton} {
-      font-size: ${p => p.theme.fontSizeSmall};
-    }
+    display: block;
   }
+`;
+
+const OpenInButtonBar = styled(ButtonBar)`
+  @media (max-width: ${p => p.theme.breakpoints[0]}) {
+    margin-top: ${space(1)};
+  }
+`;
+
+const StyledDropdownItem = styled(DropdownItem)`
+  white-space: nowrap;
 `;
 
 const TableWrapper = styled('div')`
@@ -219,11 +239,6 @@ const TableWrapper = styled('div')`
     /* smaller space between table and pagination */
     margin-bottom: -${space(1)};
   }
-`;
-
-const LabelText = styled('em')`
-  font-style: normal;
-  color: ${p => p.theme.gray2};
 `;
 
 export default Issues;

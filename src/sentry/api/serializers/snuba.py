@@ -127,10 +127,13 @@ def value_from_row(row, tagkey):
 def zerofill(data, start, end, rollup):
     rv = []
     start = (int(to_timestamp(start)) // rollup) * rollup
-    end = ((int(to_timestamp(end)) // rollup) * rollup) + rollup
+    end = (int(to_timestamp(end)) // rollup) * rollup
     i = 0
     for key in six.moves.xrange(start, end, rollup):
         try:
+            while data[i][0] < key:
+                rv.append(data[i])
+                i += 1
             if data[i][0] == key:
                 rv.append(data[i])
                 i += 1
@@ -290,7 +293,7 @@ class SnubaTSResultSerializer(BaseSnubaSerializer):
     Serializer for time-series Snuba data.
     """
 
-    def serialize(self, result, column="count"):
+    def serialize(self, result, column="count", order=None):
         data = [
             (key, list(group))
             for key, group in itertools.groupby(result.data["data"], key=lambda r: r["time"])
@@ -314,5 +317,10 @@ class SnubaTSResultSerializer(BaseSnubaSerializer):
 
         if result.data.get("totals"):
             res["totals"] = {"count": result.data["totals"][column]}
+        # If order is passed let that overwrite whats in data since its order for multi-axis
+        if order is not None:
+            res["order"] = order
+        elif "order" in result.data:
+            res["order"] = result.data["order"]
 
         return res

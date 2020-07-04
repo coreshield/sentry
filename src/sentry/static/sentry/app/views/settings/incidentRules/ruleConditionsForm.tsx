@@ -1,4 +1,5 @@
 import React from 'react';
+import styled from '@emotion/styled';
 
 import {Client} from 'app/api';
 import {Environment, Organization} from 'app/types';
@@ -9,10 +10,16 @@ import {getDisplayName} from 'app/utils/environment';
 import {t, tct} from 'app/locale';
 import FormField from 'app/views/settings/components/forms/formField';
 import SearchBar from 'app/views/events/searchBar';
+import RadioGroup from 'app/views/settings/components/forms/controls/radioGroup';
 import SelectField from 'app/views/settings/components/forms/selectField';
+import space from 'app/styles/space';
+import theme from 'app/utils/theme';
+import Tooltip from 'app/components/tooltip';
+import Feature from 'app/components/acl/feature';
 
-import {AlertRuleAggregations, TimeWindow} from './types';
-import getMetricDisplayName from './utils/getMetricDisplayName';
+import {TimeWindow, IncidentRule, Dataset} from './types';
+import MetricField from './metricField';
+import {DATASET_EVENT_TYPE_FILTERS, DEFAULT_AGGREGATE} from './constants';
 
 type TimeWindowMapType = {[key in TimeWindow]: string};
 
@@ -33,7 +40,8 @@ type Props = {
   organization: Organization;
   projectSlug: string;
   disabled: boolean;
-  onFilterUpdate: (query: string) => void;
+  thresholdChart: React.ReactNode;
+  onFilterSearch: (query: string) => void;
 };
 
 type State = {
@@ -68,73 +76,115 @@ class RuleConditionsForm extends React.PureComponent<Props, State> {
   }
 
   render() {
-    const {organization, disabled, onFilterUpdate} = this.props;
+    const {organization, disabled, onFilterSearch} = this.props;
+    const {environments} = this.state;
+
+    const environmentList: [IncidentRule['environment'], React.ReactNode][] = defined(
+      environments
+    )
+      ? environments.map((env: Environment) => [env.name, getDisplayName(env)])
+      : [];
+
+    const anyEnvironmentLabel = (
+      <React.Fragment>
+        {t('All Environments')}
+        <div className="all-environment-note">
+          {tct(
+            `This will count events across every environment. For example,
+             having 50 [code1:production] events and 50 [code2:development]
+             events would trigger an alert with a critical threshold of 100.`,
+            {code1: <code />, code2: <code />}
+          )}
+        </div>
+      </React.Fragment>
+    );
+    environmentList.unshift([null, anyEnvironmentLabel]);
 
     return (
       <Panel>
         <PanelHeader>{t('Configure Rule Conditions')}</PanelHeader>
         <PanelBody>
-          <SelectField
-            name="aggregation"
-            label={t('Metric')}
-            help={t('Choose which metric to trigger on')}
-            choices={[
-              [
-                AlertRuleAggregations.UNIQUE_USERS,
-                getMetricDisplayName(AlertRuleAggregations.UNIQUE_USERS),
-              ],
-              [
-                AlertRuleAggregations.TOTAL,
-                getMetricDisplayName(AlertRuleAggregations.TOTAL),
-              ],
+          <Feature
+            requireAll
+            features={[
+              'organizations:performance-view',
+              'organizations:incidents-performance',
             ]}
-            required
-            isDisabled={disabled}
-          />
-          <SelectField
-            name="environment"
-            label={t('Environment')}
-            help={t('Select an environment')}
-            placeholder={t('All environments')}
-            choices={
-              defined(this.state.environments)
-                ? this.state.environments.map((env: Environment) => [
-                    env.name,
-                    getDisplayName(env),
-                  ])
-                : []
-            }
-            isDisabled={disabled || this.state.environments === null}
-            multiple
-            isClearable
-          />
-          <FormField
-            name="query"
-            label={t('Filter')}
-            placeholder="error.type:TypeError"
-            help={tct(`Note: A filter of [filter] is automatically applied`, {
-              filter: <code>event.type:error</code>,
-            })}
           >
-            {({onChange, onBlur, onKeyDown, initialData}) => (
+            <FormField required name="dataset" label="Data source">
+              {({onChange, onBlur, value, model, label}) => (
+                <RadioGroup
+                  orientInline
+                  disabled={disabled}
+                  value={value}
+                  label={label}
+                  onChange={(id, e) => {
+                    onChange(id, e);
+                    onBlur(id, e);
+                    // Reset the aggregate to the default (which works across
+                    // datatypes), otherwise we may send snuba an invalid query
+                    // (transaction aggregate on events datasource = bad).
+                    model.setValue('aggregate', DEFAULT_AGGREGATE);
+                  }}
+                  choices={[
+                    [Dataset.ERRORS, t('Errors')],
+                    [Dataset.TRANSACTIONS, t('Transactions')],
+                  ]}
+                />
+              )}
+            </FormField>
+          </Feature>
+          {this.props.thresholdChart}
+          <FormField name="query" inline={false}>
+            {({onChange, onBlur, onKeyDown, initialData, model}) => (
               <SearchBar
                 defaultQuery={initialData?.query ?? ''}
+                inlineLabel={
+                  <Tooltip
+                    title={t(
+                      'Metric alerts are automatically filtered to your data source'
+                    )}
+                  >
+                    <SearchEventTypeNote>
+                      {DATASET_EVENT_TYPE_FILTERS[model.getValue('dataset')]}
+                    </SearchEventTypeNote>
+                  </Tooltip>
+                }
+                omitTags={['event.type']}
                 disabled={disabled}
                 useFormWrapper={false}
                 organization={organization}
                 onChange={onChange}
-                onKeyDown={onKeyDown}
+                onKeyDown={e => {
+                  /**
+                   * Do not allow enter key to submit the alerts form since it is unlikely
+                   * users will be ready to create the rule as this sits above required fields.
+                   */
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }
+
+                  onKeyDown?.(e);
+                }}
                 onBlur={query => {
-                  onFilterUpdate(query);
+                  onFilterSearch(query);
                   onBlur(query);
                 }}
                 onSearch={query => {
-                  onFilterUpdate(query);
+                  onFilterSearch(query);
                   onChange(query, {});
                 }}
               />
             )}
           </FormField>
+          <MetricField
+            name="aggregate"
+            label="Metric"
+            organization={organization}
+            disabled={disabled}
+            required
+          />
           <SelectField
             name="timeWindow"
             label={t('Time Window')}
@@ -154,10 +204,44 @@ class RuleConditionsForm extends React.PureComponent<Props, State> {
             getValue={value => Number(value)}
             setValue={value => `${value}`}
           />
+          <SelectField
+            name="environment"
+            label={t('Environment')}
+            placeholder={t('All Environments')}
+            help={t('Choose which environment events must match')}
+            styles={{
+              singleValue: (base: any) => ({
+                ...base,
+                '.all-environment-note': {display: 'none'},
+              }),
+              option: (base: any, state: any) => ({
+                ...base,
+                '.all-environment-note': {
+                  ...(!state.isSelected && !state.isFocused
+                    ? {color: theme.gray600}
+                    : {}),
+                  fontSize: theme.fontSizeSmall,
+                },
+              }),
+            }}
+            choices={environmentList}
+            isDisabled={disabled || this.state.environments === null}
+            isClearable
+          />
         </PanelBody>
       </Panel>
     );
   }
 }
+
+const SearchEventTypeNote = styled('div')`
+  font: ${p => p.theme.fontSizeExtraSmall} ${p => p.theme.text.familyMono};
+  color: ${p => p.theme.gray600};
+  background: ${p => p.theme.gray200};
+  border-radius: 2px;
+  padding: ${space(0.5)} ${space(0.75)};
+  margin: 0 ${space(0.5)} 0 ${space(1)};
+  user-select: none;
+`;
 
 export default RuleConditionsForm;

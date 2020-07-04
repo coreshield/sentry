@@ -17,7 +17,7 @@ storiesOf('Style|Icons', module).add(
             <LabelWrapper>IconBookmark</LabelWrapper>
           </Swatch>
           <Swatch>
-            <IconBookmark solid color="#6C5FC7" />
+            <IconBookmark isSolid color="#6C5FC7" />
             <LabelWrapper>
               IconBookmark <Highlight>solid color="#6C5FC7"</Highlight>
             </LabelWrapper>
@@ -111,7 +111,7 @@ storiesOf('Style|Icons', module).add(
 );
 
 const Highlight = styled('span')`
-  color: ${p => p.theme.purple};
+  color: ${p => p.theme.purple400};
   font-weight: 600;
 `;
 

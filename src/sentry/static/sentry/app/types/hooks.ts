@@ -16,7 +16,7 @@ import FeatureDisabled from 'app/components/acl/featureDisabled';
 
 /**
  * The Hooks type mapping is the master interface for all external Hooks into
- * the sentry frontent application.
+ * the sentry frontend application.
  */
 export type Hooks = {_: any} & RouteHooks &
   ComponentHooks &
@@ -77,23 +77,26 @@ export type AnalyticsHooks = {
  * rendered in place for Feature components when the feature is not enabled.
  */
 export type FeatureDisabledHooks = {
+  'feature-disabled:alerts-page': FeatureDisabledHook;
   'feature-disabled:custom-inbound-filters': FeatureDisabledHook;
-  'feature-disabled:discard-groups': FeatureDisabledHook;
+  'feature-disabled:custom-symbol-sources': FeatureDisabledHook;
   'feature-disabled:data-forwarding': FeatureDisabledHook;
+  'feature-disabled:discard-groups': FeatureDisabledHook;
+  'feature-disabled:discover-page': FeatureDisabledHook;
+  'feature-disabled:discover-saved-query-create': FeatureDisabledHook;
+  'feature-disabled:discover-sidebar-item': FeatureDisabledHook;
+  'feature-disabled:discover2-page': FeatureDisabledHook;
+  'feature-disabled:discover2-sidebar-item': FeatureDisabledHook;
+  'feature-disabled:events-page': FeatureDisabledHook;
+  'feature-disabled:events-sidebar-item': FeatureDisabledHook;
+  'feature-disabled:grid-editable-actions': FeatureDisabledHook;
+  'feature-disabled:performance-page': FeatureDisabledHook;
+  'feature-disabled:performance-sidebar-item': FeatureDisabledHook;
+  'feature-disabled:project-selector-checkbox': FeatureDisabledHook;
   'feature-disabled:rate-limits': FeatureDisabledHook;
   'feature-disabled:sso-basic': FeatureDisabledHook;
   'feature-disabled:sso-rippling': FeatureDisabledHook;
   'feature-disabled:sso-saml2': FeatureDisabledHook;
-  'feature-disabled:events-page': FeatureDisabledHook;
-  'feature-disabled:events-sidebar-item': FeatureDisabledHook;
-  'feature-disabled:discover-page': FeatureDisabledHook;
-  'feature-disabled:discover-sidebar-item': FeatureDisabledHook;
-  'feature-disabled:project-selector-checkbox': FeatureDisabledHook;
-  'feature-disabled:custom-symbol-sources': FeatureDisabledHook;
-  'feature-disabled:discover2-page': FeatureDisabledHook;
-  'feature-disabled:discover2-sidebar-item': FeatureDisabledHook;
-  'feature-disabled:grid-editable-actions': FeatureDisabledHook;
-  'feature-disabled:discover-saved-query-create': FeatureDisabledHook;
 };
 
 /**
@@ -123,6 +126,7 @@ export type OnboardingHooks = {
 export type SettingsHooks = {
   'settings:organization-navigation': OrganizationSettingsHook;
   'settings:organization-navigation-config': SettingsConfigHook;
+  'settings:organization-general-settings': GeneralSettingsHook;
 };
 
 /**
@@ -195,7 +199,7 @@ type AnalyticsTrackEvent = (opts: {
 }) => void;
 
 /**
- * Trigger adhoc analytics tracking in the hook store.
+ * Trigger ad hoc analytics tracking in the hook store.
  */
 type AnalyticsTrackAdhocEvent = (opts: {
   /**
@@ -267,6 +271,11 @@ type OrganizationSettingsHook = (organization: Organization) => React.ReactEleme
  * Provides additional setting configurations
  */
 type SettingsConfigHook = (organization: Organization) => NavigationSection;
+
+/**
+ * Provides additional general setting components
+ */
+type GeneralSettingsHook = () => React.ReactElement;
 
 /**
  * Each sidebar label is wrapped with this hook, to allow sidebar item

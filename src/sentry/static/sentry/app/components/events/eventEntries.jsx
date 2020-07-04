@@ -6,7 +6,6 @@ import {analytics} from 'app/utils/analytics';
 import {logException} from 'app/utils/logging';
 import {objectIsEmpty} from 'app/utils';
 import {t} from 'app/locale';
-import BreadcrumbsInterface from 'app/components/events/interfaces/breadcrumbs/breadcrumbs';
 import CspInterface from 'app/components/events/interfaces/csp';
 import DebugMetaInterface from 'app/components/events/interfaces/debugmeta';
 import EventAttachments from 'app/components/events/eventAttachments';
@@ -36,8 +35,9 @@ import TemplateInterface from 'app/components/events/interfaces/template';
 import ThreadsInterface from 'app/components/events/interfaces/threads/threads';
 import {DataSection} from 'app/components/events/styles';
 import space from 'app/styles/space';
-import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
+
+import BreadcrumbsInterface from './eventEntriesBreadcrumbs';
 
 export const INTERFACES = {
   exception: ExceptionInterface,
@@ -73,7 +73,6 @@ class EventEntries extends React.Component {
     isShare: PropTypes.bool,
     showExampleCommit: PropTypes.bool,
     showTagSummary: PropTypes.bool,
-    eventView: PropTypes.object,
   };
 
   static defaultProps = {
@@ -119,7 +118,7 @@ class EventEntries extends React.Component {
   }
 
   renderEntries() {
-    const {event, project, organization, isShare, eventView} = this.props;
+    const {event, project, organization, isShare} = this.props;
 
     const entries = event && event.entries;
 
@@ -138,12 +137,6 @@ class EventEntries extends React.Component {
           return null;
         }
 
-        // inject additional props for certain interfaces
-        const extraProps = {};
-        if (entry.type === 'spans' && eventView) {
-          extraProps.eventView = eventView;
-        }
-
         return (
           <Component
             key={'entry-' + entryIdx}
@@ -153,7 +146,6 @@ class EventEntries extends React.Component {
             type={entry.type}
             data={entry.data}
             isShare={isShare}
-            {...extraProps}
           />
         );
       } catch (ex) {
@@ -248,7 +240,7 @@ class EventEntries extends React.Component {
           <EventGroupingInfo
             projectId={project.slug}
             event={event}
-            showSelector={features.has('set-grouping-config')}
+            showGroupingConfig={features.has('set-grouping-config')}
           />
         )}
         {!isShare && features.has('event-attachments') && (
@@ -282,5 +274,5 @@ const StyledEventUserFeedback = styled(EventUserFeedback)`
   margin: 0;
 `;
 
-export default withOrganization(withApi(EventEntries));
+export default withOrganization(EventEntries);
 export {BorderlessEventEntries};

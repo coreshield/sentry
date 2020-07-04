@@ -1,6 +1,7 @@
 import React from 'react';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
+
 import SavedQueryButtonGroup from 'app/views/eventsV2/savedQuery';
 import {ALL_VIEWS} from 'app/views/eventsV2/data';
 import EventView from 'app/utils/discover/eventView';
@@ -10,6 +11,7 @@ const SELECTOR_BUTTON_SAVE_AS = 'ButtonSaveAs';
 const SELECTOR_BUTTON_SAVED = 'ButtonSaved';
 const SELECTOR_BUTTON_UPDATE = '[data-test-id="discover2-savedquery-button-update"]';
 const SELECTOR_BUTTON_DELETE = '[data-test-id="discover2-savedquery-button-delete"]';
+const SELECTOR_BUTTON_CREATE_ALERT = '[data-test-id="discover2-create-from-discover"]';
 
 function generateWrappedComponent(
   location,
@@ -25,6 +27,7 @@ function generateWrappedComponent(
       eventView={eventView}
       savedQuery={savedQuery}
       disabled={disabled}
+      updateCallback={() => {}}
     />,
     TestStubs.routerContext()
   );
@@ -296,6 +299,19 @@ describe('EventsV2 > SaveQueryButtonGroup', function() {
           false
         );
       });
+    });
+  });
+  describe('create alert from discover', () => {
+    it('renders create alert when org has create-from-discover', () => {
+      const wrapper = generateWrappedComponent(
+        location,
+        {...organization, features: ['create-from-discover']},
+        errorsViewModified,
+        savedQuery
+      );
+      const buttonCreateAlert = wrapper.find(SELECTOR_BUTTON_CREATE_ALERT);
+
+      expect(buttonCreateAlert.exists()).toBe(true);
     });
   });
 });

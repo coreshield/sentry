@@ -54,7 +54,7 @@ const BannerWrapper = styled('div')<BannerWrapperProps>`
     if (p.backgroundImg) {
       return 'url(' + p.backgroundImg + ')';
     }
-    return p.theme.gray4;
+    return p.theme.gray700;
   }};
   background-repeat: no-repeat;
   background-size: cover;
@@ -87,6 +87,10 @@ const BannerContent = styled('div')`
   align-items: center;
   text-align: center;
   padding: ${space(4)};
+
+  @media (max-width: ${theme.breakpoints[0]}) {
+    position: relative;
+  }
 `;
 
 const BannerTitle = styled('h1')`

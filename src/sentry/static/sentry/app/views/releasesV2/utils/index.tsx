@@ -5,10 +5,8 @@ import ConfigStore from 'app/stores/configStore';
 import OrganizationStore from 'app/stores/organizationStore';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
 import {Client} from 'app/api';
-import ProgressRing from 'app/components/progressRing';
+import {stringifyQueryObject} from 'app/utils/tokenizeSearch';
 
-const CRASH_FREE_DANGER_THRESHOLD = 98;
-const CRASH_FREE_WARNING_THRESHOLD = 99.5;
 const RELEASES_VERSION_KEY = 'releases:version';
 
 export const switchReleasesVersion = (version: '1' | '2', orgId: string) => {
@@ -85,18 +83,22 @@ export const displayCrashFreePercent = (
 
 export const convertAdoptionToProgress = (
   percent: number,
-  numberOfProgressUnits = 5
+  numberOfProgressUnits = 10
 ): number => Math.ceil((percent * numberOfProgressUnits) / 100);
 
-type ProgressRingColorFn = React.ComponentProps<typeof ProgressRing>['progressColor'];
-export const getCrashFreePercentColor: ProgressRingColorFn = ({percent, theme}) => {
-  if (percent < CRASH_FREE_DANGER_THRESHOLD) {
-    return theme.red;
-  }
-
-  if (percent < CRASH_FREE_WARNING_THRESHOLD) {
-    return theme.yellow;
-  }
-
-  return theme.green;
+export const getReleaseNewIssuesUrl = (
+  orgSlug: string,
+  projectId: string | number | null,
+  version: string
+) => {
+  return {
+    pathname: `/organizations/${orgSlug}/issues/`,
+    query: {
+      project: projectId,
+      query: stringifyQueryObject({
+        query: [],
+        firstRelease: [version],
+      }),
+    },
+  };
 };

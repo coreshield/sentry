@@ -3,14 +3,13 @@ import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
 
 import {Organization, Project} from 'app/types';
+import FormModel from 'app/views/settings/components/forms/model';
 import {
-  addErrorMessage,
-  addLoadingMessage,
-  addSuccessMessage,
-  clearIndicators,
-} from 'app/actionCreators/indicator';
-import {createDefaultTrigger} from 'app/views/settings/incidentRules/constants';
+  createDefaultTrigger,
+  DATASET_EVENT_TYPE_FILTERS,
+} from 'app/views/settings/incidentRules/constants';
 import {defined} from 'app/utils';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
 import {fetchOrganizationTags} from 'app/actionCreators/tags';
 import {t} from 'app/locale';
 import Access from 'app/components/acl/access';
@@ -24,16 +23,21 @@ import TriggersChart from 'app/views/settings/incidentRules/triggers/chart';
 import hasThresholdValue from 'app/views/settings/incidentRules/utils/hasThresholdValue';
 import recreateRoute from 'app/utils/recreateRoute';
 import withProject from 'app/utils/withProject';
+import {
+  addErrorMessage,
+  addLoadingMessage,
+  addSuccessMessage,
+  clearIndicators,
+} from 'app/actionCreators/indicator';
 
 import {
-  AlertRuleAggregations,
   AlertRuleThresholdType,
   IncidentRule,
   MetricActionTemplate,
   Trigger,
+  Dataset,
 } from '../types';
 import {addOrUpdateRule} from '../actions';
-import FormModel from '../../components/forms/model';
 import RuleConditionsForm from '../ruleConditionsForm';
 
 type Props = {
@@ -56,9 +60,11 @@ type State = {
 
   // Rule conditions form inputs
   // Needed for TriggersChart
+  dataset: Dataset;
   query: string;
-  aggregation: AlertRuleAggregations;
+  aggregate: string;
   timeWindow: number;
+  environment: string | null;
 } & AsyncComponent['state'];
 
 const isEmpty = (str: unknown): boolean => str === '' || !defined(str);
@@ -76,9 +82,11 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     return {
       ...super.getDefaultState(),
 
-      aggregation: rule.aggregation,
+      dataset: rule.dataset,
+      aggregate: rule.aggregate,
       query: rule.query || '',
       timeWindow: rule.timeWindow,
+      environment: rule.environment || null,
       triggerErrors: new Map(),
       availableActions: null,
       triggers: this.props.rule.triggers,
@@ -100,10 +108,8 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     ];
   }
 
-  getEventType() {
-    // XXX: This is hardcoded for now, this will need to change when we add
-    // metric types that require different `event.type` (e.g. transactions)
-    return 'event.type:error';
+  get eventTypeFilter() {
+    return DATASET_EVENT_TYPE_FILTERS[this.state.dataset ?? Dataset.ERRORS];
   }
 
   goBack() {
@@ -137,10 +143,15 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     // If this is alert threshold and inverted, it can't be above resolve
     // If this is resolve threshold and not inverted, it can't be above resolve
     // If this is resolve threshold and inverted, it can't be below resolve
+    // Since we're comparing non-inclusive thresholds here (>, <), we need
+    // to modify the values when we compare. An example of why:
+    // Alert > 0, resolve < 1. This means that we want to alert on values
+    // of 1 or more, and resolve on values of 0 or less. This is valid, but
+    // without modifying the values, this boundary case will fail.
     const isValid =
       trigger.thresholdType === AlertRuleThresholdType.BELOW
-        ? alertThreshold <= resolveThreshold
-        : alertThreshold >= resolveThreshold;
+        ? alertThreshold - 1 <= resolveThreshold + 1
+        : alertThreshold + 1 >= resolveThreshold - 1;
 
     const otherErrors = errors.get(triggerIndex) || {};
     const isResolveChanged = changeObj?.hasOwnProperty('resolveThreshold');
@@ -152,7 +163,7 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     // Not valid... let's figure out an error message
     const isBelow = trigger.thresholdType === AlertRuleThresholdType.BELOW;
     const thresholdKey = isResolveChanged ? 'resolveThreshold' : 'alertThreshold';
-    let errorMessage;
+    let errorMessage = '';
 
     if (isResolveChanged) {
       errorMessage = isBelow
@@ -241,10 +252,13 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
       const criticalTrigger = triggers[criticalTriggerIndex];
       const warningTrigger = triggers[warningTriggerIndex];
 
+      const warningThreshold = warningTrigger.alertThreshold ?? 0;
+      const criticalThreshold = criticalTrigger.alertThreshold ?? 0;
+
       const hasError =
         criticalTrigger.thresholdType === AlertRuleThresholdType.ABOVE
-          ? warningTrigger.alertThreshold > criticalTrigger.alertThreshold
-          : warningTrigger.alertThreshold < criticalTrigger.alertThreshold;
+          ? warningThreshold > criticalThreshold
+          : warningThreshold < criticalThreshold;
 
       if (hasError) {
         [criticalTriggerIndex, warningTriggerIndex].forEach(index => {
@@ -264,12 +278,24 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
   }
 
   handleFieldChange = (name: string, value: unknown) => {
-    if (['timeWindow', 'aggregation'].includes(name)) {
+    if (['dataset', 'timeWindow', 'environment', 'aggregate'].includes(name)) {
       this.setState({[name]: value});
     }
   };
 
-  handleFilterUpdate = query => {
+  // We handle the filter update outside of the fieldChange handler since we
+  // don't want to update the filter on every input change, just on blurs and
+  // searches.
+  handleFilterUpdate = (query: string) => {
+    const {organization} = this.props;
+
+    trackAnalyticsEvent({
+      eventKey: 'alert_builder.filter',
+      eventName: 'Alert Builder: Filter',
+      query,
+      organization_id: organization.id,
+    });
+
     this.setState({query});
   };
 
@@ -315,14 +341,13 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
         onSubmitSuccess(resp, model);
       }
     } catch (err) {
-      addErrorMessage(
-        t(
-          'Unable to save alert%s',
-          err?.responseJSON?.nonFieldErrors
-            ? `: ${err.responseJSON.nonFieldErrors.join(', ')}`
-            : ''
-        )
-      );
+      const errors = err?.responseJSON
+        ? Array.isArray(err?.responseJSON)
+          ? err?.responseJSON
+          : Object.values(err?.responseJSON)
+        : [];
+      const apiErrors = errors.length > 0 ? `: ${errors.join(', ')}` : '';
+      addErrorMessage(t('Unable to save alert%s', apiErrors));
     }
   };
 
@@ -386,11 +411,21 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
   renderBody() {
     const {organization, ruleId, rule, params, onSubmitSuccess} = this.props;
-    const {query, aggregation, timeWindow, triggers} = this.state;
+    const {query, timeWindow, triggers, aggregate, environment} = this.state;
 
-    const queryAndAlwaysErrorEvents = !query.includes('event.type')
-      ? `${query} ${this.getEventType()}`.trim()
-      : query;
+    const queryWithTypeFilter = `${query} ${this.eventTypeFilter}`.trim();
+
+    const chart = (
+      <TriggersChart
+        organization={organization}
+        projects={this.state.projects}
+        triggers={triggers}
+        query={queryWithTypeFilter}
+        aggregate={aggregate}
+        timeWindow={timeWindow}
+        environment={environment}
+      />
+    );
 
     return (
       <Access access={['project:write']}>
@@ -403,10 +438,11 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
             submitDisabled={!hasAccess}
             initialData={{
               name: rule.name || '',
-              aggregation: rule.aggregation,
+              dataset: rule.dataset,
+              aggregate: rule.aggregate,
               query: rule.query || '',
               timeWindow: rule.timeWindow,
-              environment: rule.environment || [],
+              environment: rule.environment || null,
             }}
             saveOnBlur={false}
             onSubmit={this.handleSubmit}
@@ -431,22 +467,13 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
             }
             submitLabel={t('Save Rule')}
           >
-            <TriggersChart
-              api={this.api}
-              organization={organization}
-              projects={this.state.projects}
-              triggers={triggers}
-              query={queryAndAlwaysErrorEvents}
-              aggregation={aggregation}
-              timeWindow={timeWindow}
-            />
-
             <RuleConditionsForm
               api={this.api}
               projectSlug={params.projectId}
               organization={organization}
               disabled={!hasAccess}
-              onFilterUpdate={this.handleFilterUpdate}
+              thresholdChart={chart}
+              onFilterSearch={this.handleFilterUpdate}
             />
 
             <Triggers

@@ -8,24 +8,24 @@ export enum AlertRuleThresholdType {
   BELOW,
 }
 
-export enum AlertRuleAggregations {
-  TOTAL,
-  UNIQUE_USERS,
+export enum Dataset {
+  ERRORS = 'events',
+  TRANSACTIONS = 'transactions',
 }
 
 export type UnsavedTrigger = {
-  // UnsavedTrigger can be apart of an Unsaved Alert Rule that does not have an id yet
+  // UnsavedTrigger can be apart of an Unsaved Alert Rule that does not have an
+  // id yet
   alertRuleId?: string;
   label: string;
   thresholdType: AlertRuleThresholdType;
-  alertThreshold: number;
+  alertThreshold: number | '' | null;
   resolveThreshold: number | '' | null;
   actions: Action[];
 };
 
 export type ThresholdControlValue = {
   thresholdType: AlertRuleThresholdType;
-
   /**
    * Resolve threshold is optional, so it can be null
    */
@@ -41,19 +41,18 @@ export type SavedTrigger = Omit<UnsavedTrigger, 'actions'> & {
 export type Trigger = Partial<SavedTrigger> & UnsavedTrigger;
 
 export type UnsavedIncidentRule = {
-  aggregation: AlertRuleAggregations;
-  aggregations: AlertRuleAggregations[];
+  dataset: Dataset;
   projects: string[];
-  environment: string[];
+  environment: string | null;
   query: string;
   timeWindow: number;
   triggers: Trigger[];
+  aggregate: string;
 };
 
 export type SavedIncidentRule = UnsavedIncidentRule & {
   dateCreated: string;
   dateModified: string;
-  dataset: string;
   id: string;
   status: number;
   name: string;

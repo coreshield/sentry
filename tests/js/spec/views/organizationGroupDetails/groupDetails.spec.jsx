@@ -3,8 +3,10 @@ import React from 'react';
 
 import {initializeOrg} from 'sentry-test/initializeOrg';
 import {mountWithTheme} from 'sentry-test/enzyme';
+
 import GlobalSelectionStore from 'app/stores/globalSelectionStore';
 import GroupDetails from 'app/views/organizationGroupDetails';
+import ProjectsStore from 'app/stores/projectsStore';
 import GroupStore from 'app/stores/groupStore';
 
 jest.mock('app/views/organizationGroupDetails/header', () => jest.fn(() => null));
@@ -58,6 +60,7 @@ describe('groupDetails', function() {
 
   let issueDetailsMock;
   beforeEach(function() {
+    ProjectsStore.loadInitialData(organization.projects);
     MockComponent = jest.fn(() => null);
     issueDetailsMock = MockApiClient.addMockResponse({
       url: `/issues/${group.id}/`,
@@ -76,6 +79,7 @@ describe('groupDetails', function() {
     if (wrapper) {
       wrapper.unmount();
     }
+    ProjectsStore.reset();
     GroupStore.reset();
     GlobalSelectionStore.reset();
     MockApiClient.clearMockResponses();
@@ -85,12 +89,19 @@ describe('groupDetails', function() {
   });
 
   it('renders', async function() {
+    ProjectsStore.reset();
+    await tick();
+
     wrapper = createWrapper();
 
     await tick();
     wrapper.update();
 
-    expect(wrapper.find('LoadingIndicator')).toHaveLength(0);
+    expect(MockComponent).not.toHaveBeenCalled();
+
+    ProjectsStore.loadInitialData(organization.projects);
+    await tick();
+
     expect(MockComponent).toHaveBeenLastCalledWith(
       {
         environments: [],
@@ -124,6 +135,28 @@ describe('groupDetails', function() {
     );
   });
 
+  it('renders error message when failing to retrieve issue details and can retry request', async function() {
+    issueDetailsMock = MockApiClient.addMockResponse({
+      url: `/issues/${group.id}/`,
+      statusCode: 403,
+    });
+    wrapper = createWrapper();
+
+    await tick();
+    wrapper.update();
+
+    expect(wrapper.find('LoadingIndicator')).toHaveLength(0);
+    expect(issueDetailsMock).toHaveBeenCalledTimes(1);
+    expect(MockComponent).not.toHaveBeenCalled();
+    expect(wrapper.find('LoadingError').text()).toEqual(
+      'There was an error loading data.Retry'
+    );
+
+    wrapper.find('button[aria-label="Retry"]').simulate('click');
+
+    expect(issueDetailsMock).toHaveBeenCalledTimes(2);
+  });
+
   it('fetches issue details for a given environment', async function() {
     const props = initializeOrg({
       project: TestStubs.Project(),
@@ -140,6 +173,8 @@ describe('groupDetails', function() {
 
     wrapper = createWrapper(props);
 
+    ProjectsStore.loadInitialData(props.organization.projects);
+
     await tick();
     // Reflux and stuff
     await tick();
@@ -147,8 +182,7 @@ describe('groupDetails', function() {
 
     expect(wrapper.find('LoadingIndicator')).toHaveLength(0);
 
-    // TODO(billy): This should be 1 time, but GSH syncs the environment to store and causes re-render and thus a second request
-    expect(issueDetailsMock).toHaveBeenCalledTimes(2);
+    expect(issueDetailsMock).toHaveBeenCalledTimes(1);
     expect(issueDetailsMock).toHaveBeenLastCalledWith(
       expect.anything(),
       expect.objectContaining({

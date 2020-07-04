@@ -153,6 +153,7 @@ exports[`TableField renders renders with form context 1`] = `
                 inline={true}
                 name="fieldName"
                 required={false}
+                showHelpInTooltip={false}
                 visible={true}
               >
                 <FieldWrapper
@@ -160,7 +161,7 @@ exports[`TableField renders renders with form context 1`] = `
                   inline={true}
                 >
                   <div
-                    className="css-hkyx7n-FieldWrapper-FieldWrapper e2iyls20"
+                    className="css-zwp5he-FieldWrapper-FieldWrapper e2iyls20"
                   >
                     <FieldControl
                       alignRight={false}
@@ -252,7 +253,7 @@ exports[`TableField renders renders with form context 1`] = `
                                         disabled={false}
                                         icon={
                                           <ForwardRef(IconAdd)
-                                            circle={true}
+                                            isCircled={true}
                                             size="xs"
                                           />
                                         }
@@ -265,7 +266,7 @@ exports[`TableField renders renders with form context 1`] = `
                                           forwardRef={null}
                                           icon={
                                             <ForwardRef(IconAdd)
-                                              circle={true}
+                                              isCircled={true}
                                               size="xs"
                                             />
                                           }
@@ -284,7 +285,7 @@ exports[`TableField renders renders with form context 1`] = `
                                             <Component
                                               aria-disabled={false}
                                               aria-label="Add Thing"
-                                              className="css-12ogwys-StyledButton edwq9my0"
+                                              className="css-8od3q1-StyledButton edwq9my0"
                                               forwardRef={null}
                                               onClick={[Function]}
                                               role="button"
@@ -293,7 +294,7 @@ exports[`TableField renders renders with form context 1`] = `
                                               <button
                                                 aria-disabled={false}
                                                 aria-label="Add Thing"
-                                                className="css-12ogwys-StyledButton edwq9my0"
+                                                className="css-8od3q1-StyledButton edwq9my0"
                                                 onClick={[Function]}
                                                 role="button"
                                                 size="xsmall"
@@ -313,17 +314,19 @@ exports[`TableField renders renders with form context 1`] = `
                                                         className="css-1hbuack-Icon edwq9my2"
                                                         size="xsmall"
                                                       >
-                                                        <ForwardRef(IconAdd)
-                                                          circle={true}
+                                                        <IconAdd
+                                                          isCircled={true}
                                                           size="xs"
                                                         >
-                                                          <svg
-                                                            fill="currentColor"
-                                                            height="12px"
-                                                            viewBox="0 0 16 16"
-                                                            width="12px"
+                                                          <ForwardRef(SvgIcon)
+                                                            size="xs"
                                                           >
-                                                            <g>
+                                                            <svg
+                                                              fill="currentColor"
+                                                              height="12px"
+                                                              viewBox="0 0 16 16"
+                                                              width="12px"
+                                                            >
                                                               <path
                                                                 d="M11.28,8.75H4.72a.75.75,0,1,1,0-1.5h6.56a.75.75,0,1,1,0,1.5Z"
                                                               />
@@ -333,9 +336,9 @@ exports[`TableField renders renders with form context 1`] = `
                                                               <path
                                                                 d="M8,16a8,8,0,1,1,8-8A8,8,0,0,1,8,16ZM8,1.53A6.47,6.47,0,1,0,14.47,8,6.47,6.47,0,0,0,8,1.53Z"
                                                               />
-                                                            </g>
-                                                          </svg>
-                                                        </ForwardRef(IconAdd)>
+                                                            </svg>
+                                                          </ForwardRef(SvgIcon)>
+                                                        </IconAdd>
                                                       </span>
                                                     </Icon>
                                                     Add Thing
@@ -599,6 +602,7 @@ exports[`TableField renders renders without form context 1`] = `
           inline={true}
           name="fieldName"
           required={false}
+          showHelpInTooltip={false}
           visible={true}
         >
           <FieldWrapper
@@ -606,7 +610,7 @@ exports[`TableField renders renders without form context 1`] = `
             inline={true}
           >
             <div
-              className="css-hkyx7n-FieldWrapper-FieldWrapper e2iyls20"
+              className="css-zwp5he-FieldWrapper-FieldWrapper e2iyls20"
             >
               <FieldControl
                 alignRight={false}
@@ -673,7 +677,7 @@ exports[`TableField renders renders without form context 1`] = `
                                   disabled={false}
                                   icon={
                                     <ForwardRef(IconAdd)
-                                      circle={true}
+                                      isCircled={true}
                                       size="xs"
                                     />
                                   }
@@ -686,7 +690,7 @@ exports[`TableField renders renders without form context 1`] = `
                                     forwardRef={null}
                                     icon={
                                       <ForwardRef(IconAdd)
-                                        circle={true}
+                                        isCircled={true}
                                         size="xs"
                                       />
                                     }
@@ -705,7 +709,7 @@ exports[`TableField renders renders without form context 1`] = `
                                       <Component
                                         aria-disabled={false}
                                         aria-label="Add Item"
-                                        className="css-12ogwys-StyledButton edwq9my0"
+                                        className="css-8od3q1-StyledButton edwq9my0"
                                         forwardRef={null}
                                         onClick={[Function]}
                                         role="button"
@@ -714,7 +718,7 @@ exports[`TableField renders renders without form context 1`] = `
                                         <button
                                           aria-disabled={false}
                                           aria-label="Add Item"
-                                          className="css-12ogwys-StyledButton edwq9my0"
+                                          className="css-8od3q1-StyledButton edwq9my0"
                                           onClick={[Function]}
                                           role="button"
                                           size="xsmall"
@@ -734,17 +738,19 @@ exports[`TableField renders renders without form context 1`] = `
                                                   className="css-1hbuack-Icon edwq9my2"
                                                   size="xsmall"
                                                 >
-                                                  <ForwardRef(IconAdd)
-                                                    circle={true}
+                                                  <IconAdd
+                                                    isCircled={true}
                                                     size="xs"
                                                   >
-                                                    <svg
-                                                      fill="currentColor"
-                                                      height="12px"
-                                                      viewBox="0 0 16 16"
-                                                      width="12px"
+                                                    <ForwardRef(SvgIcon)
+                                                      size="xs"
                                                     >
-                                                      <g>
+                                                      <svg
+                                                        fill="currentColor"
+                                                        height="12px"
+                                                        viewBox="0 0 16 16"
+                                                        width="12px"
+                                                      >
                                                         <path
                                                           d="M11.28,8.75H4.72a.75.75,0,1,1,0-1.5h6.56a.75.75,0,1,1,0,1.5Z"
                                                         />
@@ -754,9 +760,9 @@ exports[`TableField renders renders without form context 1`] = `
                                                         <path
                                                           d="M8,16a8,8,0,1,1,8-8A8,8,0,0,1,8,16ZM8,1.53A6.47,6.47,0,1,0,14.47,8,6.47,6.47,0,0,0,8,1.53Z"
                                                         />
-                                                      </g>
-                                                    </svg>
-                                                  </ForwardRef(IconAdd)>
+                                                      </svg>
+                                                    </ForwardRef(SvgIcon)>
+                                                  </IconAdd>
                                                 </span>
                                               </Icon>
                                               Add Item

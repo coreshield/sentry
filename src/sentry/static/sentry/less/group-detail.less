@@ -68,14 +68,6 @@
       margin-right: 5px;
     }
 
-    .more .icon-arrow-down {
-      margin-left: 5px;
-    }
-
-    .icon-checkmark {
-      font-size: 13px;
-    }
-
     .group-resolve.active {
       background: @green;
       color: #fff;
@@ -520,6 +512,10 @@
 
     &.ubuntu .context-item-icon {
       background-image: url(../images/logos/context/ubuntu.png);
+    }
+
+    &.amazon .context-item-icon {
+      background-image: url(../images/logos/context/amazon.svg);
     }
 
     &.firefox .context-item-icon {
@@ -1327,10 +1323,6 @@ div.traceback > ul {
   }
 }
 
-.exception-mechanism {
-  margin: 15px 0;
-}
-
 #full-message {
   line-height: 1.5em;
 
@@ -1380,32 +1372,6 @@ div.commands {
   }
 }
 
-.box.grouping-info {
-  padding-top: 20px !important;
-  padding-bottom: 18px !important;
-  position: relative;
-  .clearfix;
-
-  .box-header h3 {
-    margin: 0 !important;
-    padding: 0 !important;
-  }
-
-  .box-content {
-    padding: 10px 20px;
-  }
-
-  a.grouping-info-toggle {
-    font-size: 14px;
-    font-weight: bold;
-    color: rgba(0, 0, 0, 0.7);
-
-    &:hover {
-      color: rgba(0, 0, 0, 0.9);
-    }
-  }
-}
-
 /* message details */
 .server-list,
 .url-list,
@@ -1436,7 +1402,6 @@ span.val {
   color: darken(@purple, 10);
   border-radius: 3px;
   padding: 2px 4px;
-  margin: -2px -4px;
 }
 
 .val-string-multiline {
@@ -1456,8 +1421,6 @@ span.val {
 }
 
 .val-dict {
-  display: block;
-
   .val-dict-items {
     display: block;
     padding: 0 0 0 15px;
@@ -1476,8 +1439,6 @@ span.val {
 }
 
 .val-array {
-  display: block;
-
   .val-array-items {
     display: block;
     padding: 0 0 0 15px;

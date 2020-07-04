@@ -4,7 +4,7 @@ import debounce from 'lodash/debounce';
 import styled from '@emotion/styled';
 
 import {Client} from 'app/api';
-import {IconAdd} from 'app/icons/iconAdd';
+import {IconAdd} from 'app/icons';
 import {Member, Organization, Project, Team, User} from 'app/types';
 import {addTeamToProject} from 'app/actionCreators/projects';
 import {callIfFunction} from 'app/utils/callIfFunction';
@@ -111,14 +111,14 @@ class SelectMembers extends React.Component<Props, State> {
       this.setState({
         memberListLoading: !MemberListStore.isLoaded(),
       });
-    }),
+    }, undefined),
   ];
 
   renderUserBadge = (user: User) => (
     <IdBadge avatarSize={24} user={user} hideEmail useLink={false} />
   );
 
-  createMentionableUser = (user: User) => ({
+  createMentionableUser = (user: User): MentionableUser => ({
     value: user.id,
     label: this.renderUserBadge(user),
     searchKey: getSearchKeyForUser(user),
@@ -184,7 +184,7 @@ class SelectMembers extends React.Component<Props, State> {
               borderless
               disabled={!canAddTeam}
               onClick={this.handleAddTeamToProject.bind(this, team)}
-              icon={<IconAdd circle />}
+              icon={<IconAdd isCircled />}
             />
           </Tooltip>
         </UnmentionableTeam>

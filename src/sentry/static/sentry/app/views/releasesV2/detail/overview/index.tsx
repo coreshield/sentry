@@ -1,5 +1,4 @@
 import React from 'react';
-import styled from '@emotion/styled';
 import {RouteComponentProps} from 'react-router/lib/Router';
 
 import {t} from 'app/locale';
@@ -7,21 +6,22 @@ import AsyncView from 'app/views/asyncView';
 import withOrganization from 'app/utils/withOrganization';
 import withGlobalSelection from 'app/utils/withGlobalSelection';
 import {Organization, GlobalSelection} from 'app/types';
-import space from 'app/styles/space';
 import {Client} from 'app/api';
 import withApi from 'app/utils/withApi';
 import {formatVersion} from 'app/utils/formatters';
 import routeTitleGen from 'app/utils/routeTitle';
+import {Main, Side} from 'app/components/layouts/thirds';
 
 import ReleaseChart from './chart/';
 import Issues from './issues';
 import CommitAuthorBreakdown from './commitAuthorBreakdown';
 import ProjectReleaseDetails from './projectReleaseDetails';
+import OtherProjects from './otherProjects';
 import TotalCrashFreeUsers from './totalCrashFreeUsers';
+import Deploys from './deploys';
 import ReleaseStatsRequest from './releaseStatsRequest';
 import {YAxis} from './chart/releaseChartControls';
 import SwitchReleasesButton from '../../utils/switchReleasesButton';
-
 import {ReleaseContext} from '..';
 
 type RouteParams = {
@@ -73,7 +73,7 @@ class ReleaseOverview extends AsyncView<Props> {
 
     return (
       <ReleaseContext.Consumer>
-        {({release, project}) => {
+        {({release, project, deploys, releaseMeta}) => {
           const {commitCount, version} = release;
           const {hasHealthData} = project.healthData || {};
           const hasDiscover = organization.features.includes('discover-basic');
@@ -92,7 +92,7 @@ class ReleaseOverview extends AsyncView<Props> {
               hasDiscover={hasDiscover}
             >
               {({crashFreeTimeBreakdown, ...releaseStatsProps}) => (
-                <ContentBox>
+                <React.Fragment>
                   <Main>
                     {(hasDiscover || hasHealthData) && (
                       <ReleaseChart
@@ -117,7 +117,13 @@ class ReleaseOverview extends AsyncView<Props> {
                       location={location}
                     />
                   </Main>
-                  <Sidebar>
+                  <Side>
+                    <ProjectReleaseDetails
+                      release={release}
+                      releaseMeta={releaseMeta}
+                      orgSlug={organization.slug}
+                      projectSlug={project.slug}
+                    />
                     {commitCount > 0 && (
                       <CommitAuthorBreakdown
                         version={version}
@@ -125,16 +131,30 @@ class ReleaseOverview extends AsyncView<Props> {
                         projectSlug={project.slug}
                       />
                     )}
-                    <ProjectReleaseDetails release={release} />
+                    {releaseMeta.projects.length > 1 && (
+                      <OtherProjects
+                        projects={releaseMeta.projects.filter(
+                          p => p.slug !== project.slug
+                        )}
+                        location={location}
+                      />
+                    )}
                     {hasHealthData && (
                       <TotalCrashFreeUsers
                         crashFreeTimeBreakdown={crashFreeTimeBreakdown}
                       />
                     )}
-                  </Sidebar>
+                    {deploys.length > 0 && (
+                      <Deploys
+                        version={version}
+                        orgSlug={organization.slug}
+                        deploys={deploys}
+                      />
+                    )}
+                  </Side>
 
                   <SwitchReleasesButton version="1" orgId={organization.id} />
-                </ContentBox>
+                </React.Fragment>
               )}
             </ReleaseStatsRequest>
           );
@@ -143,20 +163,5 @@ class ReleaseOverview extends AsyncView<Props> {
     );
   }
 }
-
-const ContentBox = styled('div')`
-  @media (min-width: ${p => p.theme.breakpoints[0]}) {
-    display: grid;
-    grid-column-gap: ${space(3)};
-    grid-template-columns: minmax(470px, 1fr) minmax(220px, 280px);
-  }
-`;
-
-const Main = styled('div')`
-  grid-column: 1 / 2;
-`;
-const Sidebar = styled('div')`
-  grid-column: 2 / 3;
-`;
 
 export default withApi(withGlobalSelection(withOrganization(ReleaseOverview)));

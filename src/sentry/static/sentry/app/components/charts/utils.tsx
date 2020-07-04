@@ -1,39 +1,28 @@
 import moment from 'moment';
 
+import {GlobalSelection} from 'app/types';
 import {DEFAULT_STATS_PERIOD} from 'app/constants';
 import {parsePeriodToHours} from 'app/utils/dates';
+import {escape} from 'app/utils';
 
 const DEFAULT_TRUNCATE_LENGTH = 80;
 
 // In minutes
+const THIRTY_DAYS = 43200;
 const TWENTY_FOUR_HOURS = 1440;
 const ONE_HOUR = 60;
 
-export const AREA_COLORS = [
-  // This first color is used when only a single series is plotted.
-  {line: '#948BCF', area: '#C4BFE9'},
-  {line: '#FFE3FD', area: '#FFE3FD'},
-  {line: '#E8B0F2', area: '#E8B0F2'},
-  {line: '#BD81E6', area: '#BD81E6'},
-  {line: '#5246A3', area: '#5246A3'},
-  {line: '#422C6F', area: '#422C6F'},
-];
+export type DateTimeObject = Partial<GlobalSelection['datetime']>;
 
-export type DateTimeObject = {
-  start: Date | null;
-  end: Date | null;
-  period?: string;
-};
-
-export function truncationFormatter(value: string, truncate: number): string {
+export function truncationFormatter(value: string, truncate: number | undefined): string {
   if (!truncate) {
-    return value;
+    return escape(value);
   }
   const truncationLength =
     truncate && typeof truncate === 'number' ? truncate : DEFAULT_TRUNCATE_LENGTH;
-  return value.length > truncationLength
-    ? value.substring(0, truncationLength) + '…'
-    : value;
+  const truncated =
+    value.length > truncationLength ? value.substring(0, truncationLength) + '…' : value;
+  return escape(truncated);
 }
 
 /**
@@ -47,6 +36,15 @@ export function useShortInterval(datetimeObj: DateTimeObject): boolean {
 
 export function getInterval(datetimeObj: DateTimeObject, highFidelity = false) {
   const diffInMinutes = getDiffInMinutes(datetimeObj);
+
+  if (diffInMinutes >= THIRTY_DAYS) {
+    // Greater than or equal to 30 days
+    if (highFidelity) {
+      return '1h';
+    } else {
+      return '24h';
+    }
+  }
 
   if (diffInMinutes > TWENTY_FOUR_HOURS) {
     // Greater than 24 hours
@@ -84,4 +82,23 @@ export function getDiffInMinutes(datetimeObj: DateTimeObject): number {
   return (
     parsePeriodToHours(typeof period === 'string' ? period : DEFAULT_STATS_PERIOD) * 60
   );
+}
+
+// Max period (in hours) before we can no long include previous period
+const MAX_PERIOD_HOURS_INCLUDE_PREVIOUS = 45 * 24;
+
+export function canIncludePreviousPeriod(
+  includePrevious: boolean | undefined,
+  period: string | undefined
+) {
+  if (!includePrevious) {
+    return false;
+  }
+
+  if (period && parsePeriodToHours(period) > MAX_PERIOD_HOURS_INCLUDE_PREVIOUS) {
+    return false;
+  }
+
+  // otherwise true
+  return !!includePrevious;
 }

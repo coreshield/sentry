@@ -66,7 +66,7 @@ function getStatsPeriodValue(
 // This format was transformed to the form that moment.js understands using
 // https://gist.github.com/asafge/0b13c5066d06ae9a4446
 const normalizeDateTimeString = (
-  input: string | undefined | null
+  input: Date | string | undefined | null
 ): string | undefined => {
   if (!input) {
     return undefined;
@@ -82,7 +82,7 @@ const normalizeDateTimeString = (
 };
 
 const getDateTimeString = (
-  maybe: string | string[] | undefined | null
+  maybe: Date | string | string[] | undefined | null
 ): string | undefined => {
   if (Array.isArray(maybe)) {
     if (maybe.length <= 0) {
@@ -104,7 +104,9 @@ const parseUtcValue = (utc: any) => {
   return undefined;
 };
 
-const getUtcValue = (maybe: string | string[] | undefined | null): string | undefined => {
+const getUtcValue = (
+  maybe: string | string[] | boolean | undefined | null
+): string | undefined => {
   if (Array.isArray(maybe)) {
     if (maybe.length <= 0) {
       return undefined;
@@ -113,39 +115,43 @@ const getUtcValue = (maybe: string | string[] | undefined | null): string | unde
     return maybe.find(needle => !!parseUtcValue(needle));
   }
 
-  maybe = parseUtcValue(maybe);
-
-  if (typeof maybe === 'string') {
-    return maybe;
-  }
-
-  return undefined;
+  return parseUtcValue(maybe);
 };
 
 type ParamValue = string | string[] | undefined | null;
-type Params = {
-  start?: ParamValue;
-  end?: ParamValue;
+
+type ParsedParams = {
+  start?: string;
+  end?: string;
+  period?: string;
+  utc?: string;
+  [others: string]: string | null | undefined;
+};
+
+type InputParams = {
+  start?: Date | ParamValue;
+  end?: Date | ParamValue;
   period?: ParamValue;
   statsPeriod?: ParamValue;
-  utc?: ParamValue;
+  utc?: boolean | ParamValue;
+  [others: string]: any;
 };
-type RestParams = {[others: string]: ParamValue};
 
+type GetParamsOptions = {
+  allowEmptyPeriod?: boolean;
+  allowAbsoluteDatetime?: boolean;
+};
 export function getParams(
-  params: Params & RestParams,
-  {allowEmptyPeriod = false}: {allowEmptyPeriod?: boolean} = {}
-): {
-  [K in keyof Params]: Exclude<NonNullable<Params[K]>, string[]>;
-} &
-  RestParams {
+  params: InputParams,
+  {allowEmptyPeriod = false, allowAbsoluteDatetime = true}: GetParamsOptions = {}
+): ParsedParams {
   const {start, end, period, statsPeriod, utc, ...otherParams} = params;
 
-  // `statsPeriod` takes precendence for now
+  // `statsPeriod` takes precedence for now
   let coercedPeriod = getStatsPeriodValue(statsPeriod) || getStatsPeriodValue(period);
 
-  const dateTimeStart = getDateTimeString(start);
-  const dateTimeEnd = getDateTimeString(end);
+  const dateTimeStart = allowAbsoluteDatetime ? getDateTimeString(start) : null;
+  const dateTimeEnd = allowAbsoluteDatetime ? getDateTimeString(end) : null;
 
   if (!(dateTimeStart && dateTimeEnd)) {
     if (!coercedPeriod && !allowEmptyPeriod) {

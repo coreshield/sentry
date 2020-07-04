@@ -3,7 +3,11 @@ import EventView, {
   pickRelevantLocationQueryStrings,
 } from 'app/utils/discover/eventView';
 import {COL_WIDTH_UNDEFINED} from 'app/components/gridEditable/utils';
-import {CHART_AXIS_OPTIONS, DISPLAY_MODE_OPTIONS} from 'app/utils/discover/types';
+import {
+  CHART_AXIS_OPTIONS,
+  DisplayModes,
+  DISPLAY_MODE_OPTIONS,
+} from 'app/utils/discover/types';
 
 const generateFields = fields =>
   fields.map(field => ({
@@ -561,6 +565,7 @@ describe('EventView.generateQueryStringObject()', function() {
       environment: ['staging'],
       yAxis: 'count()',
       display: 'releases',
+      interval: '1m',
     };
 
     const eventView = new EventView(state);
@@ -579,6 +584,7 @@ describe('EventView.generateQueryStringObject()', function() {
       environment: ['staging'],
       yAxis: 'count()',
       display: 'releases',
+      interval: '1m',
     };
 
     expect(eventView.generateQueryStringObject()).toEqual(expected);
@@ -837,7 +843,11 @@ describe('EventView.getEventsAPIPayload()', function() {
     });
 
     const location = {
-      query: {},
+      query: {
+        // these should not be part of the API payload
+        statsPeriod: '55d',
+        period: '55d',
+      },
     };
 
     expect(eventView.getEventsAPIPayload(location)).toEqual({
@@ -849,6 +859,117 @@ describe('EventView.getEventsAPIPayload()', function() {
       per_page: 50,
       project: [],
       environment: [],
+    });
+  });
+
+  it("an eventview's date selection has higher precedence than the date selection in the query string", function() {
+    const initialState = {
+      fields: generateFields(['title', 'count()']),
+      sorts: generateSorts(['count']),
+      query: 'event.type:csp',
+      environment: [],
+      project: [],
+    };
+
+    const output = {
+      field: ['title', 'count()'],
+      sort: '-count',
+      query: 'event.type:csp',
+      per_page: 50,
+      project: [],
+      environment: [],
+    };
+
+    // eventview's statsPeriod has highest precedence
+
+    let eventView = new EventView({
+      ...initialState,
+      statsPeriod: '90d',
+      start: '2019-10-01T00:00:00',
+      end: '2019-10-02T00:00:00',
+    });
+
+    let location = {
+      query: {
+        // these should not be part of the API payload
+        statsPeriod: '55d',
+        period: '30d',
+        start: '2020-10-01T00:00:00',
+        end: '2020-10-02T00:00:00',
+      },
+    };
+
+    expect(eventView.getEventsAPIPayload(location)).toEqual({
+      ...output,
+      statsPeriod: '90d',
+    });
+
+    // eventview's start/end has higher precedence than the date selection in the query string
+
+    eventView = new EventView({
+      ...initialState,
+      start: '2019-10-01T00:00:00',
+      end: '2019-10-02T00:00:00',
+    });
+
+    location = {
+      query: {
+        // these should not be part of the API payload
+        statsPeriod: '55d',
+        period: '30d',
+        start: '2020-10-01T00:00:00',
+        end: '2020-10-02T00:00:00',
+      },
+    };
+
+    expect(eventView.getEventsAPIPayload(location)).toEqual({
+      ...output,
+      start: '2019-10-01T00:00:00.000',
+      end: '2019-10-02T00:00:00.000',
+    });
+
+    // the date selection in the query string should be applied as expected
+
+    eventView = new EventView(initialState);
+
+    location = {
+      query: {
+        statsPeriod: '55d',
+        period: '30d',
+        start: '2020-10-01T00:00:00',
+        end: '2020-10-02T00:00:00',
+      },
+    };
+
+    expect(eventView.getEventsAPIPayload(location)).toEqual({
+      ...output,
+      statsPeriod: '55d',
+    });
+
+    location = {
+      query: {
+        period: '30d',
+        start: '2020-10-01T00:00:00',
+        end: '2020-10-02T00:00:00',
+      },
+    };
+
+    expect(eventView.getEventsAPIPayload(location)).toEqual({
+      ...output,
+      statsPeriod: '30d',
+    });
+
+    location = {
+      query: {
+        start: '2020-10-01T00:00:00',
+        end: '2020-10-02T00:00:00',
+      },
+    };
+
+    expect(eventView.getEventsAPIPayload(location)).toEqual({
+      ...output,
+      start: '2020-10-01T00:00:00.000',
+      end: '2020-10-02T00:00:00.000',
     });
   });
 });
@@ -1048,6 +1169,37 @@ describe('EventView.numOfColumns()', function() {
   });
 });
 
+describe('EventView.getDays()', function() {
+  it('returns the right number of days for statsPeriod', function() {
+    const eventView = new EventView({
+      statsPeriod: '14d',
+    });
+
+    expect(eventView.getDays()).toBe(14);
+
+    const eventView2 = new EventView({
+      statsPeriod: '12h',
+    });
+
+    expect(eventView2.getDays()).toBe(0.5);
+  });
+
+  it('returns the right number of days for start/end', function() {
+    const eventView = new EventView({
+      start: '2019-10-01T00:00:00',
+      end: '2019-10-02T00:00:00',
+    });
+
+    expect(eventView.getDays()).toBe(1);
+
+    const eventView2 = new EventView({
+      start: '2019-10-01T00:00:00',
+      end: '2019-10-15T00:00:00',
+    });
+    expect(eventView2.getDays()).toBe(14);
+  });
+});
+
 describe('EventView.clone()', function() {
   it('returns a unique instance', function() {
     const state = {
@@ -1061,6 +1213,7 @@ describe('EventView.clone()', function() {
       end: '2019-10-02T00:00:00',
       statsPeriod: '14d',
       environment: ['staging'],
+      interval: '5m',
       display: 'releases',
     };
 
@@ -1725,7 +1878,7 @@ describe('EventView.getQuery()', function() {
   });
 });
 
-describe('EventView.isFieldSorted()', function() {
+describe('EventView.sortForField()', function() {
   const state = {
     id: '1234',
     name: 'best query',
@@ -1738,18 +1891,15 @@ describe('EventView.isFieldSorted()', function() {
     statsPeriod: '14d',
     environment: ['staging'],
   };
-
+  const eventView = new EventView(state);
   const meta = {count: 'integer'};
 
   it('returns the sort when selected field is sorted', function() {
-    const eventView = new EventView(state);
-    expect(eventView).toMatchObject(state);
-
     const field = {
       field: 'count()',
     };
 
-    const actual = eventView.isFieldSorted(field, meta);
+    const actual = eventView.sortForField(field, meta);
 
     expect(actual).toEqual({
       field: 'count',
@@ -1758,14 +1908,19 @@ describe('EventView.isFieldSorted()', function() {
   });
 
   it('returns undefined when selected field is not sorted', function() {
-    const eventView = new EventView(state);
-    expect(eventView).toMatchObject(state);
-
     const field = {
       field: 'project.id',
     };
 
-    expect(eventView.isFieldSorted(field, meta)).toBe(void 0);
+    expect(eventView.sortForField(field, meta)).toBeUndefined();
+  });
+
+  it('returns undefined when no meta is provided', function() {
+    const field = {
+      field: 'project.id',
+    };
+
+    expect(eventView.sortForField(field, undefined)).toBeUndefined();
   });
 });
 
@@ -1813,6 +1968,25 @@ describe('EventView.sortOnField()', function() {
     expect(eventView2).toMatchObject(nextState);
   });
 
+  it('enforce sort order on sorted field', function() {
+    const eventView = new EventView(state);
+    expect(eventView).toMatchObject(state);
+
+    const field = state.fields[0];
+
+    const eventView2 = eventView.sortOnField(field, meta, 'asc');
+    expect(eventView2).toMatchObject({
+      ...state,
+      sorts: [{field: 'count', kind: 'asc'}],
+    });
+
+    const eventView3 = eventView.sortOnField(field, meta, 'desc');
+    expect(eventView3).toMatchObject({
+      ...state,
+      sorts: [{field: 'count', kind: 'desc'}],
+    });
+  });
+
   it('sort on new field', function() {
     const modifiedState = {
       ...state,
@@ -1834,6 +2008,56 @@ describe('EventView.sortOnField()', function() {
     };
 
     expect(eventView2).toMatchObject(nextState);
+
+    // enforce asc sort order
+
+    const eventView3 = eventView.sortOnField(field, meta, 'asc');
+
+    expect(eventView3).toMatchObject({
+      ...modifiedState,
+      sorts: [{field: 'title', kind: 'asc'}],
+    });
+
+    // enforce desc sort order
+
+    const eventView4 = eventView.sortOnField(field, meta, 'desc');
+
+    expect(eventView4).toMatchObject({
+      ...modifiedState,
+      sorts: [{field: 'title', kind: 'desc'}],
+    });
+  });
+});
+
+describe('EventView.withSorts()', function() {
+  it('returns a clone', function() {
+    const eventView = new EventView({
+      fields: [{field: 'event.type'}],
+    });
+    const updated = eventView.withSorts([{kind: 'desc', field: 'event.type'}]);
+    expect(updated.sorts).not.toEqual(eventView.sorts);
+  });
+
+  it('only accepts sorting on fields in the view', function() {
+    const eventView = new EventView({
+      fields: [{field: 'event.type'}],
+    });
+    const updated = eventView.withSorts([
+      {kind: 'desc', field: 'event.type'},
+      {kind: 'asc', field: 'unknown'},
+    ]);
+    expect(updated.sorts).toEqual([{kind: 'desc', field: 'event.type'}]);
+  });
+
+  it('accepts aggregate field sorts', function() {
+    const eventView = new EventView({
+      fields: [{field: 'p50()'}],
+    });
+    const updated = eventView.withSorts([
+      {kind: 'desc', field: 'p50'},
+      {kind: 'asc', field: 'unknown'},
+    ]);
+    expect(updated.sorts).toEqual([{kind: 'desc', field: 'p50'}]);
   });
 });
 
@@ -1955,7 +2179,7 @@ describe('EventView.getResultsViewUrlTarget()', function() {
   });
 });
 
-describe('EventView.getGlobalSelection', function() {
+describe('EventView.getGlobalSelection()', function() {
   it('return default global selection', function() {
     const eventView = new EventView({});
 
@@ -1983,7 +2207,7 @@ describe('EventView.getGlobalSelection', function() {
   });
 });
 
-describe('EventView.generateBlankQueryStringObject', function() {
+describe('EventView.generateBlankQueryStringObject()', function() {
   it('should return blank values', function() {
     const eventView = new EventView({});
 
@@ -2004,7 +2228,7 @@ describe('EventView.generateBlankQueryStringObject', function() {
   });
 });
 
-describe('EventView.getYAxisOptions', function() {
+describe('EventView.getYAxisOptions()', function() {
   const state = {
     fields: [],
     sorts: [],
@@ -2053,8 +2277,8 @@ describe('EventView.getYAxisOptions', function() {
       fields: generateFields([
         'ignored-field',
         'count_unique(issue)',
-        'last_seen',
-        'latest_event',
+        'last_seen()',
+        'latest_event()',
       ]),
     });
 
@@ -2065,7 +2289,7 @@ describe('EventView.getYAxisOptions', function() {
   });
 });
 
-describe('EventView.getYAxis', function() {
+describe('EventView.getYAxis()', function() {
   const state = {
     fields: [],
     sorts: [],
@@ -2142,6 +2366,46 @@ describe('EventView.getDisplayOptions()', function() {
     const options = eventView.getDisplayOptions();
     expect(options[1].value).toEqual('previous');
     expect(options[1].disabled).toBeTruthy();
+  });
+});
+
+describe('EventView.getDisplayMode()', function() {
+  const state = {
+    fields: [],
+    sorts: [],
+    query: '',
+    project: [],
+    statsPeriod: '42d',
+    environment: [],
+  };
+
+  it('should have default', function() {
+    const eventView = new EventView({
+      ...state,
+    });
+    const displayMode = eventView.getDisplayMode();
+    expect(displayMode).toEqual(DisplayModes.DEFAULT);
+  });
+
+  it('should return current mode when not disabled', function() {
+    const eventView = new EventView({
+      ...state,
+      display: DisplayModes.TOP5,
+    });
+    const displayMode = eventView.getDisplayMode();
+    expect(displayMode).toEqual(DisplayModes.TOP5);
+  });
+
+  it('should return default mode when disabled', function() {
+    const eventView = new EventView({
+      ...state,
+      // the existence of start and end will disable the PREVIOUS mode
+      end: '2020-04-13T12:13:14',
+      start: '2020-04-01T12:13:14',
+      display: DisplayModes.PREVIOUS,
+    });
+    const displayMode = eventView.getDisplayMode();
+    expect(displayMode).toEqual(DisplayModes.DEFAULT);
   });
 });
 

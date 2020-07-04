@@ -349,7 +349,7 @@ export default class SentryApplicationDetails extends AsyncView<Props, State> {
                 {t('Tokens')}
                 <Button
                   size="xsmall"
-                  icon={<IconAdd size="xs" circle />}
+                  icon={<IconAdd size="xs" isCircled />}
                   onClick={evt => this.onAddToken(evt)}
                   data-test-id="token-add"
                   type="button"
@@ -413,7 +413,7 @@ const TokenItem = styled('div')`
 `;
 
 const CreatedTitle = styled('span')`
-  color: ${p => p.theme.gray2};
+  color: ${p => p.theme.gray500};
   margin-bottom: 2px;
 `;
 
