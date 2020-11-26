@@ -1,16 +1,16 @@
 import React from 'react';
-import classNames from 'classnames';
 import styled from '@emotion/styled';
+import classNames from 'classnames';
 
 import Button from 'app/components/button';
 import space, {ValidSize} from 'app/styles/space';
 
 type ButtonBarProps = {
-  className?: string;
+  children: React.ReactNode;
   gap?: ValidSize;
   merged?: boolean;
   active?: React.ComponentProps<typeof Button>['barId'];
-  children: React.ReactNode;
+  className?: string;
 };
 
 function ButtonBar({

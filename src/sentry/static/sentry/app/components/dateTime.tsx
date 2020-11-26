@@ -1,6 +1,6 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import moment from 'moment-timezone';
+import PropTypes from 'prop-types';
 
 import ConfigStore from 'app/stores/configStore';
 
@@ -13,7 +13,9 @@ type Props = DefaultProps & {
   dateOnly?: boolean;
   timeOnly?: boolean;
   shortDate?: boolean;
+  timeAndDate?: boolean;
   utc?: boolean;
+  format?: string;
 };
 
 class DateTime extends React.Component<Props> {
@@ -23,7 +25,9 @@ class DateTime extends React.Component<Props> {
     timeOnly: PropTypes.bool,
     shortDate: PropTypes.bool,
     seconds: PropTypes.bool,
+    timeAndDate: PropTypes.bool,
     utc: PropTypes.bool,
+    format: PropTypes.string,
   };
 
   static defaultProps: DefaultProps = {
@@ -31,15 +35,28 @@ class DateTime extends React.Component<Props> {
   };
 
   getFormat = ({clock24Hours}: {clock24Hours: boolean}): string => {
-    const {dateOnly, timeOnly, seconds, shortDate} = this.props;
+    const {dateOnly, timeOnly, seconds, shortDate, timeAndDate, format} = this.props;
+
+    if (format) {
+      return format;
+    }
 
     // October 26, 2017
     if (dateOnly) {
       return 'LL';
     }
 
+    // Oct 26, 11:30 AM
+    if (timeAndDate) {
+      return 'MMM DD, LT';
+    }
+
     // 4:57 PM
     if (timeOnly) {
+      if (clock24Hours) {
+        return 'HH:mm';
+      }
+
       return 'LT';
     }
 
@@ -47,8 +64,9 @@ class DateTime extends React.Component<Props> {
       return 'MM/DD/YYYY';
     }
 
+    // Oct 26, 2017 11:30
     if (clock24Hours) {
-      return 'MMMM D YYYY HH:mm:ss z';
+      return 'MMM D, YYYY HH:mm';
     }
 
     // Oct 26, 2017 11:30:30 AM
@@ -68,6 +86,7 @@ class DateTime extends React.Component<Props> {
       shortDate: _shortDate,
       dateOnly: _dateOnly,
       timeOnly: _timeOnly,
+      timeAndDate: _timeAndDate,
       ...carriedProps
     } = this.props;
     const user = ConfigStore.get('user');

@@ -1,15 +1,15 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import {t, tct} from 'app/locale';
 import ActivityItem from 'app/components/activity/item';
+import {t, tct} from 'app/locale';
 import getDynamicText from 'app/utils/getDynamicText';
 
 import {
+  ActivityType,
   Incident,
   IncidentActivityType,
   IncidentStatus,
-  ActivityType,
   IncidentStatusMethod,
 } from '../../types';
 
@@ -88,10 +88,11 @@ class StatusItem extends React.Component<Props> {
                 : tct('[user] created an alert', {
                     user: <StatusValue>{authorName}</StatusValue>,
                   }))}
-            {isStarted && t('Trigger conditions were met')}
+            {isStarted && t('Trigger conditions were met for the interval')}
           </div>
         }
         date={getDynamicText({value: activity.dateCreated, fixed: new Date(0)})}
+        interval={isStarted ? incident?.alertRule.timeWindow : undefined}
       />
     );
   }

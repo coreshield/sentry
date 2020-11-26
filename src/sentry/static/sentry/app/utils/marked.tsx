@@ -1,5 +1,7 @@
-import marked from 'marked'; // eslint-disable-line no-restricted-imports
 import dompurify from 'dompurify';
+import marked from 'marked'; // eslint-disable-line no-restricted-imports
+
+import {IS_ACCEPTANCE_TEST, NODE_ENV} from 'app/constants';
 
 // Only https and mailto, (e.g. no javascript, vbscript, data protocols)
 const safeLinkPattern = /^(https?:|mailto:)/i;
@@ -48,16 +50,14 @@ marked.setOptions({
   renderer: new SafeRenderer(),
   sanitize: true,
 
-  // Silence sanitize deprecation warning in test / travs (Travis sets NODE_NV
+  // Silence sanitize deprecation warning in test / ci (CI sets NODE_NV
   // to production, but specifies `CI`).
   //
   // [!!] This has the side effect of causing failed markdown content to render
   //      as a html error, instead of throwing an exception, however none of
   //      our tests are rendering failed markdown so this is likely a safe
   //      tradeoff to turn off off the deprecation warning.
-  //
-  // eslint-disable-next-line no-undef
-  silent: !!process.env.IS_CI || process.env.NODE_ENV === 'test',
+  silent: !!IS_ACCEPTANCE_TEST || NODE_ENV === 'test',
 });
 
 const sanitizedMarked = (...args: Parameters<typeof marked>) =>

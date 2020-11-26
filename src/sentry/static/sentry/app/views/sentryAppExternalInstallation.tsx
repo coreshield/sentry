@@ -1,25 +1,26 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 import styled from '@emotion/styled';
 
+import {addErrorMessage} from 'app/actionCreators/indicator';
+import {installSentryApp} from 'app/actionCreators/sentryAppInstallations';
+import Alert from 'app/components/alert';
+import OrganizationAvatar from 'app/components/avatar/organizationAvatar';
+import SelectControl from 'app/components/forms/selectControl';
+import SentryAppDetailsModal from 'app/components/modals/sentryAppDetailsModal';
+import NarrowLayout from 'app/components/narrowLayout';
+import {IconFlag} from 'app/icons';
+import {t, tct} from 'app/locale';
 import {
   LightWeightOrganization,
   Organization,
   SentryApp,
   SentryAppInstallation,
 } from 'app/types';
-import {addErrorMessage} from 'app/actionCreators/indicator';
+import {trackIntegrationEvent} from 'app/utils/integrationUtil';
 import {addQueryParamsToExistingUrl} from 'app/utils/queryString';
-import {installSentryApp} from 'app/actionCreators/sentryAppInstallations';
-import {t, tct} from 'app/locale';
-import Alert from 'app/components/alert';
 import AsyncView from 'app/views/asyncView';
 import Field from 'app/views/settings/components/forms/field';
-import NarrowLayout from 'app/components/narrowLayout';
-import OrganizationAvatar from 'app/components/avatar/organizationAvatar';
-import SelectControl from 'app/components/forms/selectControl';
-import SentryAppDetailsModal from 'app/components/modals/sentryAppDetailsModal';
-import {trackIntegrationEvent} from 'app/utils/integrationUtil';
 
 type Props = RouteComponentProps<{sentryAppSlug: string}, {}>;
 
@@ -43,7 +44,7 @@ export default class SentryAppExternalInstallation extends AsyncView<Props, Stat
     };
   }
 
-  getEndpoints(): [string, string][] {
+  getEndpoints(): ReturnType<AsyncView['getEndpoints']> {
     return [
       ['organizations', '/organizations/'],
       ['sentryApp', `/sentry-apps/${this.sentryAppSlug}/`],
@@ -178,7 +179,7 @@ export default class SentryAppExternalInstallation extends AsyncView<Props, Stat
   renderInternalAppError() {
     const {sentryApp} = this.state;
     return (
-      <Alert type="error" icon="icon-circle-exclamation">
+      <Alert type="error" icon={<IconFlag size="md" />}>
         {tct(
           'Integration [sentryAppName] is an internal integration. Internal integrations are automatically installed',
           {
@@ -193,7 +194,7 @@ export default class SentryAppExternalInstallation extends AsyncView<Props, Stat
     const {organization, selectedOrgSlug, isInstalled, sentryApp} = this.state;
     if (selectedOrgSlug && organization && !this.hasAccess(organization)) {
       return (
-        <Alert type="error" icon="icon-circle-exclamation">
+        <Alert type="error" icon={<IconFlag size="md" />}>
           <p>
             {tct(
               `You do not have permission to install integrations in
@@ -208,7 +209,7 @@ export default class SentryAppExternalInstallation extends AsyncView<Props, Stat
     }
     if (isInstalled && organization) {
       return (
-        <Alert type="error" icon="icon-circle-exclamation">
+        <Alert type="error" icon={<IconFlag size="md" />}>
           {tct('Integration [sentryAppName] already installed for [organization]', {
             organization: <strong>{organization.name}</strong>,
             sentryAppName: <strong>{sentryApp.name}</strong>,
@@ -221,7 +222,7 @@ export default class SentryAppExternalInstallation extends AsyncView<Props, Stat
       // use the slug of the owner if we have it, otherwise use 'another organization'
       const ownerSlug = sentryApp?.owner?.slug ?? 'another organization';
       return (
-        <Alert type="error" icon="icon-circle-exclamation">
+        <Alert type="error" icon={<IconFlag size="md" />}>
           {tct(
             'Integration [sentryAppName] is an unpublished integration for [otherOrg]. An unpublished integration can only be installed on the organization which created it.',
             {

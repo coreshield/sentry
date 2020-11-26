@@ -1,14 +1,11 @@
-import PropTypes from 'prop-types';
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import {IOSDeviceList} from 'app/types/iOSDeviceList';
 
 export function deviceNameMapper(model: string, iOSDeviceList): string {
   const modelIdentifier = model.split(' ')[0];
-  const modelId = model
-    .split(' ')
-    .splice(1)
-    .join(' ');
+  const modelId = model.split(' ').splice(1).join(' ');
   const modelName = iOSDeviceList.generationByIdentifier(modelIdentifier);
   return modelName === undefined ? model : modelName + ' ' + modelId;
 }

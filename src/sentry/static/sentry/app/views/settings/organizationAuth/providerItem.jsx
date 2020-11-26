@@ -1,18 +1,18 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {PanelItem} from 'app/components/panels';
-import {t} from 'app/locale';
-import space from 'app/styles/space';
 import Access from 'app/components/acl/access';
-import Button from 'app/components/button';
 import Feature from 'app/components/acl/feature';
 import FeatureDisabled from 'app/components/acl/featureDisabled';
+import Button from 'app/components/button';
 import Hovercard from 'app/components/hovercard';
-import SentryTypes from 'app/sentryTypes';
+import {PanelItem} from 'app/components/panels';
+import Tag from 'app/components/tagDeprecated';
 import {IconLock} from 'app/icons';
-import Tag from 'app/views/settings/components/tag';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import space from 'app/styles/space';
 import {descopeFeatureName} from 'app/utils';
 
 export default class ProviderItem extends React.PureComponent {
@@ -72,7 +72,7 @@ export default class ProviderItem extends React.PureComponent {
             <ProviderInfo>
               <ProviderLogo
                 className={`provider-logo ${provider.name
-                  .replace(/\s/g, '')
+                  .replace(/\s/g, '-')
                   .toLowerCase()}`}
               />
               <div>
@@ -130,7 +130,7 @@ const FeatureBadge = styled('div')`
 `;
 
 const ActiveIndicator = styled(p => <div className={p.className}>{t('Active')}</div>)`
-  background: ${p => p.theme.green400};
+  background: ${p => p.theme.green300};
   color: #fff;
   padding: 8px 12px;
   border-radius: 2px;

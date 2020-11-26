@@ -3,26 +3,26 @@ import styled from '@emotion/styled';
 
 import space from 'app/styles/space';
 
-import {
-  rectOfContent,
-  toPercent,
-  getHumanDuration,
-  pickSpanBarColour,
-  boundsGenerator,
-  SpanBoundsType,
-  SpanGeneratedBoundsType,
-  getSpanID,
-  getSpanOperation,
-} from './utils';
-import {DragManagerChildrenProps} from './dragManager';
 import * as CursorGuideHandler from './cursorGuideHandler';
+import {DragManagerChildrenProps} from './dragManager';
+import {zIndex} from './styles';
 import {
   ParsedTraceType,
-  TickAlignment,
-  SpanChildrenLookupType,
   RawSpanType,
+  SpanChildrenLookupType,
+  TickAlignment,
 } from './types';
-import {zIndex} from './styles';
+import {
+  boundsGenerator,
+  getHumanDuration,
+  getSpanID,
+  getSpanOperation,
+  pickSpanBarColour,
+  rectOfContent,
+  SpanBoundsType,
+  SpanGeneratedBoundsType,
+  toPercent,
+} from './utils';
 
 export const MINIMAP_CONTAINER_HEIGHT = 106;
 export const MINIMAP_SPAN_BAR_HEIGHT = 4;
@@ -397,7 +397,7 @@ class ActualMinimap extends React.PureComponent<{trace: ParsedTraceType}> {
     span,
   }: {
     spanNumber: number;
-    childSpans: Readonly<SpanChildrenLookupType>;
+    childSpans: SpanChildrenLookupType;
     generateBounds: (bounds: SpanBoundsType) => SpanGeneratedBoundsType;
     span: Readonly<RawSpanType>;
   }): {
@@ -414,6 +414,13 @@ class ActualMinimap extends React.PureComponent<{trace: ParsedTraceType}> {
     const {left: spanLeft, width: spanWidth} = this.getBounds(bounds);
 
     const spanChildren: Array<RawSpanType> = childSpans?.[getSpanID(span)] ?? [];
+
+    // Mark descendents as being rendered. This is to address potential recursion issues due to malformed data.
+    // For example if a span has a span_id that's identical to its parent_span_id.
+    childSpans = {
+      ...childSpans,
+    };
+    delete childSpans[getSpanID(span)];
 
     type AccType = {
       nextSpanNumber: number;
@@ -478,10 +485,10 @@ const TimeAxis = styled('div')`
   position: absolute;
   left: 0;
   bottom: 0;
-  border-top: 1px solid ${p => p.theme.borderDark};
+  border-top: 1px solid ${p => p.theme.border};
   height: ${TIME_AXIS_HEIGHT}px;
-  background-color: ${p => p.theme.white};
-  color: ${p => p.theme.gray500};
+  background-color: ${p => p.theme.background};
+  color: ${p => p.theme.gray300};
   font-size: 10px;
   font-weight: 500;
 `;
@@ -523,7 +530,7 @@ const TickText = styled('span')<{align: TickAlignment}>`
 const TickMarker = styled('div')`
   width: 1px;
   height: 4px;
-  background-color: ${p => p.theme.gray400};
+  background-color: ${p => p.theme.gray200};
   position: absolute;
   top: 0;
   left: 0;
@@ -548,7 +555,7 @@ const TickLabel = (props: {
 
 const DurationGuideBox = styled('div')<{alignLeft: boolean}>`
   position: absolute;
-  background-color: ${p => p.theme.white};
+  background-color: ${p => p.theme.background};
   padding: 4px;
   height: 100%;
   border-radius: 3px;
@@ -571,8 +578,8 @@ const HeaderContainer = styled('div')`
   left: 0;
   top: 0;
   z-index: ${zIndex.minimapContainer};
-  background-color: ${p => p.theme.white};
-  border-bottom: 1px solid ${p => p.theme.borderDark};
+  background-color: ${p => p.theme.background};
+  border-bottom: 1px solid ${p => p.theme.border};
   height: ${MINIMAP_HEIGHT + TIME_AXIS_HEIGHT + 1}px;
 `;
 
@@ -599,14 +606,20 @@ const ViewHandleContainer = styled('div')`
   height: ${MINIMAP_HEIGHT}px;
 `;
 
+const ViewHandleLine = styled('div')`
+  height: ${MINIMAP_HEIGHT - VIEW_HANDLE_HEIGHT}px;
+  width: 2px;
+  background-color: ${p => p.theme.textColor};
+`;
+
 const ViewHandle = styled('div')<{isDragging: boolean}>`
   position: absolute;
-  background-color: ${p => p.theme.gray800};
+  background-color: ${p => p.theme.textColor};
   cursor: col-resize;
   width: 8px;
   height: ${VIEW_HANDLE_HEIGHT}px;
   bottom: 0;
-  left: -4px;
+  left: -3px;
 `;
 
 const Fog = styled('div')`
@@ -633,7 +646,7 @@ const CursorGuide = styled('div')`
   position: absolute;
   top: 0;
   width: 1px;
-  background-color: ${p => p.theme.red400};
+  background-color: ${p => p.theme.red300};
   transform: translateX(-50%);
 `;
 
@@ -651,22 +664,7 @@ const Handle = ({
       left: toPercent(left),
     }}
   >
-    <svg
-      width={1}
-      height={MINIMAP_HEIGHT - VIEW_HANDLE_HEIGHT}
-      fill="none"
-      style={{width: '1px', overflow: 'visible'}}
-    >
-      <line
-        x1="0"
-        x2="0"
-        y1="0"
-        y2={MINIMAP_HEIGHT - VIEW_HANDLE_HEIGHT}
-        strokeWidth="1"
-        strokeDasharray="5 3"
-        style={{stroke: '#302839'}}
-      />
-    </svg>
+    <ViewHandleLine />
     <ViewHandle
       data-ignore="true"
       onMouseDown={onMouseDown}

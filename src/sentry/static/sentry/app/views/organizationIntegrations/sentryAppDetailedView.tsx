@@ -86,8 +86,16 @@ class SentryAppDetailedView extends AbstractIntegrationDetailedView<
   }
 
   get resourceLinks() {
-    //sentry apps don't have resources (yet)
-    return [];
+    //only show links for published sentry apps
+    if (this.sentryApp.status !== 'published') {
+      return [];
+    }
+    return [
+      {
+        title: 'Documentation',
+        url: `https://docs.sentry.io/product/integrations/${this.integrationSlug}/`,
+      },
+    ];
   }
 
   get permissions() {
@@ -216,7 +224,7 @@ class SentryAppDetailedView extends AbstractIntegrationDetailedView<
               {tct('[read] and [write] access to [resources] resources', {
                 read: <strong>Read</strong>,
                 write: <strong>Write</strong>,
-                resources: permissions.read.join(', '),
+                resources: permissions.write.join(', '),
               })}
             </Text>
           </Permission>
@@ -227,7 +235,7 @@ class SentryAppDetailedView extends AbstractIntegrationDetailedView<
             <Text key="admin">
               {tct('[admin] access to [resources] resources', {
                 admin: <strong>Admin</strong>,
-                resources: permissions.read.join(', '),
+                resources: permissions.admin.join(', '),
               })}
             </Text>
           </Permission>
@@ -299,7 +307,7 @@ const Title = styled('p')`
 `;
 
 const Indicator = styled(p => <CircleIndicator size={7} {...p} />)`
-  margin-top: 7px;
+  margin-top: 3px;
   color: ${p => p.theme.success};
 `;
 
@@ -308,10 +316,10 @@ const InstallButton = styled(Button)`
 `;
 
 const StyledUninstallButton = styled(Button)`
-  color: ${p => p.theme.gray500};
-  background: #ffffff;
+  color: ${p => p.theme.gray300};
+  background: ${p => p.theme.background};
 
-  border: ${p => `1px solid ${p.theme.gray500}`};
+  border: ${p => `1px solid ${p.theme.gray300}`};
   box-sizing: border-box;
   box-shadow: 0px 2px 1px rgba(0, 0, 0, 0.08);
   border-radius: 4px;

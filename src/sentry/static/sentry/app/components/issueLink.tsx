@@ -1,18 +1,19 @@
-import {Link} from 'react-router';
 import React from 'react';
-import classNames from 'classnames';
+import {Link} from 'react-router';
 import styled from '@emotion/styled';
+import classNames from 'classnames';
 
-import {t} from 'app/locale';
 import Count from 'app/components/count';
+import EventOrGroupTitle from 'app/components/eventOrGroupTitle';
 import EventAnnotation from 'app/components/events/eventAnnotation';
 import EventMessage from 'app/components/events/eventMessage';
-import EventOrGroupTitle from 'app/components/eventOrGroupTitle';
 import Hovercard from 'app/components/hovercard';
 import TimeSince from 'app/components/timeSince';
+import {t} from 'app/locale';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
 import space from 'app/styles/space';
 import {Group} from 'app/types';
+import {getMessage} from 'app/utils/events';
 
 type Props = {
   orgId: string;
@@ -21,18 +22,6 @@ type Props = {
   card: boolean;
   children: React.ReactNode;
 };
-
-function getMessage(issue: Group) {
-  const metadata = issue.metadata;
-  switch (issue.type) {
-    case 'error':
-      return metadata.value;
-    case 'csp':
-      return metadata.message;
-    default:
-      return issue.culprit || '';
-  }
-}
 
 const IssueLink = ({children, orgId, issue, to, card = true}: Props) => {
   if (!card) {
@@ -120,7 +109,7 @@ const Title = styled('h3')`
   em {
     font-style: normal;
     font-weight: 400;
-    color: ${p => p.theme.gray500};
+    color: ${p => p.theme.gray300};
     font-size: 90%;
   }
 `;
@@ -139,7 +128,7 @@ const HovercardEventMessage = styled(EventMessage)`
 `;
 
 const GridHeader = styled('h5')`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
   font-size: 11px;
   margin-bottom: ${space(0.5)};
   text-transform: uppercase;

@@ -13,10 +13,10 @@ function clickMenuItem(card, selector) {
   card.find(`DropdownMenu MenuItem[data-test-id="${selector}"]`).simulate('click');
 }
 
-describe('EventsV2 > QueryList', function() {
+describe('EventsV2 > QueryList', function () {
   let location, savedQueries, organization, deleteMock, duplicateMock, queryChangeMock;
 
-  beforeEach(function() {
+  beforeEach(function () {
     organization = TestStubs.Organization();
     savedQueries = [
       TestStubs.DiscoverSavedQuery(),
@@ -53,7 +53,7 @@ describe('EventsV2 > QueryList', function() {
     queryChangeMock = jest.fn();
   });
 
-  it('renders an empty list', function() {
+  it('renders an empty list', function () {
     const wrapper = mountWithTheme(
       <QueryList
         organization={organization}
@@ -71,11 +71,12 @@ describe('EventsV2 > QueryList', function() {
     expect(wrapper.find('EmptyStateWarning')).toHaveLength(1);
   });
 
-  it('renders pre-built queries and saved ones', function() {
+  it('renders pre-built queries and saved ones', function () {
     const wrapper = mountWithTheme(
       <QueryList
         organization={organization}
         savedQueries={savedQueries}
+        renderPrebuilt
         pageLinks=""
         onQueryChange={queryChangeMock}
         location={location}
@@ -87,7 +88,7 @@ describe('EventsV2 > QueryList', function() {
     expect(content).toHaveLength(5);
   });
 
-  it('can duplicate and trigger change callback', async function() {
+  it('can duplicate and trigger change callback', async function () {
     const wrapper = mountWithTheme(
       <QueryList
         organization={organization}
@@ -115,7 +116,7 @@ describe('EventsV2 > QueryList', function() {
     expect(queryChangeMock).toHaveBeenCalled();
   });
 
-  it('can delete and trigger change callback', async function() {
+  it('can delete and trigger change callback', async function () {
     const wrapper = mountWithTheme(
       <QueryList
         organization={organization}
@@ -142,7 +143,7 @@ describe('EventsV2 > QueryList', function() {
     expect(queryChangeMock).toHaveBeenCalled();
   });
 
-  it('can redirect on last query deletion', async function() {
+  it('can redirect on last query deletion', async function () {
     const wrapper = mountWithTheme(
       <QueryList
         organization={organization}

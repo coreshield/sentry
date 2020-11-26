@@ -1,28 +1,28 @@
 import React, {ReactElement} from 'react';
-import PropTypes from 'prop-types';
 import Modal from 'react-bootstrap/lib/Modal';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
+import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
+import {deleteExternalIssue} from 'app/actionCreators/platformExternalIssues';
 import {Client} from 'app/api';
-import withApi from 'app/utils/withApi';
-import InlineSvg from 'app/components/inlineSvg';
-import {addSuccessMessage, addErrorMessage} from 'app/actionCreators/indicator';
-import {IntegrationLink} from 'app/components/issueSyncListElement';
-import {SentryAppIcon} from 'app/components/sentryAppIcon';
 import SentryAppExternalIssueForm from 'app/components/group/sentryAppExternalIssueForm';
+import {IntegrationLink} from 'app/components/issueSyncListElement';
 import NavTabs from 'app/components/navTabs';
+import {SentryAppIcon} from 'app/components/sentryAppIcon';
+import {IconAdd, IconClose} from 'app/icons';
 import {t, tct} from 'app/locale';
 import SentryTypes from 'app/sentryTypes';
 import space from 'app/styles/space';
-import {deleteExternalIssue} from 'app/actionCreators/platformExternalIssues';
-import {recordInteraction} from 'app/utils/recordSentryAppInteraction';
 import {
+  Event,
   Group,
   PlatformExternalIssue,
-  Event,
   SentryAppComponent,
   SentryAppInstallation,
 } from 'app/types';
+import {recordInteraction} from 'app/utils/recordSentryAppInteraction';
+import withApi from 'app/utils/withApi';
 
 type Props = {
   api: Client;
@@ -148,11 +148,9 @@ class SentryAppExternalIssueActions extends React.Component<Props, State> {
             {displayName}
           </IntegrationLink>
         </IssueLink>
-        <AddRemoveIcon
-          src="icon-close"
-          isLinked={!!externalIssue}
-          onClick={this.onAddRemoveClick}
-        />
+        <StyledIcon onClick={this.onAddRemoveClick}>
+          {!!externalIssue ? <IconClose /> : <IconAdd />}
+        </StyledIcon>
       </IssueLinkContainer>
     );
   }
@@ -164,7 +162,7 @@ class SentryAppExternalIssueActions extends React.Component<Props, State> {
     const config = sentryAppComponent.schema[action];
 
     return (
-      <Modal show={showModal} onHide={this.hideModal} animation={false}>
+      <Modal show={showModal} backdrop="static" onHide={this.hideModal} animation={false}>
         <Modal.Header closeButton>
           <Modal.Title>{tct('[name] Issue', {name})}</Modal.Title>
         </Modal.Header>
@@ -201,9 +199,8 @@ class SentryAppExternalIssueActions extends React.Component<Props, State> {
   }
 }
 
-// @ts-ignore ; TS2589: Type instantiation is excessively deep and possibly infinite.
 const StyledSentryAppIcon = styled(SentryAppIcon)`
-  color: ${p => p.theme.gray700};
+  color: ${p => p.theme.textColor};
   width: ${space(3)};
   height: ${space(3)};
   cursor: pointer;
@@ -224,15 +221,9 @@ const IssueLinkContainer = styled('div')`
   margin-bottom: 16px;
 `;
 
-const AddRemoveIcon = styled(InlineSvg)<{isLinked: boolean}>`
-  height: ${space(1.5)};
-  color: ${p => p.theme.gray700};
-  transition: 0.2s transform;
+const StyledIcon = styled('span')`
+  color: ${p => p.theme.textColor};
   cursor: pointer;
-  box-sizing: content-box;
-  padding: ${space(1)};
-  margin: -${space(1)};
-  ${p => (p.isLinked ? '' : 'transform: rotate(45deg) scale(0.9);')};
 `;
 
 export default withApi(SentryAppExternalIssueActions);

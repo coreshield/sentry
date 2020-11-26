@@ -1,3 +1,4 @@
+import {LightWeightOrganization} from 'app/types';
 import {assert} from 'app/types/utils';
 
 export type Sort = {
@@ -23,10 +24,14 @@ export type ColumnType =
 
 export type ColumnValueType = ColumnType | 'never'; // Matches to nothing
 
+type ValidateColumnValueFunction = ({name: string, dataType: ColumnType}) => boolean;
+
+export type ValidateColumnTypes = ColumnType[] | ValidateColumnValueFunction;
+
 export type AggregateParameter =
   | {
       kind: 'column';
-      columnTypes: Readonly<ColumnType[]>;
+      columnTypes: Readonly<ValidateColumnTypes>;
       defaultValue?: string;
       required: boolean;
     }
@@ -76,11 +81,22 @@ export const AGGREGATIONS = {
     isSortable: true,
     multiPlotType: 'line',
   },
+  failure_count: {
+    parameters: [],
+    outputType: 'number',
+    isSortable: true,
+    multiPlotType: 'line',
+  },
   min: {
     parameters: [
       {
         kind: 'column',
-        columnTypes: ['integer', 'number', 'duration', 'date'],
+        columnTypes: validateForNumericAggregate([
+          'integer',
+          'number',
+          'duration',
+          'date',
+        ]),
         required: true,
       },
     ],
@@ -92,7 +108,12 @@ export const AGGREGATIONS = {
     parameters: [
       {
         kind: 'column',
-        columnTypes: ['integer', 'number', 'duration', 'date'],
+        columnTypes: validateForNumericAggregate([
+          'integer',
+          'number',
+          'duration',
+          'date',
+        ]),
         required: true,
       },
     ],
@@ -104,7 +125,7 @@ export const AGGREGATIONS = {
     parameters: [
       {
         kind: 'column',
-        columnTypes: ['duration'],
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
         defaultValue: 'transaction.duration',
         required: true,
       },
@@ -117,7 +138,7 @@ export const AGGREGATIONS = {
     parameters: [
       {
         kind: 'column',
-        columnTypes: ['duration'],
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
         required: true,
       },
     ],
@@ -134,33 +155,68 @@ export const AGGREGATIONS = {
 
   // Tracing functions.
   p50: {
-    parameters: [],
-    outputType: 'duration',
+    parameters: [
+      {
+        kind: 'column',
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
+        defaultValue: 'transaction.duration',
+        required: false,
+      },
+    ],
+    outputType: null,
     isSortable: true,
     multiPlotType: 'line',
   },
   p75: {
-    parameters: [],
-    outputType: 'duration',
+    parameters: [
+      {
+        kind: 'column',
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
+        defaultValue: 'transaction.duration',
+        required: false,
+      },
+    ],
+    outputType: null,
     isSortable: true,
     multiPlotType: 'line',
   },
   p95: {
-    parameters: [],
-    outputType: 'duration',
+    parameters: [
+      {
+        kind: 'column',
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
+        defaultValue: 'transaction.duration',
+        required: false,
+      },
+    ],
+    outputType: null,
     type: [],
     isSortable: true,
     multiPlotType: 'line',
   },
   p99: {
-    parameters: [],
-    outputType: 'duration',
+    parameters: [
+      {
+        kind: 'column',
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
+        defaultValue: 'transaction.duration',
+        required: false,
+      },
+    ],
+    outputType: null,
     isSortable: true,
     multiPlotType: 'line',
   },
   p100: {
-    parameters: [],
-    outputType: 'duration',
+    parameters: [
+      {
+        kind: 'column',
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
+        defaultValue: 'transaction.duration',
+        required: false,
+      },
+    ],
+    outputType: null,
     isSortable: true,
     multiPlotType: 'line',
   },
@@ -168,7 +224,7 @@ export const AGGREGATIONS = {
     parameters: [
       {
         kind: 'column',
-        columnTypes: ['duration'],
+        columnTypes: validateForNumericAggregate(['duration', 'number']),
         defaultValue: 'transaction.duration',
         required: true,
       },
@@ -190,19 +246,9 @@ export const AGGREGATIONS = {
     multiPlotType: 'line',
   },
   apdex: {
-    parameters: [
-      {
-        kind: 'value',
-        dataType: 'number',
-        defaultValue: '300',
-        required: true,
-      },
-    ],
-    outputType: 'number',
-    isSortable: true,
-    multiPlotType: 'line',
-  },
-  impact: {
+    generateDefaultValue({parameter, organization}: DefaultValueInputs) {
+      return organization.apdexThreshold?.toString() ?? parameter.defaultValue;
+    },
     parameters: [
       {
         kind: 'value',
@@ -216,6 +262,9 @@ export const AGGREGATIONS = {
     multiPlotType: 'line',
   },
   user_misery: {
+    generateDefaultValue({parameter, organization}: DefaultValueInputs) {
+      return organization.apdexThreshold?.toString() ?? parameter.defaultValue;
+    },
     parameters: [
       {
         kind: 'value',
@@ -242,6 +291,12 @@ export const AGGREGATIONS = {
   },
 } as const;
 
+// TPM and TPS are aliases that are only used in Performance
+export const ALIASES = {
+  tpm: 'epm',
+  tps: 'eps',
+};
+
 assert(AGGREGATIONS as Readonly<{[key in keyof typeof AGGREGATIONS]: Aggregation}>);
 
 export type AggregationKey = keyof typeof AGGREGATIONS | '';
@@ -253,11 +308,32 @@ export type AggregationOutputType = Extract<
 
 export type PlotType = 'line' | 'area';
 
+type DefaultValueInputs = {
+  parameter: AggregateParameter;
+  organization: LightWeightOrganization;
+};
+
 export type Aggregation = {
+  /**
+   * Used by functions that need to define their default values dynamically
+   * based on the organization, or parameter data.
+   */
+  generateDefaultValue?: (data: DefaultValueInputs) => string;
+  /**
+   * List of parameters for the function.
+   */
   parameters: Readonly<AggregateParameter[]>;
-  // null means to inherit from the column.
+  /**
+   * The output type. Null means to inherit from the field.
+   */
   outputType: AggregationOutputType | null;
+  /**
+   * Can this function be used in a sort result
+   */
   isSortable: boolean;
+  /**
+   * How this function should be plotted when shown in a multiseries result (top5)
+   */
   multiPlotType: PlotType;
 };
 
@@ -276,6 +352,7 @@ enum FieldKey {
   DIST = 'dist',
   ENVIRONMENT = 'environment',
   ERROR_HANDLED = 'error.handled',
+  ERROR_UNHANDLED = 'error.unhandled',
   ERROR_MECHANISM = 'error.mechanism',
   ERROR_TYPE = 'error.type',
   ERROR_VALUE = 'error.value',
@@ -284,6 +361,7 @@ enum FieldKey {
   GEO_COUNTRY_CODE = 'geo.country_code',
   GEO_REGION = 'geo.region',
   HTTP_METHOD = 'http.method',
+  HTTP_REFERER = 'http.referer',
   HTTP_URL = 'http.url',
   ID = 'id',
   ISSUE = 'issue',
@@ -315,11 +393,11 @@ enum FieldKey {
   TRANSACTION_DURATION = 'transaction.duration',
   TRANSACTION_OP = 'transaction.op',
   TRANSACTION_STATUS = 'transaction.status',
-  USER = 'user',
   USER_EMAIL = 'user.email',
   USER_ID = 'user.id',
   USER_IP = 'user.ip',
   USER_USERNAME = 'user.username',
+  USER_DISPLAY = 'user.display',
 }
 
 /**
@@ -344,7 +422,6 @@ export const FIELDS: Readonly<Record<FieldKey, ColumnType>> = {
   // tags.key and tags.value are omitted on purpose as well.
 
   [FieldKey.TRANSACTION]: 'string',
-  [FieldKey.USER]: 'string',
   [FieldKey.USER_ID]: 'string',
   [FieldKey.USER_EMAIL]: 'string',
   [FieldKey.USER_USERNAME]: 'string',
@@ -352,6 +429,7 @@ export const FIELDS: Readonly<Record<FieldKey, ColumnType>> = {
   [FieldKey.SDK_NAME]: 'string',
   [FieldKey.SDK_VERSION]: 'string',
   [FieldKey.HTTP_METHOD]: 'string',
+  [FieldKey.HTTP_REFERER]: 'string',
   [FieldKey.HTTP_URL]: 'string',
   [FieldKey.OS_BUILD]: 'string',
   [FieldKey.OS_KERNEL_VERSION]: 'string',
@@ -372,6 +450,7 @@ export const FIELDS: Readonly<Record<FieldKey, ColumnType>> = {
   [FieldKey.ERROR_VALUE]: 'string',
   [FieldKey.ERROR_MECHANISM]: 'string',
   [FieldKey.ERROR_HANDLED]: 'boolean',
+  [FieldKey.ERROR_UNHANDLED]: 'boolean',
   [FieldKey.STACK_ABS_PATH]: 'string',
   [FieldKey.STACK_FILENAME]: 'string',
   [FieldKey.STACK_PACKAGE]: 'string',
@@ -395,6 +474,7 @@ export const FIELDS: Readonly<Record<FieldKey, ColumnType>> = {
   // Field alises defined in src/sentry/api/event_search.py
   [FieldKey.PROJECT]: 'string',
   [FieldKey.ISSUE]: 'string',
+  [FieldKey.USER_DISPLAY]: 'string',
 };
 
 export type FieldTag = {
@@ -409,7 +489,7 @@ export const FIELD_TAGS = Object.freeze(
 // Allows for a less strict field key definition in cases we are returning custom strings as fields
 export type LooseFieldKey = FieldKey | string | '';
 
-// This list should be removed with the tranaction-events feature flag.
+// This list contains fields/functions that are available with performance-view feature.
 export const TRACING_FIELDS = [
   'avg',
   'sum',
@@ -424,13 +504,93 @@ export const TRACING_FIELDS = [
   'percentile',
   'failure_rate',
   'apdex',
-  'impact',
   'user_misery',
   'eps',
   'epm',
 ];
 
+export enum WebVital {
+  FP = 'measurements.fp',
+  FCP = 'measurements.fcp',
+  LCP = 'measurements.lcp',
+  FID = 'measurements.fid',
+  CLS = 'measurements.cls',
+  TTFB = 'measurements.ttfb',
+  RequestTime = 'measurements.ttfb.requesttime',
+}
+
+const MEASUREMENTS: Readonly<Record<WebVital, ColumnType>> = {
+  [WebVital.FP]: 'duration',
+  [WebVital.FCP]: 'duration',
+  [WebVital.LCP]: 'duration',
+  [WebVital.FID]: 'duration',
+  [WebVital.CLS]: 'number',
+  [WebVital.TTFB]: 'duration',
+  [WebVital.RequestTime]: 'duration',
+};
+
+export const MEASUREMENT_PATTERN = /^measurements\.([a-zA-Z0-9-_.]+)$/;
+
+export function isMeasurement(field: string): boolean {
+  const results = field.match(MEASUREMENT_PATTERN);
+  return !!results;
+}
+
+export function measurementType(field: string) {
+  if (MEASUREMENTS.hasOwnProperty(field)) {
+    return MEASUREMENTS[field];
+  }
+  return 'number';
+}
+
+export function getMeasurementSlug(field: string): string | null {
+  const results = field.match(MEASUREMENT_PATTERN);
+  if (results && results.length >= 2) {
+    return results[1];
+  }
+  return null;
+}
+
 const AGGREGATE_PATTERN = /^([^\(]+)\((.*?)(?:\s*,\s*(.*))?\)$/;
+
+export function getAggregateArg(field: string): string | null {
+  const results = field.match(AGGREGATE_PATTERN);
+  if (results && results.length >= 3) {
+    return results[2];
+  }
+  return null;
+}
+
+export function generateAggregateFields(
+  organization: LightWeightOrganization,
+  eventFields: readonly Field[] | Field[],
+  excludeFields: readonly string[] = []
+): Field[] {
+  const functions = Object.keys(AGGREGATIONS);
+  const fields = Object.values(eventFields).map(field => field.field);
+  functions.forEach(func => {
+    const parameters = AGGREGATIONS[func].parameters.map(param => {
+      const generator = AGGREGATIONS[func].generateDefaultValue;
+      if (typeof generator === 'undefined') {
+        return param;
+      }
+      return {
+        ...param,
+        defaultValue: generator({parameter: param, organization}),
+      };
+    });
+
+    if (parameters.every(param => typeof param.defaultValue !== 'undefined')) {
+      const newField = `${func}(${parameters
+        .map(param => param.defaultValue)
+        .join(',')})`;
+      if (fields.indexOf(newField) === -1 && excludeFields.indexOf(newField) === -1) {
+        fields.push(newField);
+      }
+    }
+  });
+  return fields.map(field => ({field})) as Field[];
+}
 
 export function explodeFieldString(field: string): Column {
   const results = field.match(AGGREGATE_PATTERN);
@@ -496,17 +656,50 @@ export function aggregateOutputType(field: string): AggregationOutputType {
   if (!matches) {
     return 'number';
   }
-  const funcName = matches[1];
-  const aggregate = AGGREGATIONS[funcName];
-  // Attempt to use the function's outputType. If the function
-  // is an inherit type it will have a field as the first parameter
-  // and we can use that to get the type.
-  if (aggregate && aggregate.outputType) {
-    return aggregate.outputType;
-  } else if (matches[2] && FIELDS.hasOwnProperty(matches[2])) {
-    return FIELDS[matches[2]];
+  const outputType = aggregateFunctionOutputType(matches[1], matches[2]);
+  if (outputType === null) {
+    return 'number';
   }
-  return 'number';
+  return outputType;
+}
+
+/**
+ * Converts a function string and its first argument into its output type.
+ * - If the function has a fixed output type, that will be the result.
+ * - If the function does not define an output type, the output type will be equal to
+ *   the type of its first argument.
+ * - If the function has an optional first argument, and it was not defined, make sure
+ *   to use the default argument as the first argument.
+ * - If the type could not be determined, return null.
+ */
+export function aggregateFunctionOutputType(
+  funcName: string,
+  firstArg: string | undefined
+): AggregationOutputType | null {
+  const aggregate = AGGREGATIONS[ALIASES[funcName] || funcName];
+
+  // Attempt to use the function's outputType.
+  if (aggregate?.outputType) {
+    return aggregate.outputType;
+  }
+
+  // If the first argument is undefined and it is not required,
+  // then we attempt to get the default value.
+  if (!firstArg && aggregate?.parameters?.[0]) {
+    if (aggregate.parameters[0].required === false) {
+      firstArg = aggregate.parameters[0].defaultValue;
+    }
+  }
+
+  // If the function is an inherit type it will have a field as
+  // the first parameter and we can use that to get the type.
+  if (firstArg && FIELDS.hasOwnProperty(firstArg)) {
+    return FIELDS[firstArg];
+  } else if (firstArg && isMeasurement(firstArg)) {
+    return measurementType(firstArg);
+  }
+
+  return null;
 }
 
 /**
@@ -523,4 +716,24 @@ export function aggregateMultiPlotType(field: string): PlotType {
     return 'area';
   }
   return AGGREGATIONS[funcName].multiPlotType;
+}
+
+function validateForNumericAggregate(
+  validColumnTypes: ColumnType[]
+): ValidateColumnValueFunction {
+  return function ({name, dataType}: {name: string; dataType: ColumnType}): boolean {
+    // these built-in columns cannot be applied to numeric aggregates such as percentile(...)
+    if (
+      [
+        FieldKey.DEVICE_BATTERY_LEVEL,
+        FieldKey.STACK_COLNO,
+        FieldKey.STACK_LINENO,
+        FieldKey.STACK_STACK_LEVEL,
+      ].includes(name as FieldKey)
+    ) {
+      return false;
+    }
+
+    return validColumnTypes.includes(dataType);
+  };
 }

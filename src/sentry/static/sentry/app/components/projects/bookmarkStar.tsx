@@ -1,24 +1,24 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import {addErrorMessage} from 'app/actionCreators/indicator';
-import {defined} from 'app/utils';
-import InlineSvg from 'app/components/inlineSvg';
-import SentryTypes from 'app/sentryTypes';
-import {t} from 'app/locale';
 import {update} from 'app/actionCreators/projects';
-import withApi from 'app/utils/withApi';
-import {Organization, Project} from 'app/types';
 import {Client} from 'app/api';
+import {IconStar} from 'app/icons';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import {Organization, Project} from 'app/types';
+import {defined} from 'app/utils';
+import withApi from 'app/utils/withApi';
 
 type Props = {
   api: Client;
+  organization: Organization;
+  project: Project;
   /* used to override when under local state */
   isBookmarked?: boolean;
   className?: string;
-  organization: Organization;
-  project: Project;
   onToggle?: (isBookmarked: boolean) => void;
 };
 
@@ -56,8 +56,8 @@ const BookmarkStar = ({
 
   return (
     <Star
+      isSolid
       isBookmarked={isBookmarked}
-      src="icon-star-small-filled"
       onClick={toggleProjectBookmark}
       className={className}
     />
@@ -74,11 +74,13 @@ BookmarkStar.propTypes = {
   onToggle: PropTypes.func,
 };
 
-const Star = styled(InlineSvg)<{isBookmarked: boolean}>`
-  color: ${p => (p.isBookmarked ? p.theme.orange300 : p.theme.gray400)};
+const Star = styled(IconStar, {shouldForwardProp: p => p !== 'isBookmarked'})<{
+  isBookmarked: boolean;
+}>`
+  color: ${p => (p.isBookmarked ? p.theme.yellow300 : p.theme.gray200)};
 
   &:hover {
-    color: ${p => (p.isBookmarked ? p.theme.orange200 : p.theme.gray500)};
+    color: ${p => (p.isBookmarked ? p.theme.yellow200 : p.theme.gray300)};
   }
 `;
 

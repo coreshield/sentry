@@ -5,15 +5,17 @@ import six
 
 from django.conf import settings
 
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import ParseError, PermissionDenied
 from rest_framework.response import Response
 
 from sentry import features
 from sentry.api.bases import OrganizationEventsEndpointBase, OrganizationEventPermission
 from sentry.api.helpers.group_index import (
     build_query_params_from_request,
+    calculate_stats_period,
     delete_groups,
     get_by_short_id,
+    rate_limit_endpoint,
     update_groups,
     ValidationError,
 )
@@ -35,6 +37,18 @@ search = EventsDatasetSnubaSearchBackend(**settings.SENTRY_SEARCH_OPTIONS)
 
 class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
     permission_classes = (OrganizationEventPermission,)
+    skip_snuba_fields = {
+        "query",
+        "status",
+        "bookmarked_by",
+        "assigned_to",
+        "unassigned",
+        "linked",
+        "subscribed_by",
+        "active_at",
+        "first_release",
+        "first_seen",
+    }
 
     def _search(self, request, organization, projects, environments, extra_query_kwargs=None):
         query_kwargs = build_query_params_from_request(
@@ -48,6 +62,7 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
         result = search.query(**query_kwargs)
         return result, query_kwargs
 
+    @rate_limit_endpoint(limit=10, window=1)
     def get(self, request, organization):
         """
         List an Organization's Issues
@@ -88,16 +103,23 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
         :pparam string organization_slug: the slug of the organization the
                                           issues belong to.
         :auth: required
+        :qparam list expand: an optional list of strings to opt in to additional data. Supports `inbox`
+        :qparam list collapse: an optional list of strings to opt out of certain pieces of data. Supports `stats`, `lifetime`, `base`
         """
         stats_period = request.GET.get("groupStatsPeriod")
-        if stats_period not in (None, "", "24h", "14d"):
+        try:
+            start, end = get_date_range_from_params(request.GET)
+        except InvalidParams as e:
+            raise ParseError(detail=six.text_type(e))
+
+        expand = request.GET.getlist("expand", [])
+        collapse = request.GET.getlist("collapse", [])
+        has_inbox = features.has("organizations:inbox", organization, actor=request.user)
+        if stats_period not in (None, "", "24h", "14d", "auto"):
             return Response({"detail": ERR_INVALID_STATS_PERIOD}, status=400)
-        elif stats_period is None:
-            # default
-            stats_period = "24h"
-        elif stats_period == "":
-            # disable stats
-            stats_period = None
+        stats_period, stats_period_start, stats_period_end = calculate_stats_period(
+            stats_period, start, end
+        )
 
         environments = self.get_environments(request, organization)
 
@@ -105,6 +127,11 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
             StreamGroupSerializerSnuba,
             environment_ids=[env.id for env in environments],
             stats_period=stats_period,
+            stats_period_start=stats_period_start,
+            stats_period_end=stats_period_end,
+            expand=expand,
+            collapse=collapse,
+            has_inbox=has_inbox,
         )
 
         projects = self.get_projects(request, organization)
@@ -166,11 +193,6 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
             return Response(serialize(groups, request.user, serializer()))
 
         try:
-            start, end = get_date_range_from_params(request.GET)
-        except InvalidParams as e:
-            return Response({"detail": six.text_type(e)}, status=400)
-
-        try:
             cursor_result, query_kwargs = self._search(
                 request,
                 organization,
@@ -183,7 +205,17 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
 
         results = list(cursor_result)
 
-        context = serialize(results, request.user, serializer())
+        context = serialize(
+            results,
+            request.user,
+            serializer(
+                start=start,
+                end=end,
+                search_filters=query_kwargs["search_filters"]
+                if "search_filters" in query_kwargs
+                else None,
+            ),
+        )
 
         # HACK: remove auto resolved entries
         # TODO: We should try to integrate this into the search backend, since
@@ -194,16 +226,16 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
             if search_filter.key.name == "status"
         ]
         if status and status[0].value.raw_value == GroupStatus.UNRESOLVED:
-            context = [r for r in context if r["status"] == "unresolved"]
+            context = [r for r in context if "status" not in r or r["status"] == "unresolved"]
 
         response = Response(context)
 
         self.add_cursor_headers(request, response, cursor_result)
 
         # TODO(jess): add metrics that are similar to project endpoint here
-
         return response
 
+    @rate_limit_endpoint(limit=10, window=1)
     def put(self, request, organization):
         """
         Bulk Mutate a List of Issues
@@ -265,8 +297,8 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
                                      the bookmark flag.
         :auth: required
         """
-
         projects = self.get_projects(request, organization)
+        has_inbox = features.has("organizations:inbox", organization, actor=request.user)
         if len(projects) > 1 and not features.has(
             "organizations:global-views", organization, actor=request.user
         ):
@@ -281,8 +313,9 @@ class OrganizationGroupIndexEndpoint(OrganizationEventsEndpointBase):
             projects,
             self.get_environments(request, organization),
         )
-        return update_groups(request, projects, organization.id, search_fn)
+        return update_groups(request, projects, organization.id, search_fn, has_inbox)
 
+    @rate_limit_endpoint(limit=10, window=1)
     def delete(self, request, organization):
         """
         Bulk Remove a List of Issues

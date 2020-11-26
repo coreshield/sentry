@@ -1,33 +1,35 @@
 import React from 'react';
+import styled from '@emotion/styled';
 import {Location} from 'history';
 import partial from 'lodash/partial';
-import styled from '@emotion/styled';
 
-import {Organization} from 'app/types';
-import {t} from 'app/locale';
 import Count from 'app/components/count';
 import Duration from 'app/components/duration';
 import ProjectBadge from 'app/components/idBadge/projectBadge';
 import UserBadge from 'app/components/idBadge/userBadge';
 import UserMisery from 'app/components/userMisery';
 import Version from 'app/components/version';
+import {t} from 'app/locale';
+import {Organization} from 'app/types';
 import {defined} from 'app/utils';
-import getDynamicText from 'app/utils/getDynamicText';
+import {AGGREGATIONS, getAggregateAlias} from 'app/utils/discover/fields';
+import {getShortEventId} from 'app/utils/events';
 import {formatFloat, formatPercentage} from 'app/utils/formatters';
-import {getAggregateAlias, AGGREGATIONS} from 'app/utils/discover/fields';
+import getDynamicText from 'app/utils/getDynamicText';
 import Projects from 'app/utils/projects';
 
+import ArrayValue from './arrayValue';
+import {EventData, MetaType} from './eventView';
+import KeyTransactionField from './keyTransactionField';
 import {
   BarContainer,
   Container,
-  EventId,
   NumberContainer,
   OverflowLink,
   StyledDateTime,
   StyledShortId,
   VersionContainer,
 } from './styles';
-import {MetaType, EventData} from './eventView';
 
 /**
  * Types, functions and definitions for rendering fields in discover results.
@@ -61,12 +63,13 @@ type FieldFormatters = {
   number: FieldFormatter;
   percentage: FieldFormatter;
   string: FieldFormatter;
+  array: FieldFormatter;
 };
 
 export type FieldTypes = keyof FieldFormatters;
 
 const EmptyValueContainer = styled('span')`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
 `;
 const emptyValue = <EmptyValueContainer>{t('n/a')}</EmptyValueContainer>;
 
@@ -81,7 +84,7 @@ const FIELD_FORMATTERS: FieldFormatters = {
   boolean: {
     isSortable: true,
     renderFunc: (field, data) => {
-      const value = data[field] ? t('yes') : t('no');
+      const value = data[field] ? t('true') : t('false');
       return <Container>{value}</Container>;
     },
   },
@@ -146,6 +149,13 @@ const FIELD_FORMATTERS: FieldFormatters = {
       return <Container>{value}</Container>;
     },
   },
+  array: {
+    isSortable: true,
+    renderFunc: (field, data) => {
+      const value = Array.isArray(data[field]) ? data[field] : [data[field]];
+      return <ArrayValue value={value} />;
+    },
+  },
 };
 
 type SpecialFieldRenderFunc = (
@@ -162,9 +172,13 @@ type SpecialFields = {
   id: SpecialField;
   project: SpecialField;
   user: SpecialField;
+  'user.display': SpecialField;
   'issue.id': SpecialField;
+  'error.handled': SpecialField;
   issue: SpecialField;
   release: SpecialField;
+  key_transaction: SpecialField;
+  'trend_percentage()': SpecialField;
 };
 
 /**
@@ -179,17 +193,17 @@ const SPECIAL_FIELDS: SpecialFields = {
       if (typeof id !== 'string') {
         return null;
       }
-      return (
-        <Container>
-          <EventId value={id} />
-        </Container>
-      );
+
+      return <Container>{getShortEventId(id)}</Container>;
     },
   },
   'issue.id': {
     sortField: 'issue.id',
     renderFunc: (data, {organization}) => {
-      const target = `/organizations/${organization.slug}/issues/${data['issue.id']}/`;
+      const target = {
+        pathname: `/organizations/${organization.slug}/issues/${data['issue.id']}/`,
+      };
+
       return (
         <Container>
           <OverflowLink to={target} aria-label={data['issue.id']}>
@@ -212,7 +226,10 @@ const SPECIAL_FIELDS: SpecialFields = {
         );
       }
 
-      const target = `/organizations/${organization.slug}/issues/${issueID}/`;
+      const target = {
+        pathname: `/organizations/${organization.slug}/issues/${issueID}/`,
+      };
+
       return (
         <Container>
           <OverflowLink to={target} aria-label={issueID}>
@@ -243,17 +260,38 @@ const SPECIAL_FIELDS: SpecialFields = {
     },
   },
   user: {
-    sortField: 'user.id',
+    sortField: 'user',
     renderFunc: data => {
-      const userObj = {
-        id: data.user,
-        name: data.user,
-        email: data.user,
-        username: data.user,
-        ip_address: '',
-      };
-
       if (data.user) {
+        const [key, value] = data.user.split(':');
+        const userObj = {
+          id: '',
+          name: '',
+          email: '',
+          username: '',
+          ip_address: '',
+        };
+        userObj[key] = value;
+
+        const badge = <UserBadge user={userObj} hideEmail avatarSize={16} />;
+        return <Container>{badge}</Container>;
+      }
+
+      return <Container>{emptyValue}</Container>;
+    },
+  },
+  'user.display': {
+    sortField: 'user.display',
+    renderFunc: data => {
+      if (data['user.display']) {
+        const userObj = {
+          id: '',
+          name: data['user.display'],
+          email: '',
+          username: '',
+          ip_address: '',
+        };
+
         const badge = <UserBadge user={userObj} hideEmail avatarSize={16} />;
         return <Container>{badge}</Container>;
       }
@@ -264,11 +302,48 @@ const SPECIAL_FIELDS: SpecialFields = {
   release: {
     sortField: 'release',
     renderFunc: data =>
-      data.release && (
+      data.release ? (
         <VersionContainer>
           <Version version={data.release} anchor={false} tooltipRawVersion truncate />
         </VersionContainer>
+      ) : (
+        <Container>{emptyValue}</Container>
       ),
+  },
+  'error.handled': {
+    sortField: 'error.handled',
+    renderFunc: data => {
+      const values = data['error.handled'];
+      // Transactions will have null, and default events have no handled attributes.
+      if (values === null || values?.length === 0) {
+        return <Container>{emptyValue}</Container>;
+      }
+      const value = Array.isArray(values) ? values.slice(-1)[0] : values;
+      return <Container>{[1, null].includes(value) ? 'true' : 'false'}</Container>;
+    },
+  },
+  key_transaction: {
+    sortField: 'key_transaction',
+    renderFunc: (data, {organization}) => (
+      <Container>
+        <KeyTransactionField
+          isKeyTransaction={(data.key_transaction ?? 0) !== 0}
+          organization={organization}
+          projectSlug={data.project}
+          transactionName={data.transaction}
+        />
+      </Container>
+    ),
+  },
+  'trend_percentage()': {
+    sortField: 'trend_percentage()',
+    renderFunc: data => (
+      <NumberContainer>
+        {typeof data.trend_percentage === 'number'
+          ? formatPercentage(data.trend_percentage - 1)
+          : emptyValue}
+      </NumberContainer>
+    ),
   },
 };
 

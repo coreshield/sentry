@@ -1,9 +1,9 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import InlineSvg from 'app/components/inlineSvg';
 import Link from 'app/components/links/link';
 import Panel from 'app/components/panels/panel';
+import {IconSentry} from 'app/icons';
 import space from 'app/styles/space';
 
 const BODY_CLASSES = ['narrow'];
@@ -66,7 +66,7 @@ const AuthSidebar = styled('div')`
 
 const SentryButton = styled(p => (
   <Link to="/" {...p}>
-    <InlineSvg size="24px" src="icon-sentry" />
+    <IconSentry size="24px" />
   </Link>
 ))`
   color: #fff;

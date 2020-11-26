@@ -1,52 +1,53 @@
-import {Params} from 'react-router/lib/Router';
-import PropTypes from 'prop-types';
 import React from 'react';
 import * as ReactRouter from 'react-router';
-import isEqual from 'lodash/isEqual';
-import pick from 'lodash/pick';
+import {Params} from 'react-router/lib/Router';
 import styled from '@emotion/styled';
 import {Location} from 'history';
+import isEqual from 'lodash/isEqual';
+import pick from 'lodash/pick';
+import PropTypes from 'prop-types';
+import {stringify} from 'query-string';
 
-import {Organization, SavedQuery, SelectValue} from 'app/types';
-import {PageContent} from 'app/styles/organization';
-import {t} from 'app/locale';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
+import Feature from 'app/components/acl/feature';
 import Alert from 'app/components/alert';
 import AsyncComponent from 'app/components/asyncComponent';
-import Banner from 'app/components/banner';
 import Button from 'app/components/button';
 import DropdownControl, {DropdownItem} from 'app/components/dropdownControl';
-import ConfigStore from 'app/stores/configStore';
-import Feature from 'app/components/acl/feature';
 import LightWeightNoProjectMessage from 'app/components/lightWeightNoProjectMessage';
 import SearchBar from 'app/components/searchBar';
 import SentryDocumentTitle from 'app/components/sentryDocumentTitle';
+import Switch from 'app/components/switch';
+import {t} from 'app/locale';
 import SentryTypes from 'app/sentryTypes';
-import localStorage from 'app/utils/localStorage';
+import ConfigStore from 'app/stores/configStore';
+import {PageContent} from 'app/styles/organization';
 import space from 'app/styles/space';
-import withOrganization from 'app/utils/withOrganization';
+import {Organization, SavedQuery, SelectValue} from 'app/types';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
 import EventView from 'app/utils/discover/eventView';
 import {decodeScalar} from 'app/utils/queryString';
+import theme from 'app/utils/theme';
+import withOrganization from 'app/utils/withOrganization';
 
+import Banner from './banner';
 import {DEFAULT_EVENT_VIEW} from './data';
-import {getPrebuiltQueries} from './utils';
 import QueryList from './queryList';
-import backgroundSpace from '../../../images/spot/background-space.svg';
-
-const BANNER_DISMISSED_KEY = 'discover-banner-dismissed';
+import {
+  getPrebuiltQueries,
+  isBannerHidden,
+  setBannerHidden,
+  setRenderPrebuilt,
+  shouldRenderPrebuilt,
+} from './utils';
 
 const SORT_OPTIONS: SelectValue<string>[] = [
-  {label: t('Recently Edited'), value: '-dateUpdated'},
   {label: t('My Queries'), value: 'myqueries'},
+  {label: t('Recently Edited'), value: '-dateUpdated'},
   {label: t('Query Name (A-Z)'), value: 'name'},
   {label: t('Date Created (Newest)'), value: '-dateCreated'},
   {label: t('Date Created (Oldest)'), value: 'dateCreated'},
   {label: t('Most Outdated'), value: 'dateUpdated'},
 ];
-
-function checkIsBannerHidden(): boolean {
-  return localStorage.getItem(BANNER_DISMISSED_KEY) === 'true';
-}
 
 type Props = {
   organization: Organization;
@@ -57,7 +58,8 @@ type Props = {
 
 type State = {
   isBannerHidden: boolean;
-  savedQueries: SavedQuery[];
+  isSmallBanner: boolean;
+  savedQueries: SavedQuery[] | null;
   savedQueriesPageLinks: string;
 } & AsyncComponent['state'];
 
@@ -68,6 +70,8 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     router: PropTypes.object.isRequired,
   };
 
+  mq = window.matchMedia?.(`(max-width: ${theme.breakpoints[1]})`);
+
   state: State = {
     // AsyncComponent state
     loading: true,
@@ -76,9 +80,29 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     errors: [],
 
     // local component state
-    isBannerHidden: checkIsBannerHidden(),
-    savedQueries: [],
+    isBannerHidden: isBannerHidden(),
+    renderPrebuilt: shouldRenderPrebuilt(),
+    isSmallBanner: this.mq?.matches,
+    savedQueries: null,
     savedQueriesPageLinks: '',
+  };
+
+  componentDidMount() {
+    if (this.mq) {
+      this.mq.addListener(this.handleMediaQueryChange);
+    }
+  }
+
+  componentWillUnmount() {
+    if (this.mq) {
+      this.mq.removeListener(this.handleMediaQueryChange);
+    }
+  }
+
+  handleMediaQueryChange = (changed: MediaQueryListEvent) => {
+    this.setState({
+      isSmallBanner: changed.matches,
+    });
   };
 
   shouldReload = true;
@@ -92,13 +116,11 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
   getActiveSort() {
     const {location} = this.props;
 
-    const urlSort = location.query.sort
-      ? decodeScalar(location.query.sort)
-      : '-dateUpdated';
+    const urlSort = location.query.sort ? decodeScalar(location.query.sort) : 'myqueries';
     return SORT_OPTIONS.find(item => item.value === urlSort) || SORT_OPTIONS[0];
   }
 
-  getEndpoints(): [string, string, any][] {
+  getEndpoints(): ReturnType<AsyncComponent['getEndpoints']> {
     const {organization, location} = this.props;
 
     const views = getPrebuiltQueries(organization);
@@ -106,7 +128,12 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
 
     const cursor = decodeScalar(location.query.cursor);
     let perPage = 9;
-    if (!cursor) {
+
+    const canRenderPrebuilt = this.state
+      ? this.state.renderPrebuilt
+      : shouldRenderPrebuilt();
+
+    if (!cursor && canRenderPrebuilt) {
       // invariant: we're on the first page
 
       if (searchQuery && searchQuery.length > 0) {
@@ -152,14 +179,13 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
   }
 
   componentDidUpdate(prevProps: Props) {
-    const isBannerHidden = checkIsBannerHidden();
-    if (isBannerHidden !== this.state.isBannerHidden) {
+    const isHidden = isBannerHidden();
+    if (isHidden !== this.state.isBannerHidden) {
       // eslint-disable-next-line react/no-did-update-set-state
       this.setState({
-        isBannerHidden,
+        isBannerHidden: isHidden,
       });
     }
-
     const PAYLOAD_KEYS = ['sort', 'cursor', 'query'] as const;
 
     const payloadKeysChanged = !isEqual(
@@ -178,8 +204,8 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     this.fetchData({reloading: true});
   };
 
-  handleClick = () => {
-    localStorage.setItem(BANNER_DISMISSED_KEY, 'true');
+  handleBannerClick = () => {
+    setBannerHidden(true);
     this.setState({isBannerHidden: true});
   };
 
@@ -197,6 +223,12 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
 
   handleSortChange = (value: string) => {
     const {location} = this.props;
+    trackAnalyticsEvent({
+      eventKey: 'discover_v2.change_sort',
+      eventName: 'Discoverv2: Sort By Changed',
+      organization_id: parseInt(this.props.organization.id, 10),
+      sort: value,
+    });
     ReactRouter.browserHistory.push({
       pathname: location.pathname,
       query: {
@@ -213,41 +245,24 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
     if (bannerDismissed) {
       return null;
     }
-
     const {location, organization} = this.props;
     const eventView = EventView.fromNewQueryWithLocation(DEFAULT_EVENT_VIEW, location);
     const to = eventView.getResultsViewUrlTarget(organization.slug);
+    const resultsUrl = `${to.pathname}?${stringify(to.query)}`;
 
     return (
       <Banner
-        title={t('Discover Trends')}
-        subtitle={t(
-          'Customize and save queries by search conditions, event fields, and tags'
-        )}
-        backgroundImg={backgroundSpace}
-        onCloseClick={this.handleClick}
-      >
-        <StarterButton
-          to={to}
-          onClick={() => {
-            trackAnalyticsEvent({
-              eventKey: 'discover_v2.build_new_query',
-              eventName: 'Discoverv2: Build a new Discover Query',
-              organization_id: parseInt(this.props.organization.id, 10),
-            });
-          }}
-        >
-          {t('Build a new query')}
-        </StarterButton>
-        <StarterButton href="https://docs.sentry.io/performance-monitoring/discover-queries/">
-          {t('Read the docs')}
-        </StarterButton>
-      </Banner>
+        organization={organization}
+        resultsUrl={resultsUrl}
+        isSmallBanner={this.state.isSmallBanner}
+        onHideBanner={this.handleBannerClick}
+      />
     );
   }
 
   renderActions() {
     const activeSort = this.getActiveSort();
+    const {renderPrebuilt, savedQueries} = this.state;
 
     return (
       <StyledActions>
@@ -257,6 +272,15 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
           placeholder={t('Search saved queries')}
           onSearch={this.handleSearchQuery}
         />
+        <PrebuiltSwitch>
+          <SwitchLabel>Show Prebuilt</SwitchLabel>
+          <Switch
+            isActive={renderPrebuilt}
+            isDisabled={renderPrebuilt && (savedQueries ?? []).length === 0}
+            size="lg"
+            toggle={this.togglePrebuilt}
+          />
+        </PrebuiltSwitch>
         <DropdownControl buttonProps={{prefix: t('Sort By')}} label={activeSort.label}>
           {SORT_OPTIONS.map(({label, value}) => (
             <DropdownItem
@@ -272,6 +296,15 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
       </StyledActions>
     );
   }
+
+  togglePrebuilt = () => {
+    const {renderPrebuilt} = this.state;
+
+    this.setState({renderPrebuilt: !renderPrebuilt}, () => {
+      setRenderPrebuilt(!renderPrebuilt);
+      this.fetchData({reloading: true});
+    });
+  };
 
   onGoLegacyDiscover = () => {
     localStorage.setItem('discover:version', '1');
@@ -294,13 +327,14 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
 
   renderBody() {
     const {location, organization} = this.props;
-    const {savedQueries, savedQueriesPageLinks} = this.state;
+    const {savedQueries, savedQueriesPageLinks, renderPrebuilt} = this.state;
 
     return (
       <QueryList
         pageLinks={savedQueriesPageLinks}
-        savedQueries={savedQueries}
+        savedQueries={savedQueries ?? []}
         savedQuerySearchQuery={this.getSavedQuerySearchQuery()}
+        renderPrebuilt={renderPrebuilt}
         location={location}
         organization={organization}
         onQueryChange={this.handleQueryChange}
@@ -343,19 +377,6 @@ class DiscoverLanding extends AsyncComponent<Props, State> {
                 {this.renderBanner()}
                 {this.renderActions()}
                 {this.renderComponent()}
-                <Feature
-                  features={['organizations:discover']}
-                  organization={organization}
-                >
-                  <div>
-                    <SwitchLink
-                      href={`/organizations/${organization.slug}/discover/`}
-                      onClick={this.onGoLegacyDiscover}
-                    >
-                      {t('Go to Legacy Discover')}
-                    </SwitchLink>
-                  </div>
-                </Feature>
               </PageContent>
             </LightWeightNoProjectMessage>
           </StyledPageContent>
@@ -369,11 +390,19 @@ const StyledPageContent = styled(PageContent)`
   padding: 0;
 `;
 
+const PrebuiltSwitch = styled('div')`
+  display: flex;
+`;
+
+const SwitchLabel = styled('div')`
+  padding-right: 8px;
+`;
+
 export const StyledPageHeader = styled('div')`
   display: flex;
   align-items: flex-end;
   font-size: ${p => p.theme.headerFontSize};
-  color: ${p => p.theme.gray800};
+  color: ${p => p.theme.textColor};
   justify-content: space-between;
   margin-bottom: ${space(2)};
 `;
@@ -385,7 +414,11 @@ const StyledSearchBar = styled(SearchBar)`
 const StyledActions = styled('div')`
   display: grid;
   grid-gap: ${space(2)};
-  grid-template-columns: auto min-content;
+  grid-template-columns: auto max-content min-content;
+
+  @media (max-width: ${p => p.theme.breakpoints[0]}) {
+    grid-template-columns: auto;
+  }
 
   align-items: center;
   margin-bottom: ${space(3)};
@@ -393,15 +426,6 @@ const StyledActions = styled('div')`
 
 const StyledButton = styled(Button)`
   white-space: nowrap;
-`;
-
-const StarterButton = styled(Button)`
-  margin: ${space(1)};
-`;
-
-const SwitchLink = styled('a')`
-  font-size: ${p => p.theme.fontSizeSmall};
-  margin-left: ${space(1)};
 `;
 
 export default withOrganization(DiscoverLanding);

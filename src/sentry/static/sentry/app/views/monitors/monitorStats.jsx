@@ -1,11 +1,12 @@
-import PropTypes from 'prop-types';
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import AsyncComponent from 'app/components/asyncComponent';
+import MiniBarChart from 'app/components/charts/miniBarChart';
 import {Panel, PanelBody} from 'app/components/panels';
 import {t} from 'app/locale';
+import theme from 'app/utils/theme';
 import EmptyMessage from 'app/views/settings/components/emptyMessage';
-import StackedBarChart from 'app/components/stackedBarChart';
 
 export default class MonitorStats extends AsyncComponent {
   static propTypes = {
@@ -40,46 +41,38 @@ export default class MonitorStats extends AsyncComponent {
     ];
   }
 
-  renderTooltip(point, _pointIdx, chart) {
-    const timeLabel = chart.getTimeLabel(point);
-    const [error, ok] = point.y;
-
-    return (
-      <div style={{width: '150px'}}>
-        <div className="time-label">{timeLabel}</div>
-        <div className="value-label">
-          {t('%s successful', ok.toLocaleString())}
-          <br />
-          {t('%s failed', error.toLocaleString())}
-        </div>
-      </div>
-    );
-  }
-
   renderBody() {
     let emptyStats = true;
-    const stats = this.state.stats.map(p => {
+    const success = {
+      seriesName: t('Successful'),
+      data: [],
+    };
+    const failed = {
+      seriesName: t('Failed'),
+      data: [],
+    };
+    this.state.stats.forEach(p => {
       if (p.ok || p.error) {
         emptyStats = false;
       }
-      return {
-        x: p.ts,
-        y: [p.error, p.ok],
-      };
+      const timestamp = p.ts * 1000;
+      success.data.push({name: timestamp, value: p.ok});
+      failed.data.push({name: timestamp, value: p.error});
     });
+    const colors = [theme.green300, theme.red300];
 
     return (
       <Panel>
-        <PanelBody>
+        <PanelBody withPadding>
           {!emptyStats ? (
-            <StackedBarChart
-              points={stats}
+            <MiniBarChart
+              isGroupedByDate
+              showTimeInTooltip
+              labelYAxisExtents
+              stacked
+              colors={colors}
               height={150}
-              label="events"
-              barClasses={['error', 'success']}
-              className="standard-barchart"
-              style={{border: 'none'}}
-              tooltip={this.renderTooltip}
+              series={[success, failed]}
             />
           ) : (
             <EmptyMessage

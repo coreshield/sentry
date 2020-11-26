@@ -1,17 +1,18 @@
 import React from 'react';
 import styled from '@emotion/styled';
+import * as Sentry from '@sentry/react';
 
-import {t} from 'app/locale';
-import Button from 'app/components/button';
-import InlineSvg from 'app/components/inlineSvg';
 import {loadIncidents} from 'app/actionCreators/serviceIncidents';
-import {SentryServiceStatus} from 'app/types';
+import Button from 'app/components/button';
+import {IconWarning} from 'app/icons';
+import {t} from 'app/locale';
 import space from 'app/styles/space';
+import {SentryServiceStatus} from 'app/types';
 
-import {CommonSidebarProps} from './types';
-import SidebarPanelEmpty from './sidebarPanelEmpty';
 import SidebarItem from './sidebarItem';
 import SidebarPanel from './sidebarPanel';
+import SidebarPanelEmpty from './sidebarPanelEmpty';
+import {CommonSidebarProps} from './types';
 
 type Props = CommonSidebarProps;
 
@@ -29,7 +30,16 @@ class ServiceIncidents extends React.Component<Props, State> {
   }
 
   async fetchData() {
-    this.setState({status: await loadIncidents()});
+    try {
+      const status = await loadIncidents();
+      this.setState({status});
+    } catch (e) {
+      Sentry.withScope(scope => {
+        scope.setLevel(Sentry.Severity.Warning);
+        scope.setFingerprint(['ServiceIncidents-fetchData']);
+        Sentry.captureException(e);
+      });
+    }
   }
 
   render() {
@@ -61,12 +71,7 @@ class ServiceIncidents extends React.Component<Props, State> {
           orientation={orientation}
           collapsed={collapsed}
           active={active}
-          icon={
-            <InlineSvg
-              src="icon-circle-exclamation"
-              className="animated pulse infinite"
-            />
-          }
+          icon={<IconWarning className="animated pulse infinite" />}
           label={t('Service status')}
           onClick={onShowPanel}
         />
@@ -120,7 +125,7 @@ const IncidentList = styled('ul')`
 `;
 
 const IncidentItem = styled('li')`
-  border-bottom: 1px solid ${p => p.theme.borderLight};
+  border-bottom: 1px solid ${p => p.theme.innerBorder};
   margin-bottom: ${space(3)};
   padding-bottom: ${space(0.75)};
 `;

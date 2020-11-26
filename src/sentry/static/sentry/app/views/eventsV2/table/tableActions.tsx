@@ -1,19 +1,19 @@
 import React from 'react';
-import PropTypes from 'prop-types';
 import {Location} from 'history';
+import PropTypes from 'prop-types';
 
-import {OrganizationSummary} from 'app/types';
-import DataExport, {ExportQueryType} from 'app/components/dataExport';
-import Button from 'app/components/button';
 import Feature from 'app/components/acl/feature';
 import FeatureDisabled from 'app/components/acl/featureDisabled';
-import {IconDownload, IconStack, IconTag} from 'app/icons';
+import Button from 'app/components/button';
+import DataExport, {ExportQueryType} from 'app/components/dataExport';
 import Hovercard from 'app/components/hovercard';
+import {IconDownload, IconStack, IconTag} from 'app/icons';
 import {t} from 'app/locale';
+import {OrganizationSummary} from 'app/types';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
+import {TableData} from 'app/utils/discover/discoverQuery';
 import EventView from 'app/utils/discover/eventView';
 
-import {TableData} from './types';
 import {downloadAsCsv} from '../utils';
 
 type Props = {
@@ -38,19 +38,14 @@ function handleDownloadAsCsv(title: string, {organization, eventView, tableData}
 }
 
 function renderDownloadButton(canEdit: boolean, props: Props) {
-  const {tableData} = props;
-  if (!tableData || (tableData.data && tableData.data.length < 50)) {
-    return renderBrowserExportButton(canEdit, props);
-  } else {
-    return (
-      <Feature
-        features={['organizations:data-export']}
-        renderDisabled={() => renderBrowserExportButton(canEdit, props)}
-      >
-        {renderAsyncExportButton(canEdit, props)}
-      </Feature>
-    );
-  }
+  return (
+    <Feature
+      features={['organizations:discover-query']}
+      renderDisabled={() => renderBrowserExportButton(canEdit, props)}
+    >
+      {renderAsyncExportButton(canEdit, props)}
+    </Feature>
+  );
 }
 
 function renderBrowserExportButton(canEdit: boolean, {isLoading, ...props}: Props) {

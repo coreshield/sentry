@@ -1,6 +1,6 @@
 import React from 'react';
 
-import {rectOfContent, clamp, UserSelectValues, setBodyUserSelect} from './utils';
+import {clamp, rectOfContent, setBodyUserSelect, UserSelectValues} from './utils';
 
 // we establish the minimum window size so that the window size of 0% is not possible
 const MINIMUM_WINDOW_SIZE = 0.5 / 100; // 0.5% window size
@@ -116,6 +116,7 @@ class DragManager extends React.Component<DragManagerProps, DragManagerState> {
       userSelect: 'none',
       MozUserSelect: 'none',
       msUserSelect: 'none',
+      webkitUserSelect: 'none',
     });
 
     // attach event listeners so that the mouse cursor can drag outside of the
@@ -244,6 +245,7 @@ class DragManager extends React.Component<DragManagerProps, DragManagerState> {
       userSelect: 'none',
       MozUserSelect: 'none',
       msUserSelect: 'none',
+      webkitUserSelect: 'none',
     });
 
     // attach event listeners so that the mouse cursor can drag outside of the

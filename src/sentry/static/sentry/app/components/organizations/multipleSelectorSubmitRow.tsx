@@ -1,19 +1,20 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import Button from 'app/components/button';
+import {t} from 'app/locale';
 import {growIn} from 'app/styles/animations';
 import space from 'app/styles/space';
-import {t} from 'app/locale';
 
 type Props = {
   onSubmit: () => void;
+  disabled?: boolean;
 };
 
-const MultipleSelectorSubmitRow = ({onSubmit}: Props) => (
+const MultipleSelectorSubmitRow = ({onSubmit, disabled = false}: Props) => (
   <SubmitButtonContainer>
-    <SubmitButton onClick={onSubmit} size="xsmall" priority="primary">
+    <SubmitButton disabled={disabled} onClick={onSubmit} size="xsmall" priority="primary">
       {t('Apply')}
     </SubmitButton>
   </SubmitButtonContainer>

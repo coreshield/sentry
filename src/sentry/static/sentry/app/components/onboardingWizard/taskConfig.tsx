@@ -1,24 +1,24 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import {t} from 'app/locale';
 import {openInviteMembersModal} from 'app/actionCreators/modal';
-import {sourceMaps} from 'app/data/platformCategories';
-import {
-  Organization,
-  OnboardingTaskDescriptor,
-  OnboardingTaskKey,
-  OnboardingTask,
-  Project,
-  OnboardingSupplementComponentProps,
-} from 'app/types';
-import withApi from 'app/utils/withApi';
 import {Client} from 'app/api';
-import withProjects from 'app/utils/withProjects';
-import EventWaiter from 'app/utils/eventWaiter';
 import {taskIsDone} from 'app/components/onboardingWizard/utils';
+import {sourceMaps} from 'app/data/platformCategories';
+import {t} from 'app/locale';
 import pulsingIndicatorStyles from 'app/styles/pulsingIndicator';
 import space from 'app/styles/space';
+import {
+  OnboardingSupplementComponentProps,
+  OnboardingTask,
+  OnboardingTaskDescriptor,
+  OnboardingTaskKey,
+  Organization,
+  Project,
+} from 'app/types';
+import EventWaiter from 'app/utils/eventWaiter';
+import withApi from 'app/utils/withApi';
+import withProjects from 'app/utils/withProjects';
 
 function hasPlatformWithSourceMaps(organization: Organization): boolean {
   const projects = organization?.projects;
@@ -70,6 +70,7 @@ export function getOnboardingTasks(
               api={api}
               organization={organization}
               project={projects[0]}
+              eventType="error"
               onIssueReceived={() => !taskIsDone(task) && onCompleteTask()}
             >
               {() => <EventWaitingIndicator />}
@@ -102,6 +103,37 @@ export function getOnboardingTasks(
       actionType: 'app',
       location: `/organizations/${organization.slug}/projects/new/`,
       display: true,
+    },
+    {
+      task: OnboardingTaskKey.FIRST_TRANSACTION,
+      title: t('Monitor Performance'),
+      description: t('See slow faster'),
+      detailedDescription: t(
+        `Set up Performance Monitoring to see everything from macro-level metrics to micro-level spans.
+        Cross-reference transactions with related issues, customize queries, and monitor mission-critical endpoints using metric alerts.`
+      ),
+      skippable: true,
+      requisites: [OnboardingTaskKey.FIRST_PROJECT],
+      actionType: 'external',
+      location: 'https://docs.sentry.io/product/performance/getting-started/',
+      display: true,
+      SupplementComponent: withProjects(
+        withApi(({api, task, projects, onCompleteTask}: FirstEventWaiterProps) =>
+          projects.length > 0 &&
+          task.requisiteTasks.length === 0 &&
+          !task.completionSeen ? (
+            <EventWaiter
+              api={api}
+              organization={organization}
+              project={projects[0]}
+              eventType="transaction"
+              onIssueReceived={() => !taskIsDone(task) && onCompleteTask()}
+            >
+              {() => <EventWaitingIndicator />}
+            </EventWaiter>
+          ) : null
+        )
+      ),
     },
     {
       task: OnboardingTaskKey.USER_CONTEXT,
@@ -217,7 +249,7 @@ const EventWaitingIndicator = styled(p => (
   </div>
 ))`
   font-size: ${p => p.theme.fontSizeSmall};
-  color: ${p => p.theme.gray700};
+  color: ${p => p.theme.textColor};
   display: grid;
   grid-template-columns: max-content max-content;
   grid-gap: ${space(1)};

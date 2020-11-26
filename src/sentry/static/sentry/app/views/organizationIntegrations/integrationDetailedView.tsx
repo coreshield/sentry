@@ -1,18 +1,18 @@
-import keyBy from 'lodash/keyBy';
 import React from 'react';
 import styled from '@emotion/styled';
+import keyBy from 'lodash/keyBy';
 
 import {addErrorMessage} from 'app/actionCreators/indicator';
 import {RequestOptions} from 'app/api';
 import Feature from 'app/components/acl/feature';
 import Alert from 'app/components/alert';
 import Button from 'app/components/button';
-import {IconWarning} from 'app/icons';
+import {IconFlag, IconOpen, IconWarning} from 'app/icons';
 import {t} from 'app/locale';
 import space from 'app/styles/space';
 import {Integration, IntegrationProvider} from 'app/types';
 import {sortArray} from 'app/utils';
-import {isSlackWorkspaceApp, getReauthAlertText} from 'app/utils/integrationUtil';
+import {getReauthAlertText, isSlackWorkspaceApp} from 'app/utils/integrationUtil';
 import withOrganization from 'app/utils/withOrganization';
 
 import AbstractIntegrationDetailedView from './abstractIntegrationDetailedView';
@@ -37,7 +37,7 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
       ],
       [
         'configurations',
-        `/organizations/${orgId}/integrations/?provider_key=${integrationSlug}`,
+        `/organizations/${orgId}/integrations/?provider_key=${integrationSlug}&includeConfig=0`,
       ],
     ];
 
@@ -63,12 +63,23 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
   get alerts() {
     const provider = this.provider;
     const metadata = this.metadata;
-    const alerts = metadata.aspects.alerts || [];
+    // The server response for integration installations includes old icon CSS classes
+    // We map those to the currently in use values to their react equivalents
+    // and fallback to IconFlag just in case.
+    const alerts = (metadata.aspects.alerts || []).map(item => {
+      switch (item.icon) {
+        case 'icon-warning':
+        case 'icon-warning-sm':
+          return {...item, icon: <IconWarning />};
+        default:
+          return {...item, icon: <IconFlag />};
+      }
+    });
 
     if (!provider.canAdd && metadata.aspects.externalInstall) {
       alerts.push({
         type: 'warning',
-        icon: 'icon-exit',
+        icon: <IconOpen />,
         text: metadata.aspects.externalInstall.noticeText,
       });
     }
@@ -136,12 +147,19 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
 
   onDisable = (integration: Integration) => {
     let url: string;
-    const [domainName, orgName] = integration.domainName.split('/');
 
-    if (integration.accountType === 'User') {
-      url = `https://${domainName}/settings/installations/`;
+    // some integrations have a custom uninstalltion URL we show
+    const uninstallationUrl =
+      integration.dynamicDisplayInformation?.integration_detail?.uninstallationUrl;
+    if (uninstallationUrl) {
+      url = uninstallationUrl;
     } else {
-      url = `https://${domainName}/organizations/${orgName}/settings/installations/`;
+      const [domainName, orgName] = integration.domainName.split('/');
+      if (integration.accountType === 'User') {
+        url = `https://${domainName}/settings/installations/`;
+      } else {
+        url = `https://${domainName}/organizations/${orgName}/settings/installations/`;
+      }
     }
 
     window.open(url, '_blank');
@@ -191,7 +209,7 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
     if (metadata.aspects.externalInstall) {
       return (
         <Button
-          icon="icon-exit"
+          icon={<IconOpen />}
           href={metadata.aspects.externalInstall.url}
           onClick={this.handleExternalInstall}
           external
@@ -249,12 +267,12 @@ class IntegrationDetailedView extends AbstractIntegrationDetailedView<
 
 const InstallWrapper = styled('div')`
   padding: ${space(2)};
-  border: 1px solid ${p => p.theme.borderLight};
+  border: 1px solid ${p => p.theme.border};
   border-bottom: none;
-  background-color: white;
+  background-color: ${p => p.theme.background};
 
   &:last-child {
-    border-bottom: 1px solid ${p => p.theme.borderLight};
+    border-bottom: 1px solid ${p => p.theme.border};
   }
 `;
 

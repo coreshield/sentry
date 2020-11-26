@@ -1,12 +1,12 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import {t, tct} from 'app/locale';
 import Alert from 'app/components/alert';
-import {IconInfo} from 'app/icons';
-import space from 'app/styles/space';
 import ExternalLink from 'app/components/links/externalLink';
 import Link from 'app/components/links/link';
+import {IconInfo} from 'app/icons';
+import {t, tct} from 'app/locale';
+import space from 'app/styles/space';
 
 const NotFound = () => (
   <NotFoundAlert type="error" icon={<IconInfo size="lg" />}>
@@ -27,8 +27,10 @@ const NotFound = () => (
         )}
       </li>
       <li>
-        {tct('If all else fails, [link:create an issue] with more details', {
-          link: <ExternalLink href="http://github.com/getsentry/sentry/issues" />,
+        {tct('If all else fails, [link:contact us] with more details', {
+          link: (
+            <ExternalLink href="https://github.com/getsentry/sentry/issues/new/choose" />
+          ),
         })}
       </li>
     </ul>

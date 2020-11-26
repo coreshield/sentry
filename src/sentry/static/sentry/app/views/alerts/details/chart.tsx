@@ -1,21 +1,27 @@
 import React from 'react';
 import moment from 'moment';
 
+import MarkLine from 'app/components/charts/components/markLine';
+import MarkPoint from 'app/components/charts/components/markPoint';
+import LineChart, {LineChartSeries} from 'app/components/charts/lineChart';
 import {t} from 'app/locale';
 import space from 'app/styles/space';
 import theme from 'app/utils/theme';
 import {Trigger} from 'app/views/settings/incidentRules/types';
-import LineChart from 'app/components/charts/lineChart';
-import MarkPoint from 'app/components/charts/components/markPoint';
-import MarkLine from 'app/components/charts/components/markLine';
 
 import closedSymbol from './closedSymbol';
-import detectedSymbol from './detectedSymbol';
+import startedSymbol from './startedSymbol';
+
+type Truthy<T> = T extends false | '' | 0 | null | undefined ? never : T;
+
+function truthy<T>(value: T): value is Truthy<T> {
+  return !!value;
+}
 
 type Data = [number, {count: number}[]];
 /**
  * So we'll have to see how this looks with real data, but echarts requires
- * an explicit (x,y) value to draw a symbol (incident detected/closed bubble).
+ * an explicit (x,y) value to draw a symbol (incident started/closed bubble).
  *
  * This uses the closest date *without* going over.
  *
@@ -41,22 +47,23 @@ function getNearbyIndex(data: Data[], needle: number) {
 type Props = {
   data: Data[];
   aggregate: string;
-  detected: string;
+  started: string;
   closed?: string;
   triggers?: Trigger[];
+  resolveThreshold?: number | '' | null;
 };
 
 const Chart = (props: Props) => {
-  const {aggregate, data, detected, closed, triggers} = props;
-  const detectedTs = detected && moment.utc(detected).unix();
+  const {aggregate, data, started, closed, triggers, resolveThreshold} = props;
+  const startedTs = started && moment.utc(started).unix();
   const closedTs = closed && moment.utc(closed).unix();
   const chartData = data.map(([ts, val]) => [
     ts * 1000,
     val.length ? val.reduce((acc, {count} = {count: 0}) => acc + count, 0) : 0,
   ]);
 
-  const detectedCoordinate = detectedTs
-    ? chartData[getNearbyIndex(data, detectedTs)]
+  const startedCoordinate = startedTs
+    ? chartData[getNearbyIndex(data, startedTs)]
     : undefined;
   const showClosedMarker =
     data && closedTs && data[data.length - 1] && data[data.length - 1][0] >= closedTs
@@ -73,25 +80,18 @@ const Chart = (props: Props) => {
     typeof warningTrigger?.alertThreshold === 'number'
       ? warningTrigger?.alertThreshold
       : undefined;
-  const warningTriggerResolveThreshold =
-    typeof warningTrigger?.resolveThreshold === 'number'
-      ? warningTrigger?.resolveThreshold
-      : undefined;
   const criticalTriggerAlertThreshold =
     typeof criticalTrigger?.alertThreshold === 'number'
       ? criticalTrigger?.alertThreshold
       : undefined;
-  const criticalTriggerResolveThreshold =
-    typeof criticalTrigger?.resolveThreshold === 'number'
-      ? criticalTrigger?.resolveThreshold
-      : undefined;
+  const alertResolveThreshold =
+    typeof resolveThreshold === 'number' ? resolveThreshold : undefined;
 
   const marklinePrecision = Math.max(
     ...[
       warningTriggerAlertThreshold,
-      warningTriggerResolveThreshold,
       criticalTriggerAlertThreshold,
-      criticalTriggerResolveThreshold,
+      alertResolveThreshold,
     ].map(decimal => {
       if (!decimal || !isFinite(decimal)) return 0;
       let e = 1;
@@ -104,6 +104,107 @@ const Chart = (props: Props) => {
     })
   );
 
+  const lineSeries: LineChartSeries[] = [
+    {
+      // e.g. Events or Users
+      seriesName,
+      dataArray: chartData,
+      data: [],
+      markPoint: MarkPoint({
+        data: [
+          {
+            labelForValue: seriesName,
+            seriesName,
+            symbol: `image://${startedSymbol}`,
+            name: t('Alert Triggered'),
+            coord: startedCoordinate,
+          },
+          ...(closedTs
+            ? [
+                {
+                  labelForValue: seriesName,
+                  seriesName,
+                  symbol: `image://${closedSymbol}`,
+                  symbolSize: 24,
+                  name: t('Alert Resolved'),
+                  coord: closedCoordinate,
+                },
+              ]
+            : []),
+        ] as any, // TODO(ts): data on this type is likely incomplete (needs @types/echarts@4.6.2)
+      }),
+    },
+    warningTrigger &&
+      warningTriggerAlertThreshold && {
+        seriesName: 'Warning Alert',
+        type: 'line',
+        markLine: MarkLine({
+          silent: true,
+          lineStyle: {color: theme.yellow300},
+          data: [
+            {
+              yAxis: warningTriggerAlertThreshold,
+            } as any, // TODO(ts): data on this type is likely incomplete (needs @types/echarts@4.6.2)
+          ],
+          precision: marklinePrecision,
+          label: {
+            show: true,
+            position: 'insideEndTop',
+            formatter: 'WARNING',
+            color: theme.yellow300,
+            fontSize: 10,
+          } as any, // TODO(ts): Color is not an exposed option for label,
+        }),
+        data: [],
+      },
+    criticalTrigger &&
+      criticalTriggerAlertThreshold && {
+        seriesName: 'Critical Alert',
+        type: 'line',
+        markLine: MarkLine({
+          silent: true,
+          lineStyle: {color: theme.red200},
+          data: [
+            {
+              yAxis: criticalTriggerAlertThreshold,
+            } as any, // TODO(ts): data on this type is likely incomplete (needs @types/echarts@4.6.2)
+          ],
+          precision: marklinePrecision,
+          label: {
+            show: true,
+            position: 'insideEndTop',
+            formatter: 'CRITICAL',
+            color: theme.red300,
+            fontSize: 10,
+          } as any, // TODO(ts): Color is not an exposed option for label,
+        }),
+        data: [],
+      },
+    criticalTrigger &&
+      alertResolveThreshold && {
+        seriesName: 'Critical Resolve',
+        type: 'line',
+        markLine: MarkLine({
+          silent: true,
+          lineStyle: {color: theme.gray200},
+          data: [
+            {
+              yAxis: alertResolveThreshold,
+            } as any, // TODO(ts): data on this type is likely incomplete (needs @types/echarts@4.6.2)
+          ],
+          precision: marklinePrecision,
+          label: {
+            show: true,
+            position: 'insideEndBottom',
+            formatter: 'CRITICAL RESOLUTION',
+            color: theme.gray200,
+            fontSize: 10,
+          } as any, // TODO(ts): Color is not an option for label,
+        }),
+        data: [],
+      },
+  ].filter(truthy);
+
   return (
     <LineChart
       isGroupedByDate
@@ -114,128 +215,7 @@ const Chart = (props: Props) => {
         top: space(2),
         bottom: 0,
       }}
-      series={[
-        {
-          // e.g. Events or Users
-          seriesName,
-          dataArray: chartData,
-          markPoint: MarkPoint({
-            data: [
-              {
-                labelForValue: seriesName,
-                seriesName,
-                symbol: `image://${detectedSymbol}`,
-                name: t('Alert Triggered'),
-                coord: detectedCoordinate,
-              },
-              ...(closedTs
-                ? [
-                    {
-                      labelForValue: seriesName,
-                      seriesName,
-                      symbol: `image://${closedSymbol}`,
-                      symbolSize: 24,
-                      name: t('Alert Resolved'),
-                      coord: closedCoordinate,
-                    },
-                  ]
-                : []),
-            ],
-          }),
-        },
-        warningTrigger &&
-          warningTriggerAlertThreshold && {
-            name: 'Warning Alert',
-            type: 'line',
-            markLine: MarkLine({
-              silent: true,
-              lineStyle: {color: theme.yellow400},
-              data: [
-                {
-                  yAxis: warningTriggerAlertThreshold,
-                },
-              ],
-              precision: marklinePrecision,
-              label: {
-                show: true,
-                position: 'insideEndTop',
-                formatter: 'WARNING',
-                color: theme.yellow400,
-                fontSize: 10,
-              },
-            }),
-            data: [],
-          },
-        warningTrigger &&
-          warningTriggerResolveThreshold && {
-            name: 'Warning Resolve',
-            type: 'line',
-            markLine: MarkLine({
-              silent: true,
-              lineStyle: {color: theme.gray400},
-              data: [
-                {
-                  yAxis: warningTriggerResolveThreshold,
-                },
-              ],
-              precision: marklinePrecision,
-              label: {
-                show: true,
-                position: 'insideEndBottom',
-                formatter: 'WARNING RESOLUTION',
-                color: theme.gray400,
-                fontSize: 10,
-              },
-            }),
-            data: [],
-          },
-        criticalTrigger &&
-          criticalTriggerAlertThreshold && {
-            name: 'Critical Alert',
-            type: 'line',
-            markLine: MarkLine({
-              silent: true,
-              lineStyle: {color: theme.red300},
-              data: [
-                {
-                  yAxis: criticalTriggerAlertThreshold,
-                },
-              ],
-              precision: marklinePrecision,
-              label: {
-                show: true,
-                position: 'insideEndTop',
-                formatter: 'CRITICAL',
-                color: theme.red400,
-                fontSize: 10,
-              },
-            }),
-            data: [],
-          },
-        criticalTrigger &&
-          criticalTriggerResolveThreshold && {
-            name: 'Critical Resolve',
-            type: 'line',
-            markLine: MarkLine({
-              silent: true,
-              lineStyle: {color: theme.gray400},
-              data: [
-                {
-                  yAxis: criticalTriggerResolveThreshold,
-                },
-              ],
-              precision: marklinePrecision,
-              label: {
-                show: true,
-                position: 'insideEndBottom',
-                formatter: 'CRITICAL RESOLUTION',
-                color: theme.gray400,
-                fontSize: 10,
-              },
-            }),
-            data: [],
-          },
-      ].filter(Boolean)}
+      series={lineSeries}
     />
   );
 };

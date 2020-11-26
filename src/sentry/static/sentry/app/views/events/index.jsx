@@ -1,26 +1,22 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
 import isEqual from 'lodash/isEqual';
+import PropTypes from 'prop-types';
 
 import {loadOrganizationTags} from 'app/actionCreators/tags';
-import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
-import {t} from 'app/locale';
-import Alert from 'app/components/alert';
-import FeatureBadge from 'app/components/featureBadge';
 import Feature from 'app/components/acl/feature';
-import Link from 'app/components/links/link';
-import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
+import FeatureBadge from 'app/components/featureBadge';
 import LightWeightNoProjectMessage from 'app/components/lightWeightNoProjectMessage';
-import {IconWarning} from 'app/icons';
-import SentryTypes from 'app/sentryTypes';
+import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
+import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
 import PageHeading from 'app/components/pageHeading';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import {PageContent, PageHeader} from 'app/styles/organization';
+import space from 'app/styles/space';
 import withApi from 'app/utils/withApi';
 import withGlobalSelection from 'app/utils/withGlobalSelection';
 import withOrganization from 'app/utils/withOrganization';
-import {getDiscoverLandingUrl} from 'app/utils/discover/urls';
-import {PageContent, PageHeader} from 'app/styles/organization';
-import space from 'app/styles/space';
 
 import SearchBar from './searchBar';
 
@@ -39,6 +35,7 @@ class EventsContainer extends React.Component {
 
   componentDidUpdate(prevProps) {
     const {api, organization, selection} = this.props;
+
     if (
       !isEqual(prevProps.selection.projects, selection.projects) ||
       !isEqual(prevProps.selection.datetime, selection.datetime)
@@ -60,7 +57,6 @@ class EventsContainer extends React.Component {
 
   render() {
     const {organization, location, children, selection} = this.props;
-    const discoverUrl = getDiscoverLandingUrl(organization);
 
     return (
       <Feature
@@ -78,11 +74,6 @@ class EventsContainer extends React.Component {
                   </HeaderTitle>
                 </PageHeader>
                 <div>
-                  <Alert type="warning" icon={<IconWarning size="sm" />}>
-                    The events view is deprecated. Check out our new visualization and
-                    querying capabilities in{' '}
-                    <Link to={discoverUrl}>the new Discover</Link> today.
-                  </Alert>
                   <StyledSearchBar
                     organization={organization}
                     projectIds={selection.projects}
@@ -106,7 +97,7 @@ export default withApi(withOrganization(withGlobalSelection(EventsContainer)));
 export {EventsContainer};
 
 const Body = styled('div')`
-  background-color: ${p => p.theme.gray100};
+  background-color: ${p => p.theme.backgroundSecondary};
   flex-direction: column;
   flex: 1;
 `;

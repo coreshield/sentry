@@ -1,14 +1,18 @@
 import 'react-date-range/dist/styles.css';
 import 'react-date-range/dist/theme/default.css';
 
-import {DateRangePicker} from 'react-date-range';
-import PropTypes from 'prop-types';
 import React from 'react';
-import moment from 'moment';
+import {DateRangePicker} from 'react-date-range';
 import styled from '@emotion/styled';
-import * as Sentry from '@sentry/react';
+import moment from 'moment';
+import PropTypes from 'prop-types';
 
-import {addErrorMessage} from 'app/actionCreators/indicator';
+import Checkbox from 'app/components/checkbox';
+import TimePicker from 'app/components/organizations/timeRangeSelector/timePicker';
+import {MAX_PICKABLE_DAYS} from 'app/constants';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import space from 'app/styles/space';
 import {analytics} from 'app/utils/analytics';
 import {
   getEndOfDay,
@@ -16,20 +20,11 @@ import {
   isValidTime,
   setDateToTime,
 } from 'app/utils/dates';
-import {MAX_PICKABLE_DAYS} from 'app/constants';
-import {t} from 'app/locale';
-import Checkbox from 'app/components/checkbox';
-import SentryTypes from 'app/sentryTypes';
-import TimePicker from 'app/components/organizations/timeRangeSelector/timePicker';
 import getRouteStringFromRoutes from 'app/utils/getRouteStringFromRoutes';
-import space from 'app/styles/space';
 import theme from 'app/utils/theme';
 
 class DateRange extends React.Component {
-  static getTimeStringFromDate = date =>
-    moment(date)
-      .local()
-      .format('HH:mm');
+  static getTimeStringFromDate = date => moment(date).local().format('HH:mm');
 
   static propTypes = {
     /**
@@ -89,6 +84,11 @@ class DateRange extends React.Component {
     maxPickableDays: MAX_PICKABLE_DAYS,
   };
 
+  state = {
+    hasStartErrors: false,
+    hasEndErrors: false,
+  };
+
   handleSelectDateRange = ({selection}) => {
     const {onChange} = this.props;
     const {startDate, endDate} = selection;
@@ -109,63 +109,55 @@ class DateRange extends React.Component {
     const {start, end, onChange} = this.props;
     const startTime = e.target.value;
 
-    try {
-      if (!startTime || !isValidTime(startTime)) {
-        throw new Error('Invalid start time');
-      }
-      const newTime = setDateToTime(start, startTime, {local: true});
-
-      analytics('dateselector.time_changed', {
-        field_changed: 'start',
-        time: startTime,
-        path: getRouteStringFromRoutes(this.context.router.routes),
-        org_id: parseInt(this.props.organization.id, 10),
-      });
-
-      onChange({
-        start: newTime,
-        end,
-      });
-    } catch (err) {
-      Sentry.withScope(scope => {
-        scope.setExtra('startTime', startTime);
-        Sentry.captureException(err);
-      });
-
-      addErrorMessage(t('Invalid start time'));
+    if (!startTime || !isValidTime(startTime)) {
+      this.setState({hasStartErrors: true});
+      onChange({hasDateRangeErrors: true});
+      return;
     }
+    const newTime = setDateToTime(start, startTime, {local: true});
+
+    analytics('dateselector.time_changed', {
+      field_changed: 'start',
+      time: startTime,
+      path: getRouteStringFromRoutes(this.context.router.routes),
+      org_id: parseInt(this.props.organization.id, 10),
+    });
+
+    onChange({
+      start: newTime,
+      end,
+      hasDateRangeErrors: this.state.hasEndErrors,
+    });
+
+    this.setState({hasStartErrors: false});
   };
 
   handleChangeEnd = e => {
     const {start, end, onChange} = this.props;
     const endTime = e.target.value;
 
-    try {
-      if (!endTime || !isValidTime(endTime)) {
-        throw new Error('Invalid end time');
-      }
-
-      const newTime = setDateToTime(end, endTime, {local: true});
-
-      analytics('dateselector.time_changed', {
-        field_changed: 'end',
-        time: endTime,
-        path: getRouteStringFromRoutes(this.context.router.routes),
-        org_id: parseInt(this.props.organization.id, 10),
-      });
-
-      onChange({
-        start,
-        end: newTime,
-      });
-    } catch (err) {
-      Sentry.withScope(scope => {
-        scope.setExtra('endTime', endTime);
-        Sentry.captureException(err);
-      });
-
-      addErrorMessage(t('Invalid end time'));
+    if (!endTime || !isValidTime(endTime)) {
+      this.setState({hasEndErrors: true});
+      onChange({hasDateRangeErrors: true});
+      return;
     }
+
+    const newTime = setDateToTime(end, endTime, {local: true});
+
+    analytics('dateselector.time_changed', {
+      field_changed: 'end',
+      time: endTime,
+      path: getRouteStringFromRoutes(this.context.router.routes),
+      org_id: parseInt(this.props.organization.id, 10),
+    });
+
+    onChange({
+      start,
+      end: newTime,
+      hasDateRangeErrors: this.state.hasStartErrors,
+    });
+
+    this.setState({hasEndErrors: false});
   };
 
   render() {
@@ -195,7 +187,7 @@ class DateRange extends React.Component {
     return (
       <div className={className} data-test-id="date-range">
         <StyledDateRangePicker
-          rangeColors={[theme.purple400]}
+          rangeColors={[theme.purple300]}
           ranges={[
             {
               startDate: moment(start).local(),
@@ -235,7 +227,7 @@ class DateRange extends React.Component {
 const StyledDateRange = styled(DateRange)`
   display: flex;
   flex-direction: column;
-  border-left: 1px solid ${p => p.theme.borderLight};
+  border-left: 1px solid ${p => p.theme.border};
 `;
 
 const StyledDateRangePicker = styled(DateRangePicker)`
@@ -317,15 +309,15 @@ const StyledDateRangePicker = styled(DateRangePicker)`
   }
 
   .rdrNextPrevButton {
-    background-color: ${p => p.theme.gray300};
+    background-color: ${p => p.theme.gray200};
   }
 
   .rdrPprevButton i {
-    border-right-color: ${p => p.theme.gray700};
+    border-right-color: ${p => p.theme.textColor};
   }
 
   .rdrNextButton i {
-    border-left-color: ${p => p.theme.gray700};
+    border-left-color: ${p => p.theme.textColor};
   }
 `;
 
@@ -333,11 +325,11 @@ const TimeAndUtcPicker = styled('div')`
   display: flex;
   align-items: center;
   padding: ${space(2)};
-  border-top: 1px solid ${p => p.theme.borderLight};
+  border-top: 1px solid ${p => p.theme.innerBorder};
 `;
 
 const UtcPicker = styled('div')`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
   display: flex;
   align-items: center;
   justify-content: flex-end;

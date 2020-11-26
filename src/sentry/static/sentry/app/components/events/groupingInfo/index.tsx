@@ -1,21 +1,19 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import {Client} from 'app/api';
 import AsyncComponent from 'app/components/asyncComponent';
-import EventDataSection from 'app/components/events/eventDataSection';
-import {t} from 'app/locale';
-import withOrganization from 'app/utils/withOrganization';
-import {Organization, Event, EventGroupInfo} from 'app/types';
-import space from 'app/styles/space';
 import Button from 'app/components/button';
+import EventDataSection from 'app/components/events/eventDataSection';
 import LoadingIndicator from 'app/components/loadingIndicator';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
+import {Event, EventGroupInfo, Organization} from 'app/types';
+import withOrganization from 'app/utils/withOrganization';
 
-import GroupVariant from './groupingVariant';
 import GroupingConfigSelect from './groupingConfigSelect';
+import GroupVariant from './groupingVariant';
 
 type Props = AsyncComponent['props'] & {
-  api: Client;
   organization: Organization;
   projectId: string;
   event: Event;
@@ -73,9 +71,9 @@ class EventGroupingInfo extends AsyncComponent<Props, State> {
       .join(', ');
 
     return (
-      <SummaryGroupedBy data-test-id="loaded-grouping-info">{`(${t(
-        'grouped by'
-      )} ${groupedBy || t('nothing')})`}</SummaryGroupedBy>
+      <SummaryGroupedBy data-test-id="loaded-grouping-info">{`(${t('grouped by')} ${
+        groupedBy || t('nothing')
+      })`}</SummaryGroupedBy>
     );
   }
 
@@ -165,10 +163,10 @@ const SummaryGroupedBy = styled('small')`
 
 const ToggleButton = styled(Button)`
   font-weight: 700;
-  color: ${p => p.theme.gray600};
+  color: ${p => p.theme.subText};
   &:hover,
   &:focus {
-    color: ${p => p.theme.gray700};
+    color: ${p => p.theme.textColor};
   }
 `;
 
@@ -184,6 +182,7 @@ export const GroupingConfigItem = styled('span')<{
   font-family: ${p => p.theme.text.familyMono};
   opacity: ${p => (p.isHidden ? 0.5 : null)};
   font-weight: ${p => (p.isActive ? 'bold' : null)};
+  font-size: ${p => p.theme.fontSizeSmall};
 `;
 
 const VariantDivider = styled('hr')`

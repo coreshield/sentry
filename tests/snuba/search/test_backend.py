@@ -1,4 +1,5 @@
 from __future__ import absolute_import
+import uuid
 
 from sentry.utils.compat import mock
 import pytz
@@ -16,6 +17,7 @@ from sentry.models import (
     GroupEnvironment,
     GroupStatus,
     GroupSubscription,
+    Integration,
 )
 from sentry.search.snuba.backend import EventsDatasetSnubaSearchBackend
 from sentry.testutils import SnubaTestCase, TestCase, xfail_if_not_postgres
@@ -148,6 +150,41 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
         self.group_p2.last_seen = self.base_datetime - timedelta(days=1)
         self.group_p2.save()
         self.store_group(self.group_p2)
+
+    def create_group_with_integration_external_issue(self, environment="production"):
+        event = self.store_event(
+            data={
+                "fingerprint": ["linked_group1"],
+                "event_id": uuid.uuid4().hex,
+                "timestamp": iso_format(self.base_datetime),
+                "environment": environment,
+            },
+            project_id=self.project.id,
+        )
+        integration = Integration.objects.create(provider="example", name="Example")
+        integration.add_organization(event.group.organization, self.user)
+        self.create_integration_external_issue(
+            group=event.group, integration=integration, key="APP-123",
+        )
+        return event.group
+
+    def create_group_with_platform_external_issue(self, environment="production"):
+        event = self.store_event(
+            data={
+                "fingerprint": ["linked_group2"],
+                "event_id": uuid.uuid4().hex,
+                "timestamp": iso_format(self.base_datetime),
+                "environment": environment,
+            },
+            project_id=self.project.id,
+        )
+        self.create_platform_external_issue(
+            group=event.group,
+            service_type="sentry-app",
+            display_name="App#issue-1",
+            web_url="https://example.com/app/issues/1",
+        )
+        return event.group
 
     def build_search_filter(self, query, projects=None, user=None, environments=None):
         user = user if user is not None else self.user
@@ -783,6 +820,58 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
         )
         assert set(results) == set([self.group2])
 
+    def test_linked(self):
+        linked_group1 = self.create_group_with_integration_external_issue()
+        linked_group2 = self.create_group_with_platform_external_issue()
+
+        results = self.make_query(search_filter_query="is:unlinked")
+        assert set(results) == set([self.group1, self.group2])
+
+        results = self.make_query(search_filter_query="is:linked")
+        assert set(results) == set([linked_group1, linked_group2])
+
+    def test_linked_with_only_integration_external_issue(self):
+        linked_group = self.create_group_with_integration_external_issue()
+
+        results = self.make_query(search_filter_query="is:unlinked")
+        assert set(results) == set([self.group1, self.group2])
+
+        results = self.make_query(search_filter_query="is:linked")
+        assert set(results) == set([linked_group])
+
+    def test_linked_with_only_platform_external_issue(self):
+        linked_group = self.create_group_with_platform_external_issue()
+
+        results = self.make_query(search_filter_query="is:unlinked")
+        assert set(results) == set([self.group1, self.group2])
+
+        results = self.make_query(search_filter_query="is:linked")
+        assert set(results) == set([linked_group])
+
+    def test_linked_with_environment(self):
+        linked_group1 = self.create_group_with_integration_external_issue(environment="production")
+        linked_group2 = self.create_group_with_platform_external_issue(environment="staging")
+
+        results = self.make_query(
+            environments=[self.environments["production"]], search_filter_query="is:unlinked"
+        )
+        assert set(results) == set([self.group1])
+
+        results = self.make_query(
+            environments=[self.environments["staging"]], search_filter_query="is:unlinked"
+        )
+        assert set(results) == set([self.group2])
+
+        results = self.make_query(
+            environments=[self.environments["production"]], search_filter_query="is:linked"
+        )
+        assert set(results) == set([linked_group1])
+
+        results = self.make_query(
+            environments=[self.environments["staging"]], search_filter_query="is:linked"
+        )
+        assert set(results) == set([linked_group2])
+
     def test_unassigned(self):
         results = self.make_query(search_filter_query="is:unassigned")
         assert set(results) == set([self.group1])
@@ -926,30 +1015,33 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
             search_filter_query="last_seen:>=%s foo" % date_to_query_format(timezone.now()),
             sort_by="date",
         )
+        query_mock.call_args[1]["aggregations"].sort()
         assert query_mock.call_args == mock.call(
             orderby=["-last_seen", "group_id"],
             aggregations=[
-                ["uniq", "group_id", "total"],
                 ["multiply(toUInt64(max(timestamp)), 1000)", "", "last_seen"],
+                ["uniq", "group_id", "total"],
             ],
             having=[["last_seen", ">=", Any(int)]],
             **common_args
         )
 
         self.make_query(search_filter_query="foo", sort_by="priority")
+        query_mock.call_args[1]["aggregations"].sort()
         assert query_mock.call_args == mock.call(
             orderby=["-priority", "group_id"],
             aggregations=[
-                ["toUInt64(plus(multiply(log(times_seen), 600), last_seen))", "", "priority"],
                 ["count()", "", "times_seen"],
-                ["uniq", "group_id", "total"],
                 ["multiply(toUInt64(max(timestamp)), 1000)", "", "last_seen"],
+                ["toUInt64(plus(multiply(log(times_seen), 600), last_seen))", "", "priority"],
+                ["uniq", "group_id", "total"],
             ],
             having=[],
             **common_args
         )
 
         self.make_query(search_filter_query="times_seen:5 foo", sort_by="freq")
+        query_mock.call_args[1]["aggregations"].sort()
         assert query_mock.call_args == mock.call(
             orderby=["-times_seen", "group_id"],
             aggregations=[["count()", "", "times_seen"], ["uniq", "group_id", "total"]],
@@ -958,6 +1050,7 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
         )
 
         self.make_query(search_filter_query="foo", sort_by="user")
+        query_mock.call_args[1]["aggregations"].sort()
         assert query_mock.call_args == mock.call(
             orderby=["-user_count", "group_id"],
             aggregations=[
@@ -1017,7 +1110,7 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
         for i in range(400):
             event = self.store_event(
                 data={
-                    "event_id": md5("event {}".format(i)).hexdigest(),
+                    "event_id": md5("event {}".format(i).encode("utf-8")).hexdigest(),
                     "fingerprint": ["put-me-in-group{}".format(i)],
                     "timestamp": iso_format(self.base_datetime - timedelta(days=21)),
                     "message": "group {} event".format(i),
@@ -1418,10 +1511,14 @@ class EventsSnubaSearchTest(TestCase, SnubaTestCase):
                 continue
             test_query("has:%s" % key)
             test_query("!has:%s" % key)
-            if key in IssueSearchVisitor.numeric_keys:
+            if key == "error.handled":
+                val = 1
+            elif key in IssueSearchVisitor.numeric_keys:
                 val = "123"
             elif key in IssueSearchVisitor.date_keys:
                 val = "2019-01-01"
+            elif key in IssueSearchVisitor.boolean_keys:
+                val = "true"
             else:
                 val = "abadcafedeadbeefdeaffeedabadfeed"
                 test_query("!%s:%s" % (key, val))

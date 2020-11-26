@@ -1,22 +1,25 @@
-import {withRouter} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
+import {withRouter} from 'react-router';
 import isEqual from 'lodash/isEqual';
+import memoize from 'lodash/memoize';
+import partition from 'lodash/partition';
+import PropTypes from 'prop-types';
 
 import {addErrorMessage} from 'app/actionCreators/indicator';
-import {getFormattedDate, getUtcDateString} from 'app/utils/dates';
-import {t} from 'app/locale';
 import MarkLine from 'app/components/charts/components/markLine';
+import {t} from 'app/locale';
 import SentryTypes from 'app/sentryTypes';
+import {escape} from 'app/utils';
+import {getFormattedDate, getUtcDateString} from 'app/utils/dates';
+import {formatVersion} from 'app/utils/formatters';
+import parseLinkHeader from 'app/utils/parseLinkHeader';
 import theme from 'app/utils/theme';
 import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
-import {escape} from 'app/utils';
-import {formatVersion} from 'app/utils/formatters';
 
 // This is not an exported action/function because releases list uses AsyncComponent
 // and this is not re-used anywhere else afaict
-function getOrganizationReleases(api, organization, conditions = null) {
+async function getOrganizationReleases(api, organization, conditions = null) {
   const query = {};
   Object.keys(conditions).forEach(key => {
     let value = conditions[key];
@@ -28,7 +31,8 @@ function getOrganizationReleases(api, organization, conditions = null) {
     }
   });
   api.clear();
-  return api.requestPromise(`/organizations/${organization.slug}/releases/`, {
+  return api.requestPromise(`/organizations/${organization.slug}/releases/stats/`, {
+    includeAllArgs: true,
     method: 'GET',
     query,
   });
@@ -40,6 +44,7 @@ class ReleaseSeries extends React.Component {
     router: PropTypes.object,
     organization: SentryTypes.Organization,
     projects: PropTypes.arrayOf(PropTypes.number),
+    environments: PropTypes.arrayOf(PropTypes.string),
 
     period: PropTypes.string,
     start: PropTypes.oneOfType([PropTypes.instanceOf(Date), PropTypes.string]),
@@ -48,6 +53,10 @@ class ReleaseSeries extends React.Component {
     // Array of releases, if empty, component will fetch releases itself
     releases: PropTypes.arrayOf(SentryTypes.Release),
     tooltip: SentryTypes.EChartsTooltip,
+    queryExtra: PropTypes.object,
+
+    memoized: PropTypes.bool,
+    emphasizeReleases: PropTypes.arrayOf(PropTypes.string),
   };
 
   state = {
@@ -56,6 +65,7 @@ class ReleaseSeries extends React.Component {
   };
 
   componentDidMount() {
+    this._isMounted = true;
     const {releases} = this.props;
 
     if (releases) {
@@ -70,6 +80,7 @@ class ReleaseSeries extends React.Component {
   componentDidUpdate(prevProps) {
     if (
       !isEqual(prevProps.projects, this.props.projects) ||
+      !isEqual(prevProps.environments, this.props.environments) ||
       !isEqual(prevProps.start, this.props.start) ||
       !isEqual(prevProps.end, this.props.end) ||
       !isEqual(prevProps.period, this.props.period)
@@ -78,40 +89,105 @@ class ReleaseSeries extends React.Component {
     }
   }
 
-  fetchData() {
-    const {api, organization, projects, period, start, end} = this.props;
-    const conditions = {start, end, project: projects, statsPeriod: period};
-    getOrganizationReleases(api, organization, conditions)
-      .then(releases => {
-        this.setReleasesWithSeries(releases);
-      })
-      .catch(() => {
+  componentWillUnmount() {
+    this._isMounted = false;
+    this.props.api.clear();
+  }
+
+  getOrganizationReleasesMemoized = memoize(
+    async (api, conditions, organization) =>
+      await getOrganizationReleases(api, conditions, organization),
+    (_, __, conditions) => `${Object.values(conditions).map(JSON.stringify).join('-')}`
+  );
+
+  async fetchData() {
+    const {
+      api,
+      organization,
+      projects,
+      environments,
+      period,
+      start,
+      end,
+      memoized,
+    } = this.props;
+    const conditions = {
+      start,
+      end,
+      project: projects,
+      environment: environments,
+      statsPeriod: period,
+    };
+    let hasMore = true;
+    const releases = [];
+    while (hasMore) {
+      try {
+        const getReleases = memoized
+          ? this.getOrganizationReleasesMemoized
+          : getOrganizationReleases;
+        const [newReleases, , xhr] = await getReleases(api, organization, conditions);
+        releases.push(...newReleases);
+        if (this._isMounted) {
+          this.setReleasesWithSeries(releases);
+        }
+
+        const pageLinks = xhr && xhr.getResponseHeader('Link');
+        if (pageLinks) {
+          const paginationObject = parseLinkHeader(pageLinks);
+          hasMore = paginationObject && paginationObject.next.results;
+          conditions.cursor = paginationObject.next.cursor;
+        } else {
+          hasMore = false;
+        }
+      } catch {
         addErrorMessage(t('Error fetching releases'));
-      });
+        hasMore = false;
+      }
+    }
   }
 
   setReleasesWithSeries(releases) {
+    const {emphasizeReleases = []} = this.props;
+    const [unemphasizedReleases, emphasizedReleases] = partition(
+      releases,
+      release => !emphasizeReleases.includes(release.version)
+    );
+    const releaseSeries = [];
+    if (unemphasizedReleases.length) {
+      releaseSeries.push(this.getReleaseSeries(unemphasizedReleases));
+    }
+    if (emphasizedReleases.length) {
+      releaseSeries.push(this.getReleaseSeries(emphasizedReleases, 0.8));
+    }
+
     this.setState({
       releases,
-      releaseSeries: [this.getReleaseSeries(releases)],
+      releaseSeries,
     });
   }
 
-  getReleaseSeries = releases => {
-    const {organization, router, tooltip} = this.props;
+  getReleaseSeries = (releases, opacity = 0.3) => {
+    const {organization, router, tooltip, queryExtra} = this.props;
+
+    const query = {...queryExtra};
+    if (organization.features.includes('global-views')) {
+      query.project = router.location.query.project;
+    }
 
     return {
       seriesName: 'Releases',
       data: [],
       markLine: MarkLine({
+        animation: false,
         lineStyle: {
           normal: {
-            color: theme.purple400,
-            opacity: 0.3,
+            color: theme.purple300,
+            opacity,
             type: 'solid',
           },
         },
         tooltip: tooltip || {
+          trigger: 'item',
           formatter: ({data}) => {
             // XXX using this.props here as this function does not get re-run
             // unless projects are changed. Using a closure variable would result
@@ -138,15 +214,13 @@ class ReleaseSeries extends React.Component {
           show: false,
         },
         data: releases.map(release => ({
-          xAxis: +new Date(release.dateCreated),
+          xAxis: +new Date(release.date),
           name: formatVersion(release.version, true),
           value: formatVersion(release.version, true),
           onClick: () => {
             router.push({
               pathname: `/organizations/${organization.slug}/releases/${release.version}/`,
-              query: new Set(organization.features).has('global-views')
-                ? undefined
-                : {project: router.location.query.project},
+              query,
             });
           },
           label: {

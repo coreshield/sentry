@@ -2,19 +2,19 @@ import React from 'react';
 import styled from '@emotion/styled';
 import capitalize from 'lodash/capitalize';
 
-import {t} from 'app/locale';
-import KeyValueList from 'app/components/events/interfaces/keyValueList/keyValueList';
-import {EventGroupVariant, EventGroupVariantType, EventGroupComponent} from 'app/types';
-import ButtonBar from 'app/components/buttonBar';
 import Button from 'app/components/button';
-import {IconCheckmark, IconClose} from 'app/icons';
-import space from 'app/styles/space';
-import Tooltip from 'app/components/tooltip';
+import ButtonBar from 'app/components/buttonBar';
+import KeyValueList from 'app/components/events/interfaces/keyValueList/keyValueList';
 import QuestionTooltip from 'app/components/questionTooltip';
+import Tooltip from 'app/components/tooltip';
+import {IconCheckmark, IconClose} from 'app/icons';
+import {t} from 'app/locale';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
+import space from 'app/styles/space';
+import {EventGroupComponent, EventGroupVariant, EventGroupVariantType} from 'app/types';
 
-import {hasNonContributingComponent} from './utils';
 import GroupingComponent from './groupingComponent';
+import {hasNonContributingComponent} from './utils';
 
 type Props = {
   variant: EventGroupVariant;
@@ -44,6 +44,10 @@ class GroupVariant extends React.Component<Props, State> {
     const {variant, showGroupingConfig} = this.props;
     const data: VariantData = [];
     let component: EventGroupComponent | undefined;
+
+    if (!this.state.showNonContributing && variant.hash === null) {
+      return [data, component];
+    }
 
     if (variant.hash !== null) {
       data.push([
@@ -147,10 +151,20 @@ class GroupVariant extends React.Component<Props, State> {
     const {variant} = this.props;
     const isContributing = variant.hash !== null;
 
+    let title;
+    if (isContributing) {
+      title = t('Contributing variant');
+    } else {
+      const hint = variant.component?.hint;
+      if (hint) {
+        title = t('Non-contributing variant: %s', hint);
+      } else {
+        title = t('Non-contributing variant');
+      }
+    }
+
     return (
-      <Tooltip
-        title={isContributing ? t('Contributing variant') : t('Non-contributing variant')}
-      >
+      <Tooltip title={title}>
         <VariantTitle>
           <ContributionIcon isContributing={isContributing} />
           {t('By')}{' '}
@@ -217,7 +231,7 @@ const VariantTitle = styled('h5')`
 
 const ContributionIcon = styled(({isContributing, ...p}) =>
   isContributing ? (
-    <IconCheckmark size="sm" isCircled color="green400" {...p} />
+    <IconCheckmark size="sm" isCircled color="green300" {...p} />
   ) : (
     <IconClose size="sm" isCircled color="red" {...p} />
   )

@@ -1,17 +1,18 @@
-import PropTypes from 'prop-types';
 import React from 'react';
-import Reflux from 'reflux';
-import pick from 'lodash/pick';
-import createReactClass from 'create-react-class';
 import styled from '@emotion/styled';
+import createReactClass from 'create-react-class';
+import pick from 'lodash/pick';
+import PropTypes from 'prop-types';
+import Reflux from 'reflux';
 
 import {openDiffModal} from 'app/actionCreators/modal';
-import {t} from 'app/locale';
 import Button from 'app/components/button';
-import GroupingStore from 'app/stores/groupingStore';
 import LinkWithConfirmation from 'app/components/links/linkWithConfirmation';
 import SpreadLayout from 'app/components/spreadLayout';
 import Toolbar from 'app/components/toolbar';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import GroupingStore from 'app/stores/groupingStore';
 import space from 'app/styles/space';
 
 const MergedToolbar = createReactClass({
@@ -19,7 +20,7 @@ const MergedToolbar = createReactClass({
 
   propTypes: {
     orgId: PropTypes.string.isRequired,
-    projectId: PropTypes.string.isRequired,
+    project: SentryTypes.Project.isRequired,
     groupId: PropTypes.string,
     onUnmerge: PropTypes.func,
     onToggleCollapse: PropTypes.func,
@@ -55,7 +56,7 @@ const MergedToolbar = createReactClass({
   },
 
   handleShowDiff(e) {
-    const {groupId, projectId, orgId} = this.props;
+    const {groupId, project, orgId} = this.props;
     const entries = this.state.unmergeList.entries();
 
     // `unmergeList` should only have 2 items in map
@@ -74,7 +75,7 @@ const MergedToolbar = createReactClass({
       baseEventId,
       targetEventId,
       orgId,
-      projectId,
+      project,
     });
 
     e.stopPropagation();

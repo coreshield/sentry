@@ -1,11 +1,11 @@
-import PropTypes from 'prop-types';
 import React from 'react';
-import classNames from 'classnames';
 import * as Sentry from '@sentry/react';
+import classNames from 'classnames';
+import PropTypes from 'prop-types';
 
-import {t} from 'app/locale';
-import InlineSvg from 'app/components/inlineSvg';
 import Button from 'app/components/button';
+import {IconFlag} from 'app/icons';
+import {t} from 'app/locale';
 
 type DefaultProps = {
   /**
@@ -62,7 +62,7 @@ class DetailedError extends React.Component<Props> {
     return (
       <div className={cx}>
         <div className="detailed-error-icon">
-          <InlineSvg src="icon-circle-exclamation" />
+          <IconFlag size="lg" />
         </div>
         <div className="detailed-error-content">
           <h4>{heading}</h4>

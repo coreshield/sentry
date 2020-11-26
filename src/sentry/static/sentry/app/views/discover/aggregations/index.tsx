@@ -1,12 +1,13 @@
 import React from 'react';
 
-import {t} from 'app/locale';
-import InlineSvg from 'app/components/inlineSvg';
 import Link from 'app/components/links/link';
+import {IconClose} from 'app/icons/iconClose';
+import {t} from 'app/locale';
+
+import {AddText, PlaceholderText, SelectListItem, SidebarLabel} from '../styles';
+import {Aggregation, DiscoverBaseProps} from '../types';
 
 import AggregationRow from './aggregation';
-import {PlaceholderText, SelectListItem, AddText, SidebarLabel} from '../styles';
-import {Aggregation, DiscoverBaseProps} from '../types';
 
 type AggregationsProps = DiscoverBaseProps & {
   value: Aggregation[];
@@ -67,7 +68,7 @@ export default class Aggregations extends React.Component<AggregationsProps> {
             />
             <div>
               <Link to="" onClick={() => this.removeRow(idx)}>
-                <InlineSvg src="icon-circle-close" height="38px" />
+                <IconClose isCircled />
               </Link>
             </div>
           </SelectListItem>

@@ -1,5 +1,5 @@
 import 'echarts/lib/chart/map';
-import 'echarts/map/js/world';
+
 import {EChartOption} from 'echarts';
 
 export default function MapSeries(

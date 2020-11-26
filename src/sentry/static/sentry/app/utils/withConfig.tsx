@@ -1,10 +1,10 @@
 import React from 'react';
-import Reflux from 'reflux';
 import createReactClass from 'create-react-class';
+import Reflux from 'reflux';
 
+import ConfigStore from 'app/stores/configStore';
 import {Config} from 'app/types';
 import getDisplayName from 'app/utils/getDisplayName';
-import ConfigStore from 'app/stores/configStore';
 
 type InjectedConfigProps = {
   config: Config;
@@ -36,8 +36,9 @@ const withConfig = <P extends InjectedConfigProps>(
     },
 
     render() {
+      const {config, ...props} = this.props as P;
       return (
-        <WrappedComponent config={this.state.config as Config} {...(this.props as P)} />
+        <WrappedComponent {...({config: config ?? this.state.config, ...props} as P)} />
       );
     },
   });

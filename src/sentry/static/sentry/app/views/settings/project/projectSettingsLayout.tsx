@@ -1,11 +1,11 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 
 import {Organization} from 'app/types';
-import ProjectContext from 'app/views/projects/projectContext';
-import ProjectSettingsNavigation from 'app/views/settings/project/projectSettingsNavigation';
-import SettingsLayout from 'app/views/settings/components/settingsLayout';
 import withOrganization from 'app/utils/withOrganization';
+import ProjectContext from 'app/views/projects/projectContext';
+import SettingsLayout from 'app/views/settings/components/settingsLayout';
+import ProjectSettingsNavigation from 'app/views/settings/project/projectSettingsNavigation';
 
 type Props = {
   organization: Organization;
@@ -16,7 +16,7 @@ function ProjectSettingsLayout({params, organization, children, ...props}: Props
   const {orgId, projectId} = params;
 
   return (
-    <ProjectContext skipReload orgId={orgId} projectId={projectId}>
+    <ProjectContext orgId={orgId} projectId={projectId}>
       <SettingsLayout
         params={params}
         {...props}

@@ -10,7 +10,16 @@ from django.utils import timezone
 
 from sentry import quotas
 from sentry.api.event_search import InvalidSearchQuery
-from sentry.models import Release, GroupEnvironment, Group, GroupStatus, GroupSubscription
+from sentry.models import (
+    Release,
+    GroupEnvironment,
+    Group,
+    GroupInbox,
+    GroupLink,
+    GroupStatus,
+    GroupSubscription,
+    PlatformExternalIssue,
+)
 from sentry.search.base import SearchBackend
 from sentry.search.snuba.executors import PostgresSnubaQueryExecutor
 
@@ -49,6 +58,43 @@ def unassigned_filter(unassigned, projects):
     return query
 
 
+def linked_filter(linked, projects):
+    """
+    Builds a filter for whether or not a Group has an issue linked via either
+    a PlatformExternalIssue or an ExternalIssue.
+    """
+    platform_qs = PlatformExternalIssue.objects.filter(project_id__in=[p.id for p in projects])
+    integration_qs = GroupLink.objects.filter(
+        project_id__in=[p.id for p in projects],
+        linked_type=GroupLink.LinkedType.issue,
+        relationship=GroupLink.Relationship.references,
+    )
+
+    group_linked_to_platform_issue_q = Q(id__in=platform_qs.values_list("group_id", flat=True))
+    group_linked_to_integration_issue_q = Q(
+        id__in=integration_qs.values_list("group_id", flat=True)
+    )
+
+    # Usually a user will either only have PlatformExternalIssues or only have ExternalIssues,
+    # i.e. in most cases, at most one of the below expressions evaluates to True:
+    platform_issue_exists = platform_qs.exists()
+    integration_issue_exists = integration_qs.exists()
+    # By optimizing for this case, we're able to produce a filter that roughly translates to
+    # `WHERE group_id IN (SELECT group_id FROM one_issue_table WHERE ...)`, which the planner
+    # is able to optimize with the semi-join strategy.
+    if platform_issue_exists and not integration_issue_exists:
+        query = group_linked_to_platform_issue_q
+    elif integration_issue_exists and not platform_issue_exists:
+        query = group_linked_to_integration_issue_q
+    # ...but if we don't have exactly one type of issues, fallback to doing the OR.
+    else:
+        query = group_linked_to_platform_issue_q | group_linked_to_integration_issue_q
+
+    if not linked:
+        query = ~query
+    return query
+
+
 def first_release_all_environments_filter(version, projects):
     try:
         release_id = Release.objects.get(
@@ -62,6 +108,18 @@ def first_release_all_environments_filter(version, projects):
         # seen in.
         id__in=GroupEnvironment.objects.filter(first_release_id=release_id).values_list("group_id")
     )
+
+
+def inbox_filter(inbox, projects):
+    organization_id = projects[0].organization_id
+    query = Q(
+        id__in=GroupInbox.objects.filter(
+            organization_id=organization_id, project_id__in=[p.id for p in projects]
+        ).values_list("group_id", flat=True)
+    )
+    if not inbox:
+        query = ~query
+    return query
 
 
 class Condition(object):
@@ -181,6 +239,10 @@ class SnubaSearchBackendBase(SearchBackend):
             date_to=date_to,
         )
 
+        # ensure sort strategy is supported by executor
+        if not query_executor.has_sort_strategy(sort_by):
+            raise InvalidSearchQuery(u"Sort key '{}' not supported.".format(sort_by))
+
         return query_executor.query(
             projects=projects,
             retention_window_start=retention_window_start,
@@ -265,6 +327,7 @@ class EventsDatasetSnubaSearchBackend(SnubaSearchBackendBase):
             "unassigned": QCallbackCondition(
                 functools.partial(unassigned_filter, projects=projects)
             ),
+            "linked": QCallbackCondition(functools.partial(linked_filter, projects=projects)),
             "subscribed_by": QCallbackCondition(
                 lambda user: Q(
                     id__in=GroupSubscription.objects.filter(
@@ -273,6 +336,7 @@ class EventsDatasetSnubaSearchBackend(SnubaSearchBackendBase):
                 )
             ),
             "active_at": ScalarCondition("active_at"),
+            "inbox": QCallbackCondition(functools.partial(inbox_filter, projects=projects)),
         }
 
         if environments is not None:

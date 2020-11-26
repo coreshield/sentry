@@ -1,4 +1,5 @@
 import 'echarts/lib/chart/pie';
+
 import {EChartOption} from 'echarts';
 
 export default function PieSeries(

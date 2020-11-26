@@ -1,12 +1,12 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {Panel} from 'app/components/panels';
-import {t} from 'app/locale';
 import EmptyStateWarning from 'app/components/emptyStateWarning';
 import Pagination from 'app/components/pagination';
+import {Panel} from 'app/components/panels';
 import QueryCount from 'app/components/queryCount';
+import {t} from 'app/locale';
 import SentryTypes from 'app/sentryTypes';
 
 import MergedItem from './mergedItem';
@@ -19,7 +19,7 @@ class MergedList extends React.Component {
     items: PropTypes.arrayOf(SentryTypes.Event),
     pageLinks: PropTypes.string,
     orgId: PropTypes.string.isRequired,
-    projectId: PropTypes.string.isRequired,
+    project: SentryTypes.Project.isRequired,
   };
 
   renderEmpty = () => (
@@ -29,7 +29,7 @@ class MergedList extends React.Component {
   );
 
   render() {
-    const {items, pageLinks, onToggleCollapse, onUnmerge, orgId, projectId} = this.props;
+    const {items, pageLinks, onToggleCollapse, onUnmerge, orgId, project} = this.props;
     const itemsWithLatestEvent = items.filter(({latestEvent}) => !!latestEvent);
     const hasResults = itemsWithLatestEvent.length > 0;
 
@@ -48,7 +48,7 @@ class MergedList extends React.Component {
           onToggleCollapse={onToggleCollapse}
           onUnmerge={onUnmerge}
           orgId={orgId}
-          projectId={projectId}
+          project={project}
         />
 
         <MergedItems>
@@ -56,6 +56,7 @@ class MergedList extends React.Component {
             <MergedItem
               key={id}
               orgId={orgId}
+              projectId={project.slug}
               disabled={items.length === 1}
               event={latestEvent}
               fingerprint={id}
@@ -72,6 +73,6 @@ class MergedList extends React.Component {
 export default MergedList;
 
 const MergedItems = styled('div')`
-  border: 1px solid ${p => p.theme.borderLight};
+  border: 1px solid ${p => p.theme.border};
   border-top: none;
 `;

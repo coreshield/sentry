@@ -8,16 +8,21 @@ from sentry_sdk import Hub
 from datetime import datetime
 from pytz import utc
 
-from sentry import quotas, utils
+from sentry import quotas, utils, features
 from sentry.constants import ObjectStatus
 from sentry.grouping.api import get_grouping_config_dict_for_project
 from sentry.interfaces.security import DEFAULT_DISALLOWED_SOURCES
-from sentry.message_filters import get_all_filters
-from sentry.utils.data_filters import FilterTypes, FilterStatKeys, get_filter_key
+from sentry.ingest.inbound_filters import (
+    get_all_filter_specs,
+    FilterTypes,
+    FilterStatKeys,
+    get_filter_key,
+)
 from sentry.utils.http import get_origins
 from sentry.utils.sdk import configure_scope
 from sentry.relay.utils import to_camel_case_name
 from sentry.datascrubbing import get_pii_config, get_datascrubbing_settings
+from sentry.models.projectkey import ProjectKeyStatus
 
 
 def get_project_key_config(project_key):
@@ -29,7 +34,10 @@ def get_public_key_configs(project, full_config, project_keys=None):
     public_keys = []
 
     for project_key in project_keys or ():
-        key = {"publicKey": project_key.public_key, "isEnabled": project_key.status == 0}
+        key = {
+            "publicKey": project_key.public_key,
+            "isEnabled": project_key.status == ProjectKeyStatus.ACTIVE,
+        }
 
         if full_config:
             key["quotas"] = [
@@ -45,22 +53,23 @@ def get_public_key_configs(project, full_config, project_keys=None):
 def get_filter_settings(project):
     filter_settings = {}
 
-    for flt in get_all_filters():
+    for flt in get_all_filter_specs():
         filter_id = get_filter_key(flt)
         settings = _load_filter_settings(flt, project)
         filter_settings[filter_id] = settings
 
-    invalid_releases = project.get_option(u"sentry:{}".format(FilterTypes.RELEASES))
-    if invalid_releases:
-        filter_settings["releases"] = {"releases": invalid_releases}
+    if features.has("projects:custom-inbound-filters", project):
+        invalid_releases = project.get_option(u"sentry:{}".format(FilterTypes.RELEASES))
+        if invalid_releases:
+            filter_settings["releases"] = {"releases": invalid_releases}
+
+        error_messages = project.get_option(u"sentry:{}".format(FilterTypes.ERROR_MESSAGES))
+        if error_messages:
+            filter_settings["errorMessages"] = {"patterns": error_messages}
 
     blacklisted_ips = project.get_option("sentry:blacklisted_ips")
     if blacklisted_ips:
         filter_settings["clientIps"] = {"blacklistedIps": blacklisted_ips}
-
-    error_messages = project.get_option(u"sentry:{}".format(FilterTypes.ERROR_MESSAGES))
-    if error_messages:
-        filter_settings["errorMessages"] = {"patterns": error_messages}
 
     csp_disallowed_sources = []
     if bool(project.get_option("sentry:csp_ignored_sources_defaults", True)):
@@ -267,7 +276,7 @@ def _load_filter_settings(flt, project):
         If the project does not explicitly specify the filter options then the
         default options for the filter will be returned
     """
-    filter_id = flt.spec.id
+    filter_id = flt.id
     filter_key = u"filters:{}".format(filter_id)
     setting = project.get_option(filter_key)
 
@@ -285,9 +294,7 @@ def _filter_option_to_config_setting(flt, setting):
     if setting is None:
         raise ValueError(
             "Could not find filter state for filter {0}."
-            " You need to register default filter state in projectoptions.defaults.".format(
-                flt.spec.id
-            )
+            " You need to register default filter state in projectoptions.defaults.".format(flt.id)
         )
 
     is_enabled = setting != "0"
@@ -296,7 +303,7 @@ def _filter_option_to_config_setting(flt, setting):
 
     # special case for legacy browser.
     # If the number of special cases increases we'll have to factor this functionality somewhere
-    if flt.spec.id == FilterStatKeys.LEGACY_BROWSER:
+    if flt.id == FilterStatKeys.LEGACY_BROWSER:
         if is_enabled:
             if setting == "1":
                 ret_val["options"] = ["default"]

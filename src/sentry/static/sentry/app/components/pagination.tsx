@@ -1,17 +1,18 @@
-import {browserHistory} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
+import {browserHistory} from 'react-router';
 import styled from '@emotion/styled';
 import {Query} from 'history';
+import PropTypes from 'prop-types';
 
-import {IconChevron} from 'app/icons';
-import {t} from 'app/locale';
 import Button from 'app/components/button';
 import ButtonBar from 'app/components/buttonBar';
-import parseLinkHeader from 'app/utils/parseLinkHeader';
+import {IconChevron} from 'app/icons';
+import {t} from 'app/locale';
 import {callIfFunction} from 'app/utils/callIfFunction';
+import parseLinkHeader from 'app/utils/parseLinkHeader';
 
 const defaultProps = {
+  size: 'small',
   onCursor: (cursor: string, path: string, query: Query, _direction: number) => {
     browserHistory.push({
       pathname: path,
@@ -25,6 +26,7 @@ type DefaultProps = Readonly<typeof defaultProps>;
 type Props = {
   className?: string;
   pageLinks: string | null | undefined;
+  size?: 'zero' | 'xsmall' | 'small';
   to?: string;
 } & DefaultProps;
 
@@ -43,7 +45,7 @@ class Pagination extends React.Component<Props> {
   static defaultProps = defaultProps;
 
   render() {
-    const {className, onCursor, pageLinks} = this.props;
+    const {className, onCursor, pageLinks, size} = this.props;
     if (!pageLinks) {
       return null;
     }
@@ -63,10 +65,11 @@ class Pagination extends React.Component<Props> {
               <IconChevron
                 direction="left"
                 size="sm"
-                color={previousDisabled ? 'gray400' : 'gray700'}
+                color={previousDisabled ? 'gray200' : 'gray500'}
               />
             }
             aria-label={t('Previous')}
+            size={size}
             disabled={previousDisabled}
             onClick={() => {
               callIfFunction(onCursor, links.previous.cursor, path, query, -1);
@@ -77,10 +80,11 @@ class Pagination extends React.Component<Props> {
               <IconChevron
                 direction="right"
                 size="sm"
-                color={nextDisabled ? 'gray400' : 'gray700'}
+                color={nextDisabled ? 'gray200' : 'gray500'}
               />
             }
             aria-label={t('Next')}
+            size={size}
             disabled={nextDisabled}
             onClick={() => {
               callIfFunction(onCursor, links.next.cursor, path, query, 1);

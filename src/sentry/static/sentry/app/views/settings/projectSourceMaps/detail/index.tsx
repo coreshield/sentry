@@ -2,27 +2,30 @@ import React from 'react';
 import {RouteComponentProps} from 'react-router/lib/Router';
 import styled from '@emotion/styled';
 
-import {t} from 'app/locale';
-import AsyncView from 'app/views/asyncView';
-import {Organization, Project, Artifact} from 'app/types';
-import routeTitleGen from 'app/utils/routeTitle';
-import SearchBar from 'app/components/searchBar';
-import Pagination from 'app/components/pagination';
-import {PanelTable} from 'app/components/panels';
-import {formatVersion} from 'app/utils/formatters';
-import SettingsPageHeader from 'app/views/settings/components/settingsPageHeader';
-import Button from 'app/components/button';
-import ButtonBar from 'app/components/buttonBar';
-import {IconDelete} from 'app/icons';
 import {
   addErrorMessage,
   addLoadingMessage,
   addSuccessMessage,
 } from 'app/actionCreators/indicator';
-import {decodeScalar} from 'app/utils/queryString';
+import Access from 'app/components/acl/access';
+import Button from 'app/components/button';
+import ButtonBar from 'app/components/buttonBar';
 import Confirm from 'app/components/confirm';
-import Version from 'app/components/version';
+import Pagination from 'app/components/pagination';
+import {PanelTable} from 'app/components/panels';
+import SearchBar from 'app/components/searchBar';
 import TextOverflow from 'app/components/textOverflow';
+import Tooltip from 'app/components/tooltip';
+import Version from 'app/components/version';
+import {IconDelete} from 'app/icons';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
+import {Artifact, Organization, Project} from 'app/types';
+import {formatVersion} from 'app/utils/formatters';
+import {decodeScalar} from 'app/utils/queryString';
+import routeTitleGen from 'app/utils/routeTitle';
+import AsyncView from 'app/views/asyncView';
+import SettingsPageHeader from 'app/views/settings/components/settingsPageHeader';
 
 import SourceMapsArtifactRow from './sourceMapsArtifactRow';
 
@@ -37,7 +40,7 @@ type State = AsyncView['state'] & {
   artifacts: Artifact[];
 };
 
-class ProjectSourceMaps extends AsyncView<Props, State> {
+class ProjectSourceMapsDetail extends AsyncView<Props, State> {
   getTitle() {
     const {projectId, name} = this.props.params;
 
@@ -123,6 +126,7 @@ class ProjectSourceMaps extends AsyncView<Props, State> {
   }
 
   renderArtifacts() {
+    const {organization} = this.props;
     const {artifacts} = this.state;
     const artifactApiUrl = this.api.baseUrl + this.getArtifactsUrl();
 
@@ -137,6 +141,7 @@ class ProjectSourceMaps extends AsyncView<Props, State> {
           artifact={artifact}
           onDelete={this.handleArtifactDelete}
           downloadUrl={`${artifactApiUrl}${artifact.id}/?download=1`}
+          downloadRole={organization.debugFilesRole}
         />
       );
     });
@@ -159,7 +164,7 @@ class ProjectSourceMaps extends AsyncView<Props, State> {
             </Title>
           }
           action={
-            <ButtonBar gap={1}>
+            <StyledButtonBar gap={1}>
               <ReleaseButton
                 to={`/organizations/${orgId}/releases/${encodeURIComponent(
                   name
@@ -167,23 +172,36 @@ class ProjectSourceMaps extends AsyncView<Props, State> {
               >
                 {t('Go to Release')}
               </ReleaseButton>
-              <Confirm
-                message={t(
-                  'Are you sure you want to remove all artifacts in this archive?'
+              <Access access={['project:releases']}>
+                {({hasAccess}) => (
+                  <Tooltip
+                    disabled={hasAccess}
+                    title={t('You do not have permission to delete artifacts.')}
+                  >
+                    <Confirm
+                      message={t(
+                        'Are you sure you want to remove all artifacts in this archive?'
+                      )}
+                      onConfirm={this.handleArchiveDelete}
+                      disabled={!hasAccess}
+                    >
+                      <Button
+                        icon={<IconDelete size="sm" />}
+                        title={t('Remove All Artifacts')}
+                        label={t('Remove All Artifacts')}
+                        disabled={!hasAccess}
+                      />
+                    </Confirm>
+                  </Tooltip>
                 )}
-                onConfirm={this.handleArchiveDelete}
-              >
-                <Button
-                  icon={<IconDelete size="sm" />}
-                  title={t('Remove All Artifacts')}
-                />
-              </Confirm>
+              </Access>
+
               <SearchBar
                 placeholder={t('Filter artifacts')}
                 onSearch={this.handleSearch}
                 query={this.getQuery()}
               />
-            </ButtonBar>
+            </StyledButtonBar>
           }
         />
 
@@ -207,11 +225,19 @@ class ProjectSourceMaps extends AsyncView<Props, State> {
 
 const StyledSettingsPageHeader = styled(SettingsPageHeader)`
   /*
-    ugly selector to make overflow ellipsis work
+    ugly selector to make header work on mobile
     we can refactor this once we start making other settings more responsive
   */
-  > div > div {
-    min-width: 0;
+  > div {
+    @media (max-width: ${p => p.theme.breakpoints[2]}) {
+      display: block;
+    }
+    > div {
+      min-width: 0;
+      @media (max-width: ${p => p.theme.breakpoints[2]}) {
+        margin-bottom: ${space(2)};
+      }
+    }
   }
 `;
 
@@ -220,8 +246,12 @@ const Title = styled('div')`
   align-items: center;
 `;
 
+const StyledButtonBar = styled(ButtonBar)`
+  justify-content: flex-start;
+`;
+
 const StyledPanelTable = styled(PanelTable)`
-  grid-template-columns: 1fr max-content 120px;
+  grid-template-columns: minmax(220px, 1fr) max-content 120px;
 `;
 
 const ReleaseButton = styled(Button)`
@@ -232,4 +262,4 @@ const SizeColumn = styled('div')`
   text-align: right;
 `;
 
-export default ProjectSourceMaps;
+export default ProjectSourceMapsDetail;

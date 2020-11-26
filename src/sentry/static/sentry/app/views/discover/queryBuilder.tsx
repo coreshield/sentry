@@ -1,19 +1,19 @@
 import React from 'react';
-import uniq from 'lodash/uniq';
 import partition from 'lodash/partition';
+import uniq from 'lodash/uniq';
 import moment from 'moment-timezone';
 
+import {openModal} from 'app/actionCreators/modal';
 import {Client} from 'app/api';
+import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
 import {DEFAULT_STATS_PERIOD} from 'app/constants';
 import {t} from 'app/locale';
-import {Project, Organization} from 'app/types';
-import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
-import {openModal} from 'app/actionCreators/modal';
 import ConfigStore from 'app/stores/configStore';
+import {Organization, Project} from 'app/types';
 
-import MissingProjectWarningModal from './missingProjectWarningModal';
-import {COLUMNS, PROMOTED_TAGS, SPECIAL_TAGS, HIDDEN_TAGS} from './data';
 import {isValidAggregation} from './aggregations/utils';
+import {COLUMNS, HIDDEN_TAGS, PROMOTED_TAGS, SPECIAL_TAGS} from './data';
+import MissingProjectWarningModal from './missingProjectWarningModal';
 import {Aggregation, Column, Query, SnubaResult} from './types';
 
 const API_LIMIT = 10000;
@@ -66,15 +66,17 @@ export default function createQueryBuilder(
     query.range = DEFAULT_STATS_PERIOD;
   }
 
+  const hasGlobalProjectAccess =
+    ConfigStore.get('user').isSuperuser || organization.access.includes('org:admin');
+
   // TODO(lightweight-org): This needs to be refactored so that queries
   // do not depend on organization.projects
   const projectsToUse = specificProjects ?? organization.projects;
-  const defaultProjects = projectsToUse.filter(projects => projects.isMember);
+  const defaultProjects = projectsToUse.filter(projects =>
+    hasGlobalProjectAccess ? projects.hasAccess : projects.isMember
+  );
 
   const defaultProjectIds = getProjectIds(defaultProjects);
-
-  const hasGlobalProjectAccess =
-    ConfigStore.get('user').isSuperuser || organization.access.includes('org:admin');
 
   const projectsToFetchTags = getProjectIds(
     hasGlobalProjectAccess ? projectsToUse : defaultProjects

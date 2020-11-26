@@ -1,34 +1,38 @@
-import PropTypes from 'prop-types';
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import {Scope} from 'app/types';
 
 import BooleanField from './booleanField';
-import EmailField from './emailField';
-import HiddenField from './hiddenField';
-import NumberField from './numberField';
-import RangeField from './rangeField';
-import SelectField from './selectField';
-import TableField from './tableField';
-import TextField from './textField';
-import TextareaField from './textareaField';
-import RadioField from './radioField';
-import InputField from './inputField';
 import ChoiceMapperField from './choiceMapperField';
-import RichListField from './richListField';
+import EmailField from './emailField';
 import FieldSeparator from './fieldSeparator';
+import HiddenField from './hiddenField';
+import InputField from './inputField';
+import NumberField from './numberField';
 import ProjectMapperField from './projectMapperField';
+import RadioField from './radioField';
+import RangeField from './rangeField';
+import RichListField from './richListField';
+import SelectField from './selectField';
+import SentryProjectSelectorField from './sentryProjectSelectorField';
+import TableField from './tableField';
+import TextareaField from './textareaField';
+import TextField from './textField';
 import {Field} from './type';
 
 type Props = {
   field: Field;
   highlighted?: boolean;
-  disabled?: boolean;
+  disabled?: boolean | ((props) => boolean);
   flexibleControlStateSize?: boolean;
+  getData?: (data) => any;
   stacked?: boolean;
   inline?: boolean;
   onBlur?: (value, event) => void;
-  access?: Scope[];
+  access?: Set<Scope>;
+  deprecatedSelectControl?: boolean;
+  noOptionsMessage?: () => string;
 };
 
 export default class FieldFromConfig extends React.Component<Props> {
@@ -57,6 +61,7 @@ export default class FieldFromConfig extends React.Component<Props> {
         'url',
         'table',
         'project_mapper',
+        'sentry_project_selector',
       ]),
       required: PropTypes.bool,
       multiline: PropTypes.bool,
@@ -139,6 +144,8 @@ export default class FieldFromConfig extends React.Component<Props> {
         return <TableField {...props} />;
       case 'project_mapper':
         return <ProjectMapperField {...props} />;
+      case 'sentry_project_selector':
+        return <SentryProjectSelectorField {...props} />;
       case 'custom':
         return field.Component(props);
       default:

@@ -1,14 +1,17 @@
 import React from 'react';
+import {withRouter, WithRouterProps} from 'react-router';
 import styled from '@emotion/styled';
 
-import {Project, Organization} from 'app/types';
-import {t, tct} from 'app/locale';
-import {IconInfo, IconClose, IconSiren} from 'app/icons';
-import Button from 'app/components/button';
-import EventView from 'app/utils/discover/eventView';
-import Alert from 'app/components/alert';
+import {navigateTo} from 'app/actionCreators/navigation';
 import Access from 'app/components/acl/access';
-import {explodeFieldString, AGGREGATIONS, Aggregation} from 'app/utils/discover/fields';
+import Alert from 'app/components/alert';
+import Button from 'app/components/button';
+import Link from 'app/components/links/link';
+import {IconClose, IconInfo, IconSiren} from 'app/icons';
+import {t, tct} from 'app/locale';
+import {Organization, Project} from 'app/types';
+import EventView from 'app/utils/discover/eventView';
+import {Aggregation, AGGREGATIONS, explodeFieldString} from 'app/utils/discover/fields';
 import {
   errorFieldConfig,
   transactionFieldConfig,
@@ -37,6 +40,7 @@ type IncompatibleQueryProperties = {
 type AlertProps = {
   incompatibleQuery: IncompatibleQueryProperties;
   eventView: EventView;
+  orgId: string;
   /**
    * Dismiss alert
    */
@@ -46,7 +50,12 @@ type AlertProps = {
 /**
  * Displays messages to the user on what needs to change in their query
  */
-function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertProps) {
+function IncompatibleQueryAlert({
+  incompatibleQuery,
+  eventView,
+  orgId,
+  onClose,
+}: AlertProps) {
   const {
     hasProjectError,
     hasEnvironmentError,
@@ -56,8 +65,14 @@ function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertPr
 
   const totalErrors = Object.values(incompatibleQuery).filter(val => val === true).length;
 
+  const eventTypeError = eventView.clone();
+  eventTypeError.query += ' event.type:error';
+  const eventTypeTransaction = eventView.clone();
+  eventTypeTransaction.query += ' event.type:transaction';
+  const pathname = `/organizations/${orgId}/discover/results/`;
+
   return (
-    <StyledAlert type="warning" icon={<IconInfo color="yellow400" size="sm" />}>
+    <StyledAlert type="warning" icon={<IconInfo color="yellow300" size="sm" />}>
       {totalErrors === 1 && (
         <React.Fragment>
           {hasProjectError &&
@@ -70,8 +85,22 @@ function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertPr
             tct(
               'An alert needs a filter of [error:event.type:error] or [transaction:event.type:transaction]. Use one of these and try again.',
               {
-                error: <StyledCode />,
-                transaction: <StyledCode />,
+                error: (
+                  <Link
+                    to={{
+                      pathname,
+                      query: eventTypeError.generateQueryStringObject(),
+                    }}
+                  />
+                ),
+                transaction: (
+                  <Link
+                    to={{
+                      pathname,
+                      query: eventTypeTransaction.generateQueryStringObject(),
+                    }}
+                  />
+                ),
               }
             )}
           {hasYAxisError &&
@@ -96,8 +125,22 @@ function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertPr
                 {tct(
                   'Use the filter [error:event.type:error] or [transaction:event.type:transaction].',
                   {
-                    error: <StyledCode />,
-                    transaction: <StyledCode />,
+                    error: (
+                      <Link
+                        to={{
+                          pathname,
+                          query: eventTypeError.generateQueryStringObject(),
+                        }}
+                      />
+                    ),
+                    transaction: (
+                      <Link
+                        to={{
+                          pathname,
+                          query: eventTypeTransaction.generateQueryStringObject(),
+                        }}
+                      />
+                    ),
                   }
                 )}
               </li>
@@ -116,7 +159,7 @@ function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertPr
         </React.Fragment>
       )}
       <StyledCloseButton
-        icon={<IconClose color="yellow400" size="sm" isCircled />}
+        icon={<IconClose color="yellow300" size="sm" isCircled />}
         aria-label={t('Close')}
         size="zero"
         onClick={onClose}
@@ -126,7 +169,7 @@ function IncompatibleQueryAlert({incompatibleQuery, eventView, onClose}: AlertPr
   );
 }
 
-type Props = React.ComponentProps<typeof Button> & {
+type CreateAlertFromViewButtonProps = React.ComponentProps<typeof Button> & {
   className?: string;
   projects: Project[];
   /**
@@ -134,12 +177,14 @@ type Props = React.ComponentProps<typeof Button> & {
    */
   eventView: EventView;
   organization: Organization;
+  referrer?: string;
   /**
    * Called when the current eventView does not meet the requirements of alert rules
    * @returns a function that takes an alert close function argument
    */
   onIncompatibleQuery: (
-    incompatibleAlertNoticeFn: (onAlertClose: () => void) => React.ReactNode
+    incompatibleAlertNoticeFn: (onAlertClose: () => void) => React.ReactNode,
+    errors: IncompatibleQueryProperties
   ) => void;
   /**
    * Called when the user is redirected to the alert builder
@@ -163,12 +208,23 @@ function incompatibleYAxis(eventView: EventView): boolean {
 
   const invalidFunction = !yAxisConfig.aggregations.includes(column.function[0]);
   // Allow empty parameters, allow all numeric parameters - eg. apdex(300)
-  const aggregation: Aggregation = AGGREGATIONS[column.function[0]];
+  const aggregation: Aggregation | undefined = AGGREGATIONS[column.function[0]];
+  if (!aggregation) {
+    return false;
+  }
+
   const isNumericParameter = aggregation.parameters.some(
     param => param.kind === 'value' && param.dataType === 'number'
   );
+  // There are other measurements possible, but for the time being, only allow alerting
+  // on the predefined set of measurements for alerts.
+  const allowedParameters = [
+    '',
+    ...yAxisConfig.fields,
+    ...(yAxisConfig.measurementKeys ?? []),
+  ];
   const invalidParameter =
-    !isNumericParameter && !['', ...yAxisConfig.fields].includes(column.function[1]);
+    !isNumericParameter && !allowedParameters.includes(column.function[1]);
 
   return invalidFunction || invalidParameter;
 }
@@ -177,14 +233,15 @@ function incompatibleYAxis(eventView: EventView): boolean {
  * Provide a button that can create an alert from an event view.
  * Emits incompatible query issues on click
  */
-function CreateAlertButton({
+function CreateAlertFromViewButton({
   projects,
   eventView,
   organization,
+  referrer,
   onIncompatibleQuery,
   onSuccess,
   ...buttonProps
-}: Props) {
+}: CreateAlertFromViewButtonProps) {
   // Must have exactly one project selected and not -1 (all projects)
   const hasProjectError = eventView.project.length !== 1 || eventView.project[0] === -1;
   // Must have one or zero environments
@@ -206,23 +263,28 @@ function CreateAlertButton({
   const to = hasErrors
     ? undefined
     : {
-        pathname: `/settings/${organization.slug}/projects/${project?.slug}/alerts/new/`,
+        pathname: `/organizations/${organization.slug}/alerts/${project?.slug}/new/`,
         query: {
           ...eventView.generateQueryStringObject(),
           createFromDiscover: true,
+          referrer,
         },
       };
 
   const handleClick = (event: React.MouseEvent) => {
     if (hasErrors) {
       event.preventDefault();
-      onIncompatibleQuery((onAlertClose: () => void) => (
-        <IncompatibleQueryAlert
-          incompatibleQuery={errors}
-          eventView={eventView}
-          onClose={onAlertClose}
-        />
-      ));
+      onIncompatibleQuery(
+        (onAlertClose: () => void) => (
+          <IncompatibleQueryAlert
+            incompatibleQuery={errors}
+            eventView={eventView}
+            orgId={organization.slug}
+            onClose={onAlertClose}
+          />
+        ),
+        errors
+      );
       return;
     }
 
@@ -230,32 +292,77 @@ function CreateAlertButton({
   };
 
   return (
-    <Access organization={organization} access={['project:write']}>
-      {({hasAccess}) => (
-        <Button
-          type="button"
-          disabled={!hasAccess}
-          title={
-            !hasAccess
-              ? t('Users with admin permission or higher can create alert rules.')
-              : undefined
-          }
-          icon={<IconSiren />}
-          to={to}
-          onClick={handleClick}
-          {...buttonProps}
-        >
-          {t('Create alert')}
-        </Button>
-      )}
-    </Access>
+    <CreateAlertButton
+      organization={organization}
+      onClick={handleClick}
+      to={to}
+      {...buttonProps}
+    />
   );
 }
 
+type Props = {
+  organization: Organization;
+  projectSlug?: string;
+  iconProps?: React.ComponentProps<typeof IconSiren>;
+  referrer?: string;
+  hideIcon?: boolean;
+} & WithRouterProps &
+  React.ComponentProps<typeof Button>;
+
+const CreateAlertButton = withRouter(
+  ({
+    organization,
+    projectSlug,
+    iconProps,
+    referrer,
+    router,
+    hideIcon,
+    ...buttonProps
+  }: Props) => {
+    function handleClickWithoutProject(event: React.MouseEvent) {
+      event.preventDefault();
+
+      navigateTo(
+        `/organizations/${organization.slug}/alerts/:projectId/new/${
+          referrer ? `?referrer=${referrer}` : ''
+        }`,
+        router
+      );
+    }
+
+    return (
+      <Access organization={organization} access={['project:write']}>
+        {({hasAccess}) => (
+          <Button
+            disabled={!hasAccess}
+            title={
+              !hasAccess
+                ? t('Users with admin permission or higher can create alert rules.')
+                : undefined
+            }
+            icon={!hideIcon && <IconSiren {...iconProps} />}
+            to={
+              projectSlug
+                ? `/organizations/${organization.slug}/alerts/${projectSlug}/new/`
+                : undefined
+            }
+            onClick={projectSlug ? undefined : handleClickWithoutProject}
+            {...buttonProps}
+          >
+            {buttonProps.children ?? t('Create Alert')}
+          </Button>
+        )}
+      </Access>
+    );
+  }
+);
+
+export {CreateAlertFromViewButton};
 export default CreateAlertButton;
 
 const StyledAlert = styled(Alert)`
-  color: ${p => p.theme.gray700};
+  color: ${p => p.theme.textColor};
   margin-bottom: 0;
 `;
 

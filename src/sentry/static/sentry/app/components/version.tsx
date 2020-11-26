@@ -1,19 +1,21 @@
-import PropTypes from 'prop-types';
 import React from 'react';
-import styled from '@emotion/styled';
 import {withRouter} from 'react-router';
 import {WithRouterProps} from 'react-router/lib/withRouter';
+import {css} from '@emotion/core';
+import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {Organization} from 'app/types';
-import SentryTypes from 'app/sentryTypes';
+import Clipboard from 'app/components/clipboard';
 import GlobalSelectionLink from 'app/components/globalSelectionLink';
 import Link from 'app/components/links/link';
 import Tooltip from 'app/components/tooltip';
 import {IconCopy} from 'app/icons';
-import Clipboard from 'app/components/clipboard';
+import SentryTypes from 'app/sentryTypes';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
 import space from 'app/styles/space';
+import {Organization} from 'app/types';
 import {formatVersion} from 'app/utils/formatters';
+import theme from 'app/utils/theme';
 import withOrganization from 'app/utils/withOrganization';
 
 type Props = {
@@ -65,7 +67,6 @@ const Version = ({
   className,
   location,
 }: WithRouterProps & Props) => {
-  const LinkComponent = preserveGlobalSelection ? GlobalSelectionLink : Link;
   const versionToDisplay = formatVersion(version, withPackage);
 
   let releaseDetailProjectId: null | undefined | string | string[];
@@ -79,19 +80,28 @@ const Version = ({
 
   const renderVersion = () => {
     if (anchor && organization?.slug) {
-      return (
-        <LinkComponent
-          to={{
-            pathname: `/organizations/${organization?.slug}/releases/${encodeURIComponent(
-              version
-            )}/`,
-            query: releaseDetailProjectId ? {project: releaseDetailProjectId} : undefined,
-          }}
-          className={className}
-        >
-          <VersionText truncate={truncate}>{versionToDisplay}</VersionText>
-        </LinkComponent>
-      );
+      const props = {
+        to: {
+          pathname: `/organizations/${organization?.slug}/releases/${encodeURIComponent(
+            version
+          )}/`,
+          query: releaseDetailProjectId ? {project: releaseDetailProjectId} : undefined,
+        },
+        className,
+      };
+      if (preserveGlobalSelection) {
+        return (
+          <GlobalSelectionLink {...props}>
+            <VersionText truncate={truncate}>{versionToDisplay}</VersionText>
+          </GlobalSelectionLink>
+        );
+      } else {
+        return (
+          <Link {...props}>
+            <VersionText truncate={truncate}>{versionToDisplay}</VersionText>
+          </Link>
+        );
+      }
     }
 
     return (
@@ -117,12 +127,26 @@ const Version = ({
     </TooltipContent>
   );
 
+  const getPopperStyles = () => {
+    // if the version name is not a hash (sha1 or sha265) and we are not on mobile, allow tooltip to be as wide as 500px
+    if (/(^[a-f0-9]{40}$)|(^[a-f0-9]{64}$)/.test(version)) {
+      return undefined;
+    }
+
+    return css`
+      @media (min-width: ${theme.breakpoints[0]}) {
+        max-width: 500px;
+      }
+    `;
+  };
+
   return (
     <Tooltip
       title={renderTooltipContent()}
       disabled={!tooltipRawVersion}
       isHoverable
       containerDisplayMode={truncate ? 'block' : 'inline-block'}
+      popperStyle={getPopperStyles()}
     >
       {renderVersion()}
     </Tooltip>
@@ -153,7 +177,7 @@ const VersionText = styled('span')<{truncate?: boolean}>`
   ${p =>
     p.truncate &&
     `max-width: 100%;
-  display: block;
+    display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;`}

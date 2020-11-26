@@ -1,14 +1,10 @@
-export interface Thread {
-  id: string;
-  name?: string;
-  crashed?: boolean;
-  stacktrace?: any;
-  rawStacktrace?: any;
-}
+import {RawStacktrace, StacktraceType} from './stacktrace';
 
-export interface Frame {
-  function?: string;
-  package?: string;
-  module?: string;
-  filename?: string;
+export interface Thread {
+  id: number;
+  crashed: boolean;
+  current: boolean;
+  rawStacktrace: RawStacktrace;
+  stacktrace: StacktraceType;
+  name?: string;
 }

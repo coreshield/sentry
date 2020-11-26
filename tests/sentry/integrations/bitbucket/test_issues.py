@@ -1,16 +1,15 @@
 from __future__ import absolute_import
 
 import copy
+import responses
+import six
 
 from sentry.integrations.bitbucket.issues import ISSUE_TYPES, PRIORITIES
 from sentry.models import ExternalIssue, Integration
 from sentry.testutils import APITestCase
 from sentry.testutils.factories import DEFAULT_EVENT_DATA
 from sentry.testutils.helpers.datetime import iso_format, before_now
-
-import json
-import responses
-import six
+from sentry.utils import json
 
 
 class BitbucketIssueTest(APITestCase):
@@ -142,7 +141,7 @@ class BitbucketIssueTest(APITestCase):
         }
         self.org_integration.save()
         installation = self.integration.get_installation(self.organization.id)
-        fields = installation.get_create_issue_config(self.group)
+        fields = installation.get_create_issue_config(self.group, self.user)
         for field in fields:
             if field["name"] == "repo":
                 repo_field = field
@@ -178,7 +177,7 @@ class BitbucketIssueTest(APITestCase):
         )
 
         installation = self.integration.get_installation(self.organization.id)
-        fields = installation.get_create_issue_config(self.group)
+        fields = installation.get_create_issue_config(self.group, self.user)
         repo_field = [field for field in fields if field["name"] == "repo"][0]
         assert repo_field["default"] == ""
         assert repo_field["choices"] == []
@@ -192,7 +191,7 @@ class BitbucketIssueTest(APITestCase):
         )
 
         installation = self.integration.get_installation(self.organization.id)
-        assert installation.get_create_issue_config(self.group) == [
+        assert installation.get_create_issue_config(self.group, self.user) == [
             {
                 "name": "repo",
                 "required": True,

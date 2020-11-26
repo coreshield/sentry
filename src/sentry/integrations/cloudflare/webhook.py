@@ -34,7 +34,6 @@ class CloudflareTokenAuthentication(TokenAuthentication):
         # This technically lets a user brute force a token before we actually
         # verify the signature, HOWEVER, they could do that either way so we
         # are ok with it.
-        request.body = six.text_type(request.body)
         try:
             token = request.data["authentications"]["account"]["token"]["token"]
         except KeyError:
@@ -48,10 +47,7 @@ class CloudflareWebhookEndpoint(Endpoint):
 
     def verify(self, payload, key, signature):
         return constant_time_compare(
-            signature,
-            hmac.new(
-                key=key.encode("utf-8"), msg=payload.encode("utf-8"), digestmod=sha256
-            ).hexdigest(),
+            signature, hmac.new(key=key.encode("utf-8"), msg=payload, digestmod=sha256).hexdigest(),
         )
 
     def organization_from_json(self, request, data, scope="project:write"):
@@ -108,12 +104,11 @@ class CloudflareWebhookEndpoint(Endpoint):
         }
         if not enum_choices:
             return self.on_organization_clear(request, data, is_test)
-        else:
-            if data["install"]["options"].get("organization") not in enum_choices:
-                data["install"]["options"]["organization"] = enum_choices[0]
-            return self.on_organization_change(request, data, is_test)
 
-        return Response({"install": data["install"], "proceed": True})
+        if data["install"]["options"].get("organization") not in enum_choices:
+            data["install"]["options"]["organization"] = enum_choices[0]
+
+        return self.on_organization_change(request, data, is_test)
 
     @requires_auth
     def on_organization_clear(self, request, data, is_test):
@@ -148,12 +143,11 @@ class CloudflareWebhookEndpoint(Endpoint):
         }
         if not enum_choices:
             return self.on_project_clear(request, data, is_test)
-        else:
-            if data["install"]["options"].get("project") not in enum_choices:
-                data["install"]["options"]["project"] = enum_choices[0]
-            return self.on_project_change(request, data, is_test)
 
-        return Response({"install": data["install"], "proceed": True})
+        if data["install"]["options"].get("project") not in enum_choices:
+            data["install"]["options"]["project"] = enum_choices[0]
+
+        return self.on_project_change(request, data, is_test)
 
     @requires_auth
     def on_project_clear(self, request, data, is_test):
@@ -181,7 +175,8 @@ class CloudflareWebhookEndpoint(Endpoint):
         }
         if not enum_choices:
             return self.on_dsn_clear(request, data, is_test)
-        elif data["install"]["options"].get("dsn") not in enum_choices:
+
+        if data["install"]["options"].get("dsn") not in enum_choices:
             data["install"]["options"]["dsn"] = enum_choices[0]
 
         return Response({"install": data["install"], "proceed": True})

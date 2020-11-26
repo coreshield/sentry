@@ -3,9 +3,10 @@ import * as ReactRouter from 'react-router';
 import max from 'lodash/max';
 import min from 'lodash/min';
 
-import {Series} from 'app/types/echarts';
 import AreaChart from 'app/components/charts/areaChart';
 import ChartZoom from 'app/components/charts/chartZoom';
+import {Series} from 'app/types/echarts';
+import {axisLabelFormatter, tooltipFormatter} from 'app/utils/discover/charts';
 import {aggregateOutputType} from 'app/utils/discover/fields';
 import theme from 'app/utils/theme';
 
@@ -32,7 +33,7 @@ function computeAxisMax(data) {
   const power = Math.log10(maxValue);
   const magnitude = min([max([10 ** (power - Math.floor(power)), 0]), 10]) as number;
 
-  let scale;
+  let scale: number;
   if (magnitude <= 2.5) {
     scale = 0.2;
   } else if (magnitude <= 5) {
@@ -86,11 +87,11 @@ class Chart extends React.Component<Props> {
       xAxes: [
         {
           gridIndex: 0,
-          type: 'time',
+          type: 'time' as const,
         },
         {
           gridIndex: 1,
-          type: 'time',
+          type: 'time' as const,
         },
       ],
       yAxes: [
@@ -98,19 +99,34 @@ class Chart extends React.Component<Props> {
           gridIndex: 0,
           scale: true,
           max: dataMax,
+          axisLabel: {
+            color: theme.chartLabel,
+            formatter(value: number) {
+              return axisLabelFormatter(value, data[0].seriesName);
+            },
+          },
         },
         {
           gridIndex: 1,
           scale: true,
           max: dataMax,
+          axisLabel: {
+            color: theme.chartLabel,
+            formatter(value: number) {
+              return axisLabelFormatter(value, data[1].seriesName);
+            },
+          },
         },
       ],
       utc,
       isGroupedByDate: true,
       showTimeInTooltip: true,
-      colors: [colors[0], colors[1]],
+      colors: [colors[0], colors[1]] as string[],
       tooltip: {
-        nameFormatter(value) {
+        valueFormatter: (value, seriesName) => {
+          return tooltipFormatter(value, seriesName);
+        },
+        nameFormatter(value: string) {
           return value === 'epm()' ? 'tpm()' : value;
         },
       },

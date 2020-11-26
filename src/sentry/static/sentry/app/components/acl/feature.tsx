@@ -1,14 +1,14 @@
-import PropTypes from 'prop-types';
 import React from 'react';
+import PropTypes from 'prop-types';
 
-import {Project, Organization, Config} from 'app/types';
-import {FeatureDisabledHooks} from 'app/types/hooks';
-import HookStore from 'app/stores/hookStore';
 import SentryTypes from 'app/sentryTypes';
+import HookStore from 'app/stores/hookStore';
+import {Config, Organization, Project} from 'app/types';
+import {FeatureDisabledHooks} from 'app/types/hooks';
+import {isRenderFunc} from 'app/utils/isRenderFunc';
 import withConfig from 'app/utils/withConfig';
 import withOrganization from 'app/utils/withOrganization';
 import withProject from 'app/utils/withProject';
-import {isRenderFunc} from 'app/utils/isRenderFunc';
 
 import ComingSoon from './comingSoon';
 
@@ -36,7 +36,7 @@ type Props = {
    * Custom renderer function for when the feature is not enabled.
    *
    *  - [default] Set this to false to disable rendering anything. If the
-   *    feature is not enabled no children will be rendererd.
+   *    feature is not enabled no children will be rendered.
    *
    *  - Set this to `true` to use the default `ComingSoon` alert component.
    *
@@ -44,7 +44,7 @@ type Props = {
    *
    * When a custom render function is used, the same object that would be
    * passed to `children` if a func is provided there, will be used here,
-   * aditionally `children` will also be passed.
+   * additionally `children` will also be passed.
    */
   renderDisabled?:
     | ((props: FeatureRenderProps & Pick<Props, 'children'>) => React.ReactNode)

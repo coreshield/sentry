@@ -62,22 +62,26 @@ def report_monitor_begin(task, **kwargs):
     if not SENTRY_DSN or not API_ROOT:
         return
 
-    monitor_id = task.request.headers.get("X-Sentry-Monitor")
+    headers = task.request.headers
+    if not headers:
+        return
+
+    monitor_id = headers.get("X-Sentry-Monitor")
     if not monitor_id:
         return
 
     with configure_scope() as scope:
         scope.set_context("monitor", {"id": monitor_id})
 
-    session = SafeSession()
-    req = session.post(
-        u"{}/api/0/monitors/{}/checkins/".format(API_ROOT, monitor_id),
-        headers={"Authorization": u"DSN {}".format(SENTRY_DSN)},
-        json={"status": "in_progress"},
-    )
-    req.raise_for_status()
-    # HACK:
-    task.request.headers["X-Sentry-Monitor-CheckIn"] = (req.json()["id"], time())
+    with SafeSession() as session:
+        req = session.post(
+            u"{}/api/0/monitors/{}/checkins/".format(API_ROOT, monitor_id),
+            headers={"Authorization": u"DSN {}".format(SENTRY_DSN)},
+            json={"status": "in_progress"},
+        )
+        req.raise_for_status()
+        # HACK:
+        headers["X-Sentry-Monitor-CheckIn"] = (req.json()["id"], time())
 
 
 @suppress_errors
@@ -85,20 +89,27 @@ def report_monitor_complete(task, retval, **kwargs):
     if not SENTRY_DSN or not API_ROOT:
         return
 
-    monitor_id = task.request.headers.get("X-Sentry-Monitor")
+    headers = task.request.headers
+    if not headers:
+        return
+
+    monitor_id = headers.get("X-Sentry-Monitor")
     if not monitor_id:
         return
 
     try:
-        checkin_id, start_time = task.request.headers.get("X-Sentry-Monitor-CheckIn")
+        checkin_id, start_time = headers.get("X-Sentry-Monitor-CheckIn")
     except (ValueError, TypeError):
         return
 
     duration = int((time() - start_time) * 1000)
 
-    session = SafeSession()
-    session.put(
-        u"{}/api/0/monitors/{}/checkins/{}/".format(API_ROOT, monitor_id, checkin_id),
-        headers={"Authorization": u"DSN {}".format(SENTRY_DSN)},
-        json={"status": "error" if isinstance(retval, Exception) else "ok", "duration": duration},
-    ).raise_for_status()
+    with SafeSession() as session:
+        session.put(
+            u"{}/api/0/monitors/{}/checkins/{}/".format(API_ROOT, monitor_id, checkin_id),
+            headers={"Authorization": u"DSN {}".format(SENTRY_DSN)},
+            json={
+                "status": "error" if isinstance(retval, Exception) else "ok",
+                "duration": duration,
+            },
+        ).raise_for_status()

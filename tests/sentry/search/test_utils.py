@@ -49,7 +49,27 @@ def test_get_numeric_field_value():
 
 
 def test_tokenize_query_only_keyed_fields():
-    assert tokenize_query("foo:bar") == {"foo": ["bar"]}
+    tests = [
+        ("a:a", {"a": ["a"]}),
+        ("(a:a AND b:b)", {"a": ["a"], "b": ["b"]}),
+        ("( a:a AND (b:b OR c:c))", {"a": ["a"], "b": ["b"], "c": ["c"]}),
+        ("( a:a AND (b:b OR c:c ) )", {"a": ["a"], "b": ["b"], "c": ["c"]}),
+        (
+            "(x y a:a AND (b:b OR c:c) z)",
+            {"a": ["a"], "b": ["b"], "c": ["c"], "query": ["x", "y", "z"]},
+        ),
+        (
+            "((x y)) a:a AND (b:b OR c:c) z)",
+            {"a": ["a"], "b": ["b"], "c": ["c"], "query": ["x", "y", "z"]},
+        ),
+        (
+            "((x y)) a():>a AND (!b:b OR c():<c) z)",
+            {"a()": [">a"], "!b": ["b"], "c()": ["<c"], "query": ["x", "y", "z"]},
+        ),
+    ]
+
+    for test in tests:
+        assert tokenize_query(test[0]) == test[1], test[0]
 
 
 def test_get_numeric_field_value_invalid():
@@ -383,6 +403,18 @@ class ParseQueryTest(TestCase):
     def test_is_assigned(self):
         result = self.parse_query("is:assigned")
         assert result == {"unassigned": False, "tags": {}, "query": ""}
+
+    def test_is_inbox(self):
+        result = self.parse_query("is:inbox")
+        assert result == {"inbox": True, "tags": {}, "query": ""}
+
+    def test_is_unlinked(self):
+        result = self.parse_query("is:unlinked")
+        assert result == {"linked": False, "tags": {}, "query": ""}
+
+    def test_is_linked(self):
+        result = self.parse_query("is:linked")
+        assert result == {"linked": True, "tags": {}, "query": ""}
 
     def test_age_from(self):
         result = self.parse_query("age:-24h")

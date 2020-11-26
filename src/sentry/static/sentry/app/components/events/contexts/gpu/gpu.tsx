@@ -2,6 +2,8 @@ import React from 'react';
 
 import ContextBlock from 'app/components/events/contexts/contextBlock';
 
+import getUnknownData from '../getUnknownData';
+
 import getOperatingSystemKnownData from './getGPUKnownData';
 import {GPUData, GPUKnownDataType} from './types';
 
@@ -19,6 +21,8 @@ const gpuKnownDataValues = [
   GPUKnownDataType.API_TYPE,
 ];
 
+const gpuIgnoredDataValues = [];
+
 const GPU = ({data}: Props) => {
   if (data.vendor_id > 0) {
     gpuKnownDataValues.unshift[GPUKnownDataType.VENDOR_ID];
@@ -28,7 +32,12 @@ const GPU = ({data}: Props) => {
   }
 
   return (
-    <ContextBlock knownData={getOperatingSystemKnownData(data, gpuKnownDataValues)} />
+    <React.Fragment>
+      <ContextBlock data={getOperatingSystemKnownData(data, gpuKnownDataValues)} />
+      <ContextBlock
+        data={getUnknownData(data, [...gpuKnownDataValues, ...gpuIgnoredDataValues])}
+      />
+    </React.Fragment>
   );
 };
 

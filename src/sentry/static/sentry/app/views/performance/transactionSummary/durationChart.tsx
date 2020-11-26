@@ -3,26 +3,26 @@ import {browserHistory} from 'react-router';
 import * as ReactRouter from 'react-router';
 import {Location} from 'history';
 
-import {OrganizationSummary} from 'app/types';
 import {Client} from 'app/api';
-import {t} from 'app/locale';
 import AreaChart from 'app/components/charts/areaChart';
 import ChartZoom from 'app/components/charts/chartZoom';
 import ErrorPanel from 'app/components/charts/errorPanel';
-import TransparentLoadingMask from 'app/components/charts/transparentLoadingMask';
-import TransitionChart from 'app/components/charts/transitionChart';
 import EventsRequest from 'app/components/charts/eventsRequest';
 import ReleaseSeries from 'app/components/charts/releaseSeries';
+import TransitionChart from 'app/components/charts/transitionChart';
+import TransparentLoadingMask from 'app/components/charts/transparentLoadingMask';
+import {getInterval, getSeriesSelection} from 'app/components/charts/utils';
 import QuestionTooltip from 'app/components/questionTooltip';
-import {getInterval} from 'app/components/charts/utils';
 import {IconWarning} from 'app/icons';
+import {t} from 'app/locale';
+import {OrganizationSummary} from 'app/types';
 import {getUtcToLocalDateObject} from 'app/utils/dates';
+import {axisLabelFormatter, tooltipFormatter} from 'app/utils/discover/charts';
 import EventView from 'app/utils/discover/eventView';
-import withApi from 'app/utils/withApi';
+import getDynamicText from 'app/utils/getDynamicText';
 import {decodeScalar} from 'app/utils/queryString';
 import theme from 'app/utils/theme';
-import {getDuration} from 'app/utils/formatters';
-import getDynamicText from 'app/utils/getDynamicText';
+import withApi from 'app/utils/withApi';
 
 import {HeaderTitleLegend} from '../styles';
 
@@ -42,6 +42,7 @@ type Props = ReactRouter.WithRouterProps &
     api: Client;
     location: Location;
     organization: OrganizationSummary;
+    queryExtra: object;
   };
 
 const YAXIS_VALUES = ['p50()', 'p75()', 'p95()', 'p99()', 'p100()'];
@@ -76,16 +77,8 @@ class DurationChart extends React.Component<Props> {
       query,
       statsPeriod,
       router,
+      queryExtra,
     } = this.props;
-
-    const unselectedSeries = location.query.unselectedSeries ?? [];
-    const unselectedMetrics = Array.isArray(unselectedSeries)
-      ? unselectedSeries
-      : [unselectedSeries];
-    const seriesSelection = unselectedMetrics.reduce((selection, metric) => {
-      selection[metric] = false;
-      return selection;
-    }, {});
 
     const start = this.props.start
       ? getUtcToLocalDateObject(this.props.start)
@@ -107,19 +100,36 @@ class DurationChart extends React.Component<Props> {
         fontSize: 11,
         fontFamily: 'Rubik',
       },
-      selected: seriesSelection,
-    };
-
-    const tooltip = {
-      valueFormatter(value: number) {
-        return getDuration(value / 1000, 2);
-      },
+      selected: getSeriesSelection(location),
     };
 
     const datetimeSelection = {
       start: start || null,
       end: end || null,
       period: statsPeriod,
+    };
+
+    const chartOptions = {
+      grid: {
+        left: '10px',
+        right: '10px',
+        top: '40px',
+        bottom: '0px',
+      },
+      seriesOptions: {
+        showSymbol: false,
+      },
+      tooltip: {
+        trigger: 'axis',
+        valueFormatter: tooltipFormatter,
+      },
+      yAxis: {
+        axisLabel: {
+          color: theme.chartLabel,
+          // p50() coerces the axis to be time based
+          formatter: (value: number) => axisLabelFormatter(value, 'p50()'),
+        },
+      },
     };
 
     return (
@@ -159,7 +169,7 @@ class DurationChart extends React.Component<Props> {
                 if (errored) {
                   return (
                     <ErrorPanel>
-                      <IconWarning color="gray500" size="lg" />
+                      <IconWarning color="gray300" size="lg" />
                     </ErrorPanel>
                   );
                 }
@@ -190,9 +200,11 @@ class DurationChart extends React.Component<Props> {
                   <ReleaseSeries
                     start={start}
                     end={end}
+                    queryExtra={queryExtra}
                     period={statsPeriod}
                     utc={utc}
                     projects={project}
+                    environments={environment}
                   >
                     {({releaseSeries}) => (
                       <TransitionChart loading={loading} reloading={reloading}>
@@ -201,19 +213,10 @@ class DurationChart extends React.Component<Props> {
                           value: (
                             <AreaChart
                               {...zoomRenderProps}
+                              {...chartOptions}
                               legend={legend}
                               onLegendSelectChanged={this.handleLegendSelectChanged}
                               series={[...series, ...releaseSeries]}
-                              seriesOptions={{
-                                showSymbol: false,
-                              }}
-                              tooltip={tooltip}
-                              grid={{
-                                left: '10px',
-                                right: '10px',
-                                top: '40px',
-                                bottom: '0px',
-                              }}
                             />
                           ),
                           fixed: 'Duration Chart',

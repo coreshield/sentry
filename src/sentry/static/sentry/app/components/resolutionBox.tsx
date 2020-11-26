@@ -1,10 +1,10 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import UserAvatar from 'app/components/avatar/userAvatar';
-import {BannerContainer, BannerSummary} from 'app/components/events/styles';
 import CommitLink from 'app/components/commitLink';
+import {BannerContainer, BannerSummary} from 'app/components/events/styles';
 import TimeSince from 'app/components/timeSince';
 import Version from 'app/components/version';
 import {IconCheckmark} from 'app/icons';
@@ -72,7 +72,7 @@ function ResolutionBox({statusDetails, projectId}: Props) {
   return (
     <BannerContainer priority="default">
       <BannerSummary>
-        <IconCheckmark color="green400" />
+        <StyledIconCheckmark color="green300" />
         <span>{renderReason(statusDetails, projectId)}</span>
       </BannerSummary>
     </BannerContainer>
@@ -85,9 +85,20 @@ ResolutionBox.propTypes = {
 };
 
 const StyledTimeSince = styled(TimeSince)`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
   margin-left: ${space(0.5)};
   font-size: ${p => p.theme.fontSizeSmall};
+`;
+
+const StyledIconCheckmark = styled(IconCheckmark)`
+  /* override margin defined in BannerSummary */
+  margin-top: 0 !important;
+  align-self: center;
+
+  @media (max-width: ${p => p.theme.breakpoints[0]}) {
+    margin-top: ${space(0.5)} !important;
+    align-self: flex-start;
+  }
 `;
 
 export default ResolutionBox;

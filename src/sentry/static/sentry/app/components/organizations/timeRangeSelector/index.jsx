@@ -1,11 +1,22 @@
-import PropTypes from 'prop-types';
 import React from 'react';
-import moment from 'moment-timezone';
 import styled from '@emotion/styled';
+import moment from 'moment-timezone';
+import PropTypes from 'prop-types';
 
+import DropdownMenu from 'app/components/dropdownMenu';
+import HookOrDefault from 'app/components/hookOrDefault';
+import HeaderItem from 'app/components/organizations/headerItem';
+import MultipleSelectorSubmitRow from 'app/components/organizations/multipleSelectorSubmitRow';
+import DateRange from 'app/components/organizations/timeRangeSelector/dateRange';
+import SelectorItems from 'app/components/organizations/timeRangeSelector/dateRange/selectorItems';
+import DateSummary from 'app/components/organizations/timeRangeSelector/dateSummary';
+import {getRelativeSummary} from 'app/components/organizations/timeRangeSelector/utils';
 import {DEFAULT_STATS_PERIOD} from 'app/constants';
-import {analytics} from 'app/utils/analytics';
+import {IconCalendar} from 'app/icons';
+import SentryTypes from 'app/sentryTypes';
+import space from 'app/styles/space';
 import {defined} from 'app/utils';
+import {analytics} from 'app/utils/analytics';
 import {
   getLocalToSystem,
   getPeriodAgo,
@@ -13,28 +24,15 @@ import {
   getUtcToSystem,
   parsePeriodToHours,
 } from 'app/utils/dates';
-import {getRelativeSummary} from 'app/components/organizations/timeRangeSelector/utils';
-import DateRange from 'app/components/organizations/timeRangeSelector/dateRange';
-import DateSummary from 'app/components/organizations/timeRangeSelector/dateSummary';
-import DropdownMenu from 'app/components/dropdownMenu';
-import HeaderItem from 'app/components/organizations/headerItem';
-import HookOrDefault from 'app/components/hookOrDefault';
-import MultipleSelectorSubmitRow from 'app/components/organizations/multipleSelectorSubmitRow';
-import SelectorItems from 'app/components/organizations/timeRangeSelector/dateRange/selectorItems';
-import SentryTypes from 'app/sentryTypes';
-import space from 'app/styles/space';
 import getDynamicText from 'app/utils/getDynamicText';
 import getRouteStringFromRoutes from 'app/utils/getRouteStringFromRoutes';
-import {IconCalendar} from 'app/icons';
 
 // Strips timezone from local date, creates a new moment date object with timezone
 // Then returns as a Date object
 const getDateWithTimezoneInUtc = (date, utc) =>
   moment
     .tz(
-      moment(date)
-        .local()
-        .format('YYYY-MM-DD HH:mm:ss'),
+      moment(date).local().format('YYYY-MM-DD HH:mm:ss'),
       utc ? 'UTC' : getUserTimezone()
     )
     .utc()
@@ -150,6 +148,7 @@ class TimeRangeSelector extends React.PureComponent {
       utc: defined(props.utc) ? props.utc : getUserTimezone() === 'UTC',
       isOpen: false,
       hasChanges: false,
+      hasDateRangeErrors: false,
       start,
       end,
       relative: props.relative,
@@ -252,7 +251,12 @@ class TimeRangeSelector extends React.PureComponent {
     this.handleUpdate(newDateTime);
   };
 
-  handleSelectDateRange = ({start, end}) => {
+  handleSelectDateRange = ({start, end, hasDateRangeErrors = false}) => {
+    if (hasDateRangeErrors) {
+      this.setState({hasDateRangeErrors});
+      return;
+    }
+
     const {onChange} = this.props;
 
     const newDateTime = {
@@ -265,7 +269,7 @@ class TimeRangeSelector extends React.PureComponent {
       newDateTime.utc = this.state.utc;
     }
 
-    this.setState({hasChanges: true, ...newDateTime});
+    this.setState({hasChanges: true, hasDateRangeErrors, ...newDateTime});
     this.callCallback(onChange, newDateTime);
   };
 
@@ -314,7 +318,7 @@ class TimeRangeSelector extends React.PureComponent {
     const isAbsoluteSelected = !!start && !!end;
 
     const summary = isAbsoluteSelected ? (
-      <DateSummary utc={this.state.utc} start={start} end={end} />
+      <DateSummary start={start} end={end} />
     ) : (
       getRelativeSummary(relative || defaultPeriod)
     );
@@ -374,13 +378,12 @@ class TimeRangeSelector extends React.PureComponent {
                       onChange={this.handleSelectDateRange}
                       onChangeUtc={this.handleUseUtc}
                     />
-                    {this.state.hasChanges && (
-                      <SubmitRow>
-                        <MultipleSelectorSubmitRow
-                          onSubmit={() => this.handleCloseMenu()}
-                        />
-                      </SubmitRow>
-                    )}
+                    <SubmitRow>
+                      <MultipleSelectorSubmitRow
+                        onSubmit={this.handleCloseMenu}
+                        disabled={!this.state.hasChanges || this.state.hasDateRangeErrors}
+                      />
+                    </SubmitRow>
                   </div>
                 )}
               </Menu>
@@ -405,8 +408,8 @@ const Menu = styled('div')`
   ${p => p.isAbsoluteSelected && 'right: -1px'};
 
   display: flex;
-  background: #fff;
-  border: 1px solid ${p => p.theme.borderDark};
+  background: ${p => p.theme.background};
+  border: 1px solid ${p => p.theme.border};
   position: absolute;
   top: 100%;
   min-width: 100%;
@@ -428,8 +431,8 @@ const SelectorList = styled('div')`
 
 const SubmitRow = styled('div')`
   padding: ${space(0.5)} ${space(1)};
-  border-top: 1px solid ${p => p.theme.borderLight};
-  border-left: 1px solid ${p => p.theme.borderLight};
+  border-top: 1px solid ${p => p.theme.innerBorder};
+  border-left: 1px solid ${p => p.theme.border};
 `;
 
 export default TimeRangeSelector;

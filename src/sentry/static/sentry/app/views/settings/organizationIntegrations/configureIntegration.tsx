@@ -1,21 +1,28 @@
 import React from 'react';
 import {RouteComponentProps} from 'react-router/lib/Router';
+import styled from '@emotion/styled';
 
+import Alert from 'app/components/alert';
+import Button from 'app/components/button';
+import List from 'app/components/list';
+import ListItem from 'app/components/list/listItem';
+import NavTabs from 'app/components/navTabs';
+import {IconAdd, IconArrow} from 'app/icons';
 import {t} from 'app/locale';
+import {IntegrationProvider, IntegrationWithConfig, Organization} from 'app/types';
+import {trackIntegrationEvent} from 'app/utils/integrationUtil';
+import {singleLineRenderer} from 'app/utils/marked';
+import withOrganization from 'app/utils/withOrganization';
 import AsyncView from 'app/views/asyncView';
 import AddIntegration from 'app/views/organizationIntegrations/addIntegration';
-import BreadcrumbTitle from 'app/views/settings/components/settingsBreadcrumb/breadcrumbTitle';
-import Button from 'app/components/button';
-import {IconAdd} from 'app/icons';
-import Form from 'app/views/settings/components/forms/form';
 import IntegrationAlertRules from 'app/views/organizationIntegrations/integrationAlertRules';
+import IntegrationCodeMappings from 'app/views/organizationIntegrations/integrationCodeMappings';
 import IntegrationItem from 'app/views/organizationIntegrations/integrationItem';
 import IntegrationRepos from 'app/views/organizationIntegrations/integrationRepos';
+import Form from 'app/views/settings/components/forms/form';
 import JsonForm from 'app/views/settings/components/forms/jsonForm';
+import BreadcrumbTitle from 'app/views/settings/components/settingsBreadcrumb/breadcrumbTitle';
 import SettingsPageHeader from 'app/views/settings/components/settingsPageHeader';
-import withOrganization from 'app/utils/withOrganization';
-import {Organization, Integration, IntegrationProvider} from 'app/types';
-import {trackIntegrationEvent} from 'app/utils/integrationUtil';
 
 type RouteParams = {
   orgId: string;
@@ -24,18 +31,29 @@ type RouteParams = {
 type Props = RouteComponentProps<RouteParams, {}> & {
   organization: Organization;
 };
+
+type Tab = 'repos' | 'codeMappings';
+
 type State = AsyncView['state'] & {
   config: {providers: IntegrationProvider[]};
-  integration: Integration;
+  integration: IntegrationWithConfig;
+  tab?: Tab;
 };
 class ConfigureIntegration extends AsyncView<Props, State> {
-  getEndpoints(): [string, string][] {
+  getEndpoints(): ReturnType<AsyncView['getEndpoints']> {
     const {orgId, integrationId} = this.props.params;
 
     return [
       ['config', `/organizations/${orgId}/config/integrations/`],
       ['integration', `/organizations/${orgId}/integrations/${integrationId}/`],
     ];
+  }
+
+  componentDidMount() {
+    const {location} = this.props;
+    const value = location.query.tab === 'codeMappings' ? 'codeMappings' : 'repos';
+    // eslint-disable-next-line react/no-did-mount-set-state
+    this.setState({tab: value});
   }
 
   onRequestSuccess({stateKey, data}) {
@@ -57,6 +75,18 @@ class ConfigureIntegration extends AsyncView<Props, State> {
     return this.state.integration
       ? this.state.integration.provider.name
       : 'Configure Integration';
+  }
+
+  hasStacktraceLinking(provider: IntegrationProvider) {
+    return !!provider.hasStacktraceLinking;
+  }
+
+  onTabChange = (value: Tab) => {
+    this.setState({tab: value});
+  };
+
+  get tab() {
+    return this.state.tab || 'repos';
   }
 
   onUpdateIntegration = () => {
@@ -88,23 +118,17 @@ class ConfigureIntegration extends AsyncView<Props, State> {
     return action;
   };
 
-  renderBody() {
+  //TODO(Steve): Refactor components into separate tabs and use more generic tab logic
+  renderMainTab(provider: IntegrationProvider) {
     const {orgId} = this.props.params;
     const {integration} = this.state;
-    const provider = this.state.config.providers.find(
-      p => p.key === integration.provider.key
-    );
 
-    const title = <IntegrationItem integration={integration} />;
+    const instructions =
+      integration.dynamicDisplayInformation?.configure_integration?.instructions;
 
     return (
       <React.Fragment>
         <BreadcrumbTitle routes={this.props.routes} title={integration.provider.name} />
-        <SettingsPageHeader
-          noTitleStyles
-          title={title}
-          action={this.getAction(provider)}
-        />
 
         {integration.configOrganization.length > 0 && (
           <Form
@@ -125,12 +149,88 @@ class ConfigureIntegration extends AsyncView<Props, State> {
           </Form>
         )}
 
-        {provider && provider.features.includes('alert-rule') && (
+        {instructions && instructions.length > 0 && (
+          <Alert type="info">
+            {instructions?.length === 1 ? (
+              <span
+                dangerouslySetInnerHTML={{__html: singleLineRenderer(instructions[0])}}
+              />
+            ) : (
+              <List symbol={<IconArrow size="xs" direction="right" />}>
+                {instructions?.map((instruction, i) => (
+                  <ListItem key={i}>
+                    <span
+                      dangerouslySetInnerHTML={{__html: singleLineRenderer(instruction)}}
+                    />
+                  </ListItem>
+                )) ?? []}
+              </List>
+            )}
+          </Alert>
+        )}
+
+        {provider.features.includes('alert-rule') && (
           <IntegrationAlertRules integration={integration} />
         )}
 
-        {provider && provider.features.includes('commits') && (
+        {provider.features.includes('commits') && (
           <IntegrationRepos {...this.props} integration={integration} />
+        )}
+      </React.Fragment>
+    );
+  }
+
+  renderBody() {
+    const {integration} = this.state;
+    const provider = this.state.config.providers.find(
+      p => p.key === integration.provider.key
+    );
+    if (!provider) {
+      return null;
+    }
+
+    const title = <IntegrationItem integration={integration} />;
+    const header = (
+      <SettingsPageHeader noTitleStyles title={title} action={this.getAction(provider)} />
+    );
+
+    return (
+      <React.Fragment>
+        {header}
+        {this.renderMainContent(provider)}
+      </React.Fragment>
+    );
+  }
+
+  //renders everything below header
+  renderMainContent(provider: IntegrationProvider) {
+    const {integration} = this.state;
+    //if no code mappings, render the single tab
+    if (!this.hasStacktraceLinking(provider)) {
+      return this.renderMainTab(provider);
+    }
+    //otherwise render the tab view
+    const tabs = [
+      ['repos', t('Repositories')],
+      ['codeMappings', t('Code Mappings')],
+    ] as const;
+    return (
+      <React.Fragment>
+        <NavTabs underlined>
+          {tabs.map(tabTuple => (
+            <li
+              key={tabTuple[0]}
+              className={this.tab === tabTuple[0] ? 'active' : ''}
+              onClick={() => this.onTabChange(tabTuple[0])}
+            >
+              <CapitalizedLink>{tabTuple[1]}</CapitalizedLink>
+            </li>
+          ))}
+        </NavTabs>
+        {this.tab === 'codeMappings' ? (
+          <IntegrationCodeMappings integration={integration} />
+        ) : (
+          this.renderMainTab(provider)
         )}
       </React.Fragment>
     );
@@ -138,3 +238,7 @@ class ConfigureIntegration extends AsyncView<Props, State> {
 }
 
 export default withOrganization(ConfigureIntegration);
+
+const CapitalizedLink = styled('a')`
+  text-transform: capitalize;
+`;

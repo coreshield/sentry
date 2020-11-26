@@ -1,44 +1,57 @@
+import React from 'react';
 import {PlainRoute} from 'react-router/lib/Route';
 import {RouteComponentProps} from 'react-router/lib/Router';
-import React from 'react';
 
-import {Organization, Project} from 'app/types';
-import FormModel from 'app/views/settings/components/forms/model';
-import {
-  createDefaultTrigger,
-  DATASET_EVENT_TYPE_FILTERS,
-} from 'app/views/settings/incidentRules/constants';
-import {defined} from 'app/utils';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
-import {fetchOrganizationTags} from 'app/actionCreators/tags';
-import {t} from 'app/locale';
-import Access from 'app/components/acl/access';
-import AsyncComponent from 'app/components/asyncComponent';
-import Button from 'app/components/button';
-import Confirm from 'app/components/confirm';
-import Form from 'app/views/settings/components/forms/form';
-import RuleNameForm from 'app/views/settings/incidentRules/ruleNameForm';
-import Triggers from 'app/views/settings/incidentRules/triggers';
-import TriggersChart from 'app/views/settings/incidentRules/triggers/chart';
-import hasThresholdValue from 'app/views/settings/incidentRules/utils/hasThresholdValue';
-import recreateRoute from 'app/utils/recreateRoute';
-import withProject from 'app/utils/withProject';
 import {
   addErrorMessage,
   addLoadingMessage,
   addSuccessMessage,
   clearIndicators,
 } from 'app/actionCreators/indicator';
+import {fetchOrganizationTags} from 'app/actionCreators/tags';
+import Access from 'app/components/acl/access';
+import Feature from 'app/components/acl/feature';
+import AsyncComponent from 'app/components/asyncComponent';
+import Button from 'app/components/button';
+import Confirm from 'app/components/confirm';
+import {t} from 'app/locale';
+import {Organization, Project} from 'app/types';
+import {defined} from 'app/utils';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
+import withProject from 'app/utils/withProject';
+import {convertDatasetEventTypesToSource} from 'app/views/alerts/utils';
+import Form from 'app/views/settings/components/forms/form';
+import FormModel from 'app/views/settings/components/forms/model';
+import RuleNameForm from 'app/views/settings/incidentRules/ruleNameForm';
+import Triggers from 'app/views/settings/incidentRules/triggers';
+import TriggersChart from 'app/views/settings/incidentRules/triggers/chart';
+import hasThresholdValue from 'app/views/settings/incidentRules/utils/hasThresholdValue';
 
+import {addOrUpdateRule} from '../actions';
+import {
+  createDefaultTrigger,
+  DATASET_EVENT_TYPE_FILTERS,
+  DATASOURCE_EVENT_TYPE_FILTERS,
+} from '../constants';
+import RuleConditionsForm from '../ruleConditionsForm';
+import RuleConditionsFormWithGuiFilters from '../ruleConditionsFormWithGuiFilters';
 import {
   AlertRuleThresholdType,
+  Dataset,
+  Datasource,
   IncidentRule,
   MetricActionTemplate,
   Trigger,
-  Dataset,
+  UnsavedIncidentRule,
 } from '../types';
-import {addOrUpdateRule} from '../actions';
-import RuleConditionsForm from '../ruleConditionsForm';
+
+const POLLING_MAX_TIME_LIMIT = 3 * 60000;
+
+type RuleTaskResponse = {
+  status: 'pending' | 'failed' | 'success';
+  alertRule?: IncidentRule;
+  error?: string;
+};
 
 type Props = {
   organization: Organization;
@@ -46,12 +59,15 @@ type Props = {
   routes: PlainRoute[];
   rule: IncidentRule;
   ruleId?: string;
+  sessionId?: string;
 } & RouteComponentProps<{orgId: string; projectId: string; ruleId?: string}, {}> & {
     onSubmitSuccess?: Form['props']['onSubmitSuccess'];
   } & AsyncComponent['props'];
 
 type State = {
   triggers: Trigger[];
+  resolveThreshold: UnsavedIncidentRule['resolveThreshold'];
+  thresholdType: UnsavedIncidentRule['thresholdType'];
   projects: Project[];
   triggerErrors: Map<number, {[fieldName: string]: string}>;
 
@@ -65,6 +81,7 @@ type State = {
   aggregate: string;
   timeWindow: number;
   environment: string | null;
+  uuid?: string;
 } & AsyncComponent['state'];
 
 const isEmpty = (str: unknown): boolean => str === '' || !defined(str);
@@ -78,6 +95,12 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
   getDefaultState(): State {
     const {rule} = this.props;
+    const triggersClone = [...rule.triggers];
+
+    // Warning trigger is removed if it is blank when saving
+    if (triggersClone.length !== 2) {
+      triggersClone.push(createDefaultTrigger('warning'));
+    }
 
     return {
       ...super.getDefaultState(),
@@ -89,34 +112,101 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
       environment: rule.environment || null,
       triggerErrors: new Map(),
       availableActions: null,
-      triggers: this.props.rule.triggers,
+      triggers: triggersClone,
+      resolveThreshold: rule.resolveThreshold,
+      thresholdType: rule.thresholdType,
       projects: [this.props.project],
     };
   }
 
-  getEndpoints(): [string, string][] {
-    const {params} = this.props;
+  getEndpoints(): ReturnType<AsyncComponent['getEndpoints']> {
+    const {orgId} = this.props.params;
 
     // TODO(incidents): This is temporary until new API endpoints
     // We should be able to just fetch the rule if rule.id exists
 
     return [
-      [
-        'availableActions',
-        `/organizations/${params.orgId}/alert-rules/available-actions/`,
-      ],
+      ['availableActions', `/organizations/${orgId}/alert-rules/available-actions/`],
     ];
   }
 
   get eventTypeFilter() {
-    return DATASET_EVENT_TYPE_FILTERS[this.state.dataset ?? Dataset.ERRORS];
+    if (this.state.eventTypes) {
+      return DATASOURCE_EVENT_TYPE_FILTERS[
+        convertDatasetEventTypesToSource(this.state.dataset, this.state.eventTypes) ??
+          Datasource.ERROR
+      ];
+    } else {
+      return DATASET_EVENT_TYPE_FILTERS[this.state.dataset ?? Dataset.ERRORS];
+    }
   }
 
   goBack() {
-    const {router, routes, params, location} = this.props;
+    const {router} = this.props;
+    const {orgId} = this.props.params;
 
-    router.replace(recreateRoute('', {routes, params, location, stepBack: -2}));
+    router.push(`/organizations/${orgId}/alerts/rules/`);
   }
+
+  resetPollingState = () => {
+    this.setState({loading: false, uuid: undefined});
+  };
+
+  fetchStatus(model: FormModel) {
+    // pollHandler calls itself until it gets either a success
+    // or failed status but we don't want to poll forever so we pass
+    // in a hard stop time of 3 minutes before we bail.
+    const quitTime = Date.now() + POLLING_MAX_TIME_LIMIT;
+    setTimeout(() => {
+      this.pollHandler(model, quitTime);
+    }, 1000);
+  }
+
+  pollHandler = async (model: FormModel, quitTime: number) => {
+    if (Date.now() > quitTime) {
+      addErrorMessage(t('Looking for that channel took too long :('));
+      this.resetPollingState();
+      return;
+    }
+
+    const {
+      organization,
+      project,
+      onSubmitSuccess,
+      params: {ruleId},
+    } = this.props;
+    const {uuid} = this.state;
+
+    try {
+      const response: RuleTaskResponse = await this.api.requestPromise(
+        `/projects/${organization.slug}/${project.slug}/alert-rule-task/${uuid}/`
+      );
+
+      const {status, alertRule, error} = response;
+
+      if (status === 'pending') {
+        setTimeout(() => {
+          this.pollHandler(model, quitTime);
+        }, 1000);
+        return;
+      }
+
+      this.resetPollingState();
+
+      if (status === 'failed') {
+        addErrorMessage(error);
+      }
+      if (alertRule) {
+        addSuccessMessage(ruleId ? t('Updated alert rule') : t('Created alert rule'));
+        if (onSubmitSuccess) {
+          onSubmitSuccess(alertRule, model);
+        }
+      }
+    } catch {
+      addErrorMessage(t('An error occurred'));
+      this.resetPollingState();
+    }
+  };
 
   /**
    * Checks to see if threshold is valid given target value, and state of
@@ -129,9 +219,10 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     triggerIndex: number,
     trigger: Trigger,
     errors,
-    changeObj?: Partial<Trigger>
+    resolveThreshold: number | '' | null
   ): boolean => {
-    const {alertThreshold, resolveThreshold} = trigger;
+    const {alertThreshold} = trigger;
+    const {thresholdType} = this.state;
 
     // If value and/or other value is empty
     // then there are no checks to perform against
@@ -149,23 +240,21 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
     // of 1 or more, and resolve on values of 0 or less. This is valid, but
     // without modifying the values, this boundary case will fail.
     const isValid =
-      trigger.thresholdType === AlertRuleThresholdType.BELOW
+      thresholdType === AlertRuleThresholdType.BELOW
         ? alertThreshold - 1 <= resolveThreshold + 1
         : alertThreshold + 1 >= resolveThreshold - 1;
 
     const otherErrors = errors.get(triggerIndex) || {};
-    const isResolveChanged = changeObj?.hasOwnProperty('resolveThreshold');
 
     if (isValid) {
       return true;
     }
 
     // Not valid... let's figure out an error message
-    const isBelow = trigger.thresholdType === AlertRuleThresholdType.BELOW;
-    const thresholdKey = isResolveChanged ? 'resolveThreshold' : 'alertThreshold';
+    const isBelow = thresholdType === AlertRuleThresholdType.BELOW;
     let errorMessage = '';
 
-    if (isResolveChanged) {
+    if (typeof resolveThreshold !== 'number') {
       errorMessage = isBelow
         ? t('Resolution threshold must be greater than alert')
         : t('Resolution threshold must be less than alert');
@@ -177,7 +266,7 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
     errors.set(triggerIndex, {
       ...otherErrors,
-      [thresholdKey]: errorMessage,
+      alertThreshold: errorMessage,
     });
 
     return false;
@@ -217,8 +306,9 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
    */
   validateTriggers(
     triggers = this.state.triggers,
-    changedTriggerIndex?: number,
-    changeObj?: Partial<Trigger>
+    thresholdType = this.state.thresholdType,
+    resolveThreshold = this.state.resolveThreshold,
+    changedTriggerIndex?: number
   ) {
     const triggerErrors = new Map();
 
@@ -229,7 +319,14 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
         this.validateFieldInTrigger({
           errors: triggerErrors,
           triggerIndex,
-          isValid: () => !isEmpty(trigger[field]),
+          isValid: (): boolean => {
+            if (trigger.label === 'critical') {
+              return !isEmpty(trigger[field]);
+            }
+
+            // If warning trigger has actions, it must have a value
+            return trigger.actions.length === 0 || !isEmpty(trigger[field]);
+          },
           field,
           message: t('Field is required'),
         });
@@ -240,45 +337,46 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
         changedTriggerIndex ?? triggerIndex,
         trigger,
         triggerErrors,
-        changeObj
+        resolveThreshold
       );
     });
 
     // If we have 2 triggers, we need to make sure that the critical and warning
     // alert thresholds are valid (e.g. if critical is above x, warning must be less than x)
-    if (triggers.length === 2) {
-      const criticalTriggerIndex = triggers.findIndex(({label}) => label === 'critical');
-      const warningTriggerIndex = criticalTriggerIndex ^ 1;
-      const criticalTrigger = triggers[criticalTriggerIndex];
-      const warningTrigger = triggers[warningTriggerIndex];
+    const criticalTriggerIndex = triggers.findIndex(({label}) => label === 'critical');
+    const warningTriggerIndex = criticalTriggerIndex ^ 1;
+    const criticalTrigger = triggers[criticalTriggerIndex];
+    const warningTrigger = triggers[warningTriggerIndex];
 
-      const warningThreshold = warningTrigger.alertThreshold ?? 0;
-      const criticalThreshold = criticalTrigger.alertThreshold ?? 0;
+    const isEmptyWarningThreshold = isEmpty(warningTrigger.alertThreshold);
+    const warningThreshold = warningTrigger.alertThreshold ?? 0;
+    const criticalThreshold = criticalTrigger.alertThreshold ?? 0;
 
-      const hasError =
-        criticalTrigger.thresholdType === AlertRuleThresholdType.ABOVE
-          ? warningThreshold > criticalThreshold
-          : warningThreshold < criticalThreshold;
+    const hasError =
+      thresholdType === AlertRuleThresholdType.ABOVE
+        ? warningThreshold > criticalThreshold
+        : warningThreshold < criticalThreshold;
 
-      if (hasError) {
-        [criticalTriggerIndex, warningTriggerIndex].forEach(index => {
-          const otherErrors = triggerErrors.get(index) ?? {};
-          triggerErrors.set(index, {
-            ...otherErrors,
-            alertThreshold:
-              criticalTrigger.thresholdType === AlertRuleThresholdType.BELOW
-                ? t('Warning alert threshold must be greater than critical alert')
-                : t('Warning alert threshold must be less than critical alert'),
-          });
+    if (hasError && !isEmptyWarningThreshold) {
+      [criticalTriggerIndex, warningTriggerIndex].forEach(index => {
+        const otherErrors = triggerErrors.get(index) ?? {};
+        triggerErrors.set(index, {
+          ...otherErrors,
+          alertThreshold:
+            thresholdType === AlertRuleThresholdType.BELOW
+              ? t('Warning threshold must be greater than critical alert')
+              : t('Warning threshold must be less than critical alert'),
         });
-      }
+      });
     }
 
     return triggerErrors;
   }
 
   handleFieldChange = (name: string, value: unknown) => {
-    if (['dataset', 'timeWindow', 'environment', 'aggregate'].includes(name)) {
+    if (
+      ['dataset', 'eventTypes', 'timeWindow', 'environment', 'aggregate'].includes(name)
+    ) {
       this.setState({[name]: value});
     }
   };
@@ -287,13 +385,14 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
   // don't want to update the filter on every input change, just on blurs and
   // searches.
   handleFilterUpdate = (query: string) => {
-    const {organization} = this.props;
+    const {organization, sessionId} = this.props;
 
     trackAnalyticsEvent({
       eventKey: 'alert_builder.filter',
       eventName: 'Alert Builder: Filter',
       query,
       organization_id: organization.id,
+      session_id: sessionId,
     });
 
     this.setState({query});
@@ -324,21 +423,49 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
       return;
     }
 
-    const {organization, params, rule, onSubmitSuccess} = this.props;
+    const {organization, params, rule, onSubmitSuccess, location, sessionId} = this.props;
     const {ruleId} = this.props.params;
+    const {resolveThreshold, triggers, thresholdType, uuid} = this.state;
+
+    // Remove empty warning trigger
+    const sanitizedTriggers = triggers.filter(
+      trigger => trigger.label !== 'warning' || !isEmpty(trigger.alertThreshold)
+    );
 
     // form model has all form state data, however we use local state to keep
     // track of the list of triggers (and actions within triggers)
     try {
       addLoadingMessage();
-      const resp = await addOrUpdateRule(this.api, organization.slug, params.projectId, {
-        ...rule,
-        ...model.getTransformedData(),
-        triggers: this.state.triggers.map(sanitizeTrigger),
-      });
-      addSuccessMessage(ruleId ? t('Updated alert rule') : t('Created alert rule'));
-      if (onSubmitSuccess) {
-        onSubmitSuccess(resp, model);
+      const [resp, , xhr] = await addOrUpdateRule(
+        this.api,
+        organization.slug,
+        params.projectId,
+        {
+          ...rule,
+          ...model.getTransformedData(),
+          triggers: sanitizedTriggers,
+          resolveThreshold: isEmpty(resolveThreshold) ? null : resolveThreshold,
+          thresholdType,
+        },
+        {
+          referrer: location?.query?.referrer,
+          sessionId,
+        }
+      );
+      // if we get a 202 back it means that we have an async task
+      // running to lookup and verify the channel id for Slack.
+      if (xhr && xhr.status === 202) {
+        // if we have a uuid in state, no need to start a new polling cycle
+        if (!uuid) {
+          this.setState({loading: true, uuid: resp.uuid});
+          this.fetchStatus(model);
+          addLoadingMessage(t('Looking through all your channels...'));
+        }
+      } else {
+        addSuccessMessage(ruleId ? t('Updated alert rule') : t('Created alert rule'));
+        if (onSubmitSuccess) {
+          onSubmitSuccess(resp, model);
+        }
       }
     } catch (err) {
       const errors = err?.responseJSON
@@ -352,28 +479,20 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
   };
 
   /**
-   * Add a new trigger
-   */
-  handleAddTrigger = () => {
-    this.setState(({triggers}) => ({
-      triggers: [...triggers, {...createDefaultTrigger(), label: 'warning'}],
-    }));
-  };
-
-  /**
    * Callback for when triggers change
    *
    * Re-validate triggers on every change and reset indicators when no errors
    */
-  handleChangeTriggers = (
-    triggers: Trigger[],
-    triggerIndex?: number,
-    changeObj?: Partial<Trigger>
-  ) => {
+  handleChangeTriggers = (triggers: Trigger[], triggerIndex?: number) => {
     this.setState(state => {
       let triggerErrors = state.triggerErrors;
 
-      const newTriggerErrors = this.validateTriggers(triggers, triggerIndex, changeObj);
+      const newTriggerErrors = this.validateTriggers(
+        triggers,
+        state.thresholdType,
+        state.resolveThreshold,
+        triggerIndex
+      );
       triggerErrors = newTriggerErrors;
 
       if (Array.from(newTriggerErrors).length === 0) {
@@ -382,6 +501,28 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
       return {triggers, triggerErrors};
     });
+  };
+
+  handleThresholdTypeChange = (thresholdType: AlertRuleThresholdType) => {
+    const {triggers} = this.state;
+
+    const triggerErrors = this.validateTriggers(triggers, thresholdType);
+    this.setState(state => ({
+      thresholdType,
+      triggerErrors: new Map([...triggerErrors, ...state.triggerErrors]),
+    }));
+  };
+
+  handleResolveThresholdChange = (
+    resolveThreshold: UnsavedIncidentRule['resolveThreshold']
+  ) => {
+    const {triggers} = this.state;
+
+    const triggerErrors = this.validateTriggers(triggers, undefined, resolveThreshold);
+    this.setState(state => ({
+      resolveThreshold,
+      triggerErrors: new Map([...triggerErrors, ...state.triggerErrors]),
+    }));
   };
 
   handleDeleteRule = async () => {
@@ -411,7 +552,15 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
   renderBody() {
     const {organization, ruleId, rule, params, onSubmitSuccess} = this.props;
-    const {query, timeWindow, triggers, aggregate, environment} = this.state;
+    const {
+      query,
+      timeWindow,
+      triggers,
+      aggregate,
+      environment,
+      thresholdType,
+      resolveThreshold,
+    } = this.state;
 
     const queryWithTypeFilter = `${query} ${this.eventTypeFilter}`.trim();
 
@@ -424,73 +573,94 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
         aggregate={aggregate}
         timeWindow={timeWindow}
         environment={environment}
+        resolveThreshold={resolveThreshold}
+        thresholdType={thresholdType}
       />
     );
 
     return (
       <Access access={['project:write']}>
         {({hasAccess}) => (
-          <Form
-            apiMethod={ruleId ? 'PUT' : 'POST'}
-            apiEndpoint={`/organizations/${organization.slug}/alert-rules/${
-              ruleId ? `${ruleId}/` : ''
-            }`}
-            submitDisabled={!hasAccess}
-            initialData={{
-              name: rule.name || '',
-              dataset: rule.dataset,
-              aggregate: rule.aggregate,
-              query: rule.query || '',
-              timeWindow: rule.timeWindow,
-              environment: rule.environment || null,
-            }}
-            saveOnBlur={false}
-            onSubmit={this.handleSubmit}
-            onSubmitSuccess={onSubmitSuccess}
-            onCancel={this.handleCancel}
-            onFieldChange={this.handleFieldChange}
-            extraButton={
-              !!rule.id ? (
-                <Confirm
+          <Feature features={['metric-alert-gui-filters']} organization={organization}>
+            {({hasFeature}) => (
+              <Form
+                apiMethod={ruleId ? 'PUT' : 'POST'}
+                apiEndpoint={`/organizations/${organization.slug}/alert-rules/${
+                  ruleId ? `${ruleId}/` : ''
+                }`}
+                submitDisabled={!hasAccess}
+                initialData={{
+                  name: rule.name || '',
+                  dataset: rule.dataset,
+                  eventTypes: hasFeature ? rule.eventTypes : undefined,
+                  aggregate: rule.aggregate,
+                  query: rule.query || '',
+                  timeWindow: rule.timeWindow,
+                  environment: rule.environment || null,
+                }}
+                saveOnBlur={false}
+                onSubmit={this.handleSubmit}
+                onSubmitSuccess={onSubmitSuccess}
+                onCancel={this.handleCancel}
+                onFieldChange={this.handleFieldChange}
+                extraButton={
+                  !!rule.id ? (
+                    <Confirm
+                      disabled={!hasAccess}
+                      message={t('Are you sure you want to delete this alert rule?')}
+                      header={t('Delete Alert Rule?')}
+                      priority="danger"
+                      confirmText={t('Delete Rule')}
+                      onConfirm={this.handleDeleteRule}
+                    >
+                      <Button type="button" priority="danger">
+                        {t('Delete Rule')}
+                      </Button>
+                    </Confirm>
+                  ) : null
+                }
+                submitLabel={t('Save Rule')}
+              >
+                {hasFeature ? (
+                  <RuleConditionsFormWithGuiFilters
+                    api={this.api}
+                    projectSlug={params.projectId}
+                    organization={organization}
+                    disabled={!hasAccess}
+                    thresholdChart={chart}
+                    onFilterSearch={this.handleFilterUpdate}
+                  />
+                ) : (
+                  <RuleConditionsForm
+                    api={this.api}
+                    projectSlug={params.projectId}
+                    organization={organization}
+                    disabled={!hasAccess}
+                    thresholdChart={chart}
+                    onFilterSearch={this.handleFilterUpdate}
+                  />
+                )}
+
+                <Triggers
                   disabled={!hasAccess}
-                  message={t('Are you sure you want to delete this alert rule?')}
-                  header={t('Delete Alert Rule?')}
-                  priority="danger"
-                  confirmText={t('Delete Rule')}
-                  onConfirm={this.handleDeleteRule}
-                >
-                  <Button type="button" priority="danger">
-                    {t('Delete Rule')}
-                  </Button>
-                </Confirm>
-              ) : null
-            }
-            submitLabel={t('Save Rule')}
-          >
-            <RuleConditionsForm
-              api={this.api}
-              projectSlug={params.projectId}
-              organization={organization}
-              disabled={!hasAccess}
-              thresholdChart={chart}
-              onFilterSearch={this.handleFilterUpdate}
-            />
+                  projects={this.state.projects}
+                  errors={this.state.triggerErrors}
+                  triggers={triggers}
+                  resolveThreshold={resolveThreshold}
+                  thresholdType={thresholdType}
+                  currentProject={params.projectId}
+                  organization={organization}
+                  ruleId={ruleId}
+                  availableActions={this.state.availableActions}
+                  onChange={this.handleChangeTriggers}
+                  onThresholdTypeChange={this.handleThresholdTypeChange}
+                  onResolveThresholdChange={this.handleResolveThresholdChange}
+                />
 
-            <Triggers
-              disabled={!hasAccess}
-              projects={this.state.projects}
-              errors={this.state.triggerErrors}
-              triggers={triggers}
-              currentProject={params.projectId}
-              organization={organization}
-              ruleId={ruleId}
-              availableActions={this.state.availableActions}
-              onChange={this.handleChangeTriggers}
-              onAdd={this.handleAddTrigger}
-            />
-
-            <RuleNameForm disabled={!hasAccess} />
-          </Form>
+                <RuleNameForm disabled={!hasAccess} />
+              </Form>
+            )}
+          </Feature>
         )}
       </Access>
     );
@@ -499,15 +669,3 @@ class RuleFormContainer extends AsyncComponent<Props, State> {
 
 export {RuleFormContainer};
 export default withProject(RuleFormContainer);
-
-/**
- * We need a default value of empty string for resolveThreshold or else React complains
- * so we also need to remove it if we do not have a value. Note `0` is a valid value.
- */
-function sanitizeTrigger({resolveThreshold, ...trigger}: Trigger): Trigger {
-  return {
-    ...trigger,
-    resolveThreshold:
-      defined(resolveThreshold) && resolveThreshold !== '' ? resolveThreshold : null,
-  };
-}

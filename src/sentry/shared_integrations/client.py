@@ -1,7 +1,6 @@
 from __future__ import absolute_import
 
 import logging
-import json
 import requests
 import sentry_sdk
 import six
@@ -13,7 +12,7 @@ from bs4 import BeautifulSoup
 from django.utils.functional import cached_property
 from requests.exceptions import ConnectionError, Timeout, HTTPError
 from sentry.http import build_session
-from sentry.utils import metrics
+from sentry.utils import metrics, json
 from sentry.utils.hashlib import md5_text
 from sentry.utils.decorators import classproperty
 
@@ -45,6 +44,8 @@ class BaseApiResponse(object):
 
     @classmethod
     def from_response(self, response, allow_text=False):
+        if response.request.method == "HEAD":
+            return BaseApiResponse(response.headers, response.status_code)
         # XXX(dcramer): this doesnt handle leading spaces, but they're not common
         # paths so its ok
         if response.text.startswith(u"<?xml"):
@@ -155,7 +156,11 @@ class BaseApiClient(object):
             tags={self.integration_type: self.name, "status": code},
         )
 
-        span.set_http_status(code)
+        try:
+            span.set_http_status(int(code))
+        except ValueError:
+            span.set_status(code)
+
         span.set_tag(self.integration_type, self.name)
 
         extra = {
@@ -200,7 +205,6 @@ class BaseApiClient(object):
             timeout = 30
 
         full_url = self.build_url(path)
-        session = build_session()
 
         metrics.incr(
             u"%s.http_request" % self.datadog_prefix,
@@ -208,23 +212,35 @@ class BaseApiClient(object):
             tags={self.integration_type: self.name},
         )
 
-        with sentry_sdk.start_span(
+        try:
+            with sentry_sdk.configure_scope() as scope:
+                parent_span_id = scope.span.span_id
+                trace_id = scope.span.trace_id
+        except AttributeError:
+            parent_span_id = None
+            trace_id = None
+
+        with sentry_sdk.start_transaction(
             op=u"{}.http".format(self.integration_type),
-            transaction=u"{}.http_response.{}".format(self.integration_type, self.name),
+            name=u"{}.http_response.{}".format(self.integration_type, self.name),
+            parent_span_id=parent_span_id,
+            trace_id=trace_id,
+            sampled=True,
         ) as span:
             try:
-                resp = getattr(session, method.lower())(
-                    url=full_url,
-                    headers=headers,
-                    json=data if json else None,
-                    data=data if not json else None,
-                    params=params,
-                    auth=auth,
-                    verify=self.verify_ssl,
-                    allow_redirects=allow_redirects,
-                    timeout=timeout,
-                )
-                resp.raise_for_status()
+                with build_session() as session:
+                    resp = getattr(session, method.lower())(
+                        url=full_url,
+                        headers=headers,
+                        json=data if json else None,
+                        data=data if not json else None,
+                        params=params,
+                        auth=auth,
+                        verify=self.verify_ssl,
+                        allow_redirects=allow_redirects,
+                        timeout=timeout,
+                    )
+                    resp.raise_for_status()
             except ConnectionError as e:
                 self.track_response_data("connection_error", span, e)
                 raise ApiHostError.from_exception(e)
@@ -279,3 +295,18 @@ class BaseApiClient(object):
 
     def put(self, *args, **kwargs):
         return self.request("PUT", *args, **kwargs)
+
+    def head(self, *args, **kwargs):
+        return self.request("HEAD", *args, **kwargs)
+
+    def head_cached(self, path, *args, **kwargs):
+        query = ""
+        if kwargs.get("params", None):
+            query = json.dumps(kwargs.get("params"), sort_keys=True)
+        key = self.get_cache_prefix() + md5_text(self.build_url(path), query).hexdigest()
+
+        result = cache.get(key)
+        if result is None:
+            result = self.head(path, *args, **kwargs)
+            cache.set(key, result, self.cache_time)
+        return result

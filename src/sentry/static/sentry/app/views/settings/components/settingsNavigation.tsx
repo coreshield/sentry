@@ -1,8 +1,10 @@
 import React from 'react';
+import styled from '@emotion/styled';
 import * as Sentry from '@sentry/react';
 
+import space from 'app/styles/space';
 import SettingsNavigationGroup from 'app/views/settings/components/settingsNavigationGroup';
-import {NavigationSection, NavigationProps} from 'app/views/settings/types';
+import {NavigationProps, NavigationSection} from 'app/views/settings/types';
 
 type DefaultProps = {
   /**
@@ -13,6 +15,10 @@ type DefaultProps = {
    * Additional navigation elements driven from hooks
    */
   hooks: React.ReactElement[];
+  /**
+   * How far from the top of the page should the navigation be when stickied.
+   */
+  stickyTop: string;
 };
 
 type Props = DefaultProps &
@@ -27,6 +33,7 @@ class SettingsNavigation extends React.Component<Props> {
   static defaultProps: DefaultProps = {
     hooks: [],
     hookConfigs: [],
+    stickyTop: '70px',
   };
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
@@ -40,18 +47,36 @@ class SettingsNavigation extends React.Component<Props> {
   }
 
   render() {
-    const {navigationObjects, hooks, hookConfigs, ...otherProps} = this.props;
+    const {navigationObjects, hooks, hookConfigs, stickyTop, ...otherProps} = this.props;
     const navWithHooks = navigationObjects.concat(hookConfigs);
 
     return (
-      <div>
+      <PositionStickyWrapper stickyTop={stickyTop}>
         {navWithHooks.map(config => (
           <SettingsNavigationGroup key={config.name} {...otherProps} {...config} />
         ))}
         {hooks.map((Hook, i) => React.cloneElement(Hook, {key: `hook-${i}`}))}
-      </div>
+      </PositionStickyWrapper>
     );
   }
 }
+
+const PositionStickyWrapper = styled('div')<{stickyTop: string}>`
+  padding: ${space(4)};
+  padding-right: ${space(2)};
+
+  @media (min-width: ${p => p.theme.breakpoints[0]}) {
+    position: sticky;
+    top: ${p => p.stickyTop};
+    overflow: scroll;
+    height: calc(100vh - ${p => p.stickyTop});
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
+  }
+`;
 
 export default SettingsNavigation;

@@ -1,11 +1,12 @@
-import {t} from 'app/locale';
-import {Incident, IncidentStats} from 'app/views/alerts/types';
-import {Project} from 'app/types';
 import Link from 'app/components/links/link';
+import {t} from 'app/locale';
+import {Project} from 'app/types';
 import {DisplayModes} from 'app/utils/discover/types';
 import {tokenizeSearch} from 'app/utils/tokenizeSearch';
+import {Incident, IncidentStats} from 'app/views/alerts/types';
+import {getStartEndFromStats} from 'app/views/alerts/utils';
+import {getIncidentDiscoverUrl} from 'app/views/alerts/utils/getIncidentDiscoverUrl';
 import {transactionSummaryRouteWithQuery} from 'app/views/performance/transactionSummary/utils';
-import {getIncidentDiscoverUrl, getStartEndFromStats} from 'app/views/alerts/utils';
 
 import {Dataset} from './types';
 
@@ -150,7 +151,9 @@ function makeGenericTransactionCta(opts: {
   }
 
   const query = tokenizeSearch(incident.discoverQuery ?? '');
-  const transaction = query.transaction?.find(filter => !filter.includes('*'));
+  const transaction = query
+    .getTagValues('transaction')
+    ?.find(filter => !filter.includes('*'));
 
   // CASE 1
   if (transaction !== undefined) {
@@ -159,6 +162,9 @@ function makeGenericTransactionCta(opts: {
     const summaryUrl = transactionSummaryRouteWithQuery({
       orgSlug,
       transaction,
+      projectID: projects
+        .filter(({slug}) => incident.projects.includes(slug))
+        .map(({id}) => id),
       query: {...period},
     });
 
@@ -207,7 +213,9 @@ function makeFailureRateCta({orgSlug, incident, projects, stats}: PresetCtaOpts)
   }
 
   const query = tokenizeSearch(incident.discoverQuery ?? '');
-  const transaction = query.transaction?.find(filter => !filter.includes('*'));
+  const transaction = query
+    .getTagValues('transaction')
+    ?.find(filter => !filter.includes('*'));
 
   const extraQueryParams =
     transaction !== undefined

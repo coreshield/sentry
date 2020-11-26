@@ -4,141 +4,248 @@ import CHART_PALETTE from 'app/constants/chartPalette';
 
 const colors = {
   white: '#FFFFFF',
+  black: '#1D1127',
 
-  gray100: '#FAF9FB',
-  gray200: '#F2F0F5',
-  gray300: '#E7E1EC',
-  gray400: '#C6BECF',
-  gray500: '#9585A3',
-  gray600: '#645574',
-  gray700: '#4A3E56',
-  gray800: '#302839',
+  gray100: '#E7E1EC',
+  gray200: '#C6BECF',
+  gray300: '#9386A0',
+  gray400: '#776589',
+  gray500: '#2B1D38',
 
-  yellow100: '#FFFDF5',
-  yellow200: '#FFF8C4',
-  yellow300: '#FFF492',
-  yellow400: '#FFC227',
-  yellow500: '#E2A301',
+  yellow100: '#FDE8b4',
+  yellow200: '#FFD577',
+  yellow300: '#FFC227',
 
-  purple100: '#FAF5FF',
-  purple200: '#E7D3FF',
-  purple300: '#B9A2FD',
-  purple400: '#6C5FC7',
-  purple500: '#3E2C73',
+  purple100: '#D4D1EC',
+  purple200: '#A396DA',
+  purple300: '#6C5FC7',
 
-  blue100: '#F5F9FF',
-  blue200: '#AFC7EE',
-  blue300: '#7199DD',
-  blue400: '#3D74DB',
-  blue500: '#194591',
+  blue100: '#D2DFF7',
+  blue200: '#92A8EA',
+  blue300: '#3D74DB',
 
-  orange100: '#FCF8F7',
+  orange100: '#FFF1ED',
   orange200: '#F9C7B9',
   orange300: '#F69C7D',
   orange400: '#FF7738',
   orange500: '#BA4A23',
 
-  red100: '#FFF5F7',
-  red200: '#F4B1BB',
-  red300: '#EA7282',
-  red400: '#FA4747',
-  red500: '#AC1025',
+  red100: '#FCC6C8',
+  red200: '#FD918F',
+  red300: '#F55459',
 
-  green100: '#F5FFFB',
-  green200: '#C0F3DD',
-  green300: '#8FE7BF',
-  green400: '#4DC771',
-  green500: '#1C8952',
+  green100: '#B6ECDF',
+  green200: '#7DD6BE',
+  green300: '#33BF9E',
 
-  pink100: '#FFF5F9',
-  pink200: '#FFCEE4',
-  pink300: '#FF99BC',
-  pink400: '#E1567C',
-  pink500: '#902D4C',
+  pink100: '#FDC9D7',
+  pink200: '#FA93AB',
+  pink300: '#F05781',
+} as const;
 
-  get borderLighter() {
-    return colors.gray100;
-  },
+/**
+ * This is not in the gray palette because it should [generally] only be used for backgrounds
+ */
+const backgroundSecondary = '#FAF9FB';
 
-  get borderLight() {
-    return colors.gray300;
-  },
+const aliases = {
+  /**
+   * Primary text color
+   */
+  textColor: colors.gray500,
 
-  get borderDark() {
-    return colors.gray400;
-  },
+  /**
+   * Text that should not have as much emphasis
+   */
+  subText: colors.gray400,
 
-  borderRadius: '4px',
-  borderRadiusBottom: '0 0 4px 4px',
-  borderRadiusTop: '4px 4px 0 0',
-  headerSelectorRowHeight: 44,
-  headerSelectorLabelHeight: 28,
+  /**
+   * Background for the main content area of a page?
+   */
+  bodyBackground: backgroundSecondary,
 
-  dropShadowLightest: '0 1px 2px rgba(0, 0, 0, 0.04)',
-  dropShadowLight: '0 2px 0 rgba(37, 11, 54, 0.04)',
-  dropShadowHeavy: '0 1px 4px 1px rgba(47,40,55,0.08), 0 4px 16px 0 rgba(47,40,55,0.12)',
+  /**
+   * Primary background color
+   */
+  background: colors.white,
+
+  /**
+   * Secondary background color used as a slight contrast against primary background
+   */
+  backgroundSecondary,
+
+  /**
+   * Background for the header of a page
+   */
+  headerBackground: colors.white,
+
+  /**
+   * Primary border color
+   */
+  border: colors.gray200,
+
+  /**
+   * Inner borders, e.g. borders inside of a grid
+   */
+  innerBorder: colors.gray100,
+
+  /**
+   * A color that denotes a "success", or something good
+   */
+  success: colors.green300,
+
+  /**
+   * A color that denotes an error, or something that is wrong
+   */
+  error: colors.red300,
+
+  /**
+   * A color that indicates something is disabled where user can not interact or use
+   * it in the usual manner (implies that there is an "enabled" state)
+   */
+  disabled: colors.gray200,
+
+  /**
+   * Indicates that something is "active" or "selected"
+   */
+  active: colors.pink300,
+
+  /**
+   * Inactive
+   */
+  inactive: colors.gray200,
+
+  /**
+   * Link color indicates that something is clickable
+   */
+  linkColor: colors.purple300,
+
+  /**
+   * ...
+   */
+  secondaryButton: colors.purple300,
+
+  /**
+   * Gradient for sidebar
+   */
+  sidebarGradient:
+    'linear-gradient(294.17deg,#2f1937 35.57%,#452650 92.42%,#452650 92.42%)',
+
+  /**
+   * Form placeholder text color
+   */
+  formPlaceholder: colors.gray200,
+
+  /**
+   * Default form text color
+   */
+  formText: colors.gray500,
+
+  /**
+   *
+   */
+  rowBackground: backgroundSecondary,
+
+  /**
+   * Color of lines that flow across the background of the chart to indicate axes levels
+   * (This should only be used for yAxis)
+   */
+  chartLineColor: colors.gray100,
+
+  /**
+   * Color for chart label text
+   */
+  chartLabel: colors.gray200,
 } as const;
 
 const warning = {
-  background: colors.yellow500,
-  backgroundLight: colors.yellow100,
-  border: colors.yellow400,
-  iconColor: colors.yellow500,
+  background: colors.yellow300,
+  backgroundLight: color(colors.yellow100).alpha(0.3).string(),
+  border: colors.yellow300,
+  iconColor: colors.yellow300,
 } as const;
 
 const alert = {
   muted: {
-    background: colors.gray400,
-    backgroundLight: colors.gray100,
-    border: colors.borderDark,
+    background: colors.gray200,
+    backgroundLight: aliases.backgroundSecondary,
+    border: aliases.border,
     iconColor: 'inherit',
   },
   info: {
-    background: colors.blue400,
-    backgroundLight: colors.blue100,
+    background: colors.blue300,
+    backgroundLight: color(colors.blue100).alpha(0.3).string(),
     border: colors.blue200,
-    iconColor: colors.blue400,
+    iconColor: colors.blue300,
   },
   warning,
   warn: warning,
   success: {
-    background: colors.green400,
-    backgroundLight: colors.green100,
-    border: colors.green300,
-    iconColor: colors.green500,
+    background: colors.green300,
+    backgroundLight: color(colors.green100).alpha(0.3).string(),
+    border: colors.green200,
+    iconColor: colors.green300,
   },
   error: {
-    background: colors.red400,
-    backgroundLight: colors.red100,
+    background: colors.red300,
+    backgroundLight: color(colors.red100).alpha(0.3).string(),
     border: colors.red200,
-    iconColor: colors.red400,
+    iconColor: colors.red300,
     textLight: colors.red200,
   },
 } as const;
 
 const badge = {
   alpha: {
-    background: `linear-gradient(90deg, ${colors.orange300}, ${colors.orange500})`,
+    background: colors.orange400,
     indicatorColor: colors.orange400,
   },
   beta: {
-    background: `linear-gradient(90deg, ${colors.pink400}, ${colors.purple400})`,
-    indicatorColor: colors.purple400,
+    background: `linear-gradient(90deg, ${colors.pink300}, ${colors.purple300})`,
+    indicatorColor: colors.purple300,
   },
   new: {
-    background: `linear-gradient(90deg, ${colors.green400}, ${colors.green500})`,
-    indicatorColor: colors.green400,
+    background: colors.green300,
+    indicatorColor: colors.green300,
   },
 };
 
-const aliases = {
-  textColor: colors.gray800,
-  success: colors.green400,
-  error: colors.red400,
-  disabled: colors.borderDark,
-} as const;
+const tag = {
+  default: {
+    background: colors.gray100,
+    iconColor: colors.purple300,
+  },
+  promotion: {
+    background: colors.orange100,
+    iconColor: colors.orange400,
+  },
+  highlight: {
+    background: colors.purple100,
+    iconColor: colors.purple300,
+  },
+  warning: {
+    background: colors.yellow100,
+    iconColor: colors.yellow300,
+  },
+  success: {
+    background: colors.green100,
+    iconColor: colors.green300,
+  },
+  error: {
+    background: colors.red100,
+    iconColor: colors.red300,
+  },
+  info: {
+    background: colors.blue100,
+    iconColor: colors.blue300,
+  },
+  white: {
+    background: colors.white,
+    iconColor: colors.gray500,
+  },
+};
 
-const button = {
+const generateButtonTheme = alias => ({
   borderRadius: '3px',
 
   default: {
@@ -148,46 +255,38 @@ const button = {
     backgroundActive: colors.white,
     border: '#d8d2de',
     borderActive: '#c9c0d1',
-    focusShadow: color(colors.gray300)
-      .alpha(0.5)
-      .string(),
+    focusShadow: color(colors.gray200).alpha(0.5).string(),
   },
   primary: {
     color: colors.white,
     colorActive: colors.white,
-    background: colors.purple400,
+    background: colors.purple300,
     backgroundActive: '#4e3fb4',
     border: '#3d328e',
     borderActive: '#352b7b',
-    focusShadow: color(colors.purple400)
-      .alpha(0.4)
-      .string(),
+    focusShadow: color(colors.purple300).alpha(0.4).string(),
   },
   success: {
     color: colors.white,
     colorActive: colors.white,
     background: '#3fa372',
-    backgroundActive: colors.green400,
+    backgroundActive: colors.green300,
     border: '#7ccca5',
     borderActive: '#7ccca5',
-    focusShadow: color(colors.green400)
-      .alpha(0.5)
-      .string(),
+    focusShadow: color(colors.green300).alpha(0.5).string(),
   },
   danger: {
     color: colors.white,
     colorActive: colors.white,
-    background: colors.red400,
+    background: colors.red300,
     backgroundActive: '#bf2a1d',
     border: '#bf2a1d',
     borderActive: '#7d1c13',
-    focusShadow: color(colors.red400)
-      .alpha(0.5)
-      .string(),
+    focusShadow: color(colors.red300).alpha(0.5).string(),
   },
   link: {
-    color: colors.blue400,
-    colorActive: colors.blue400,
+    color: colors.blue300,
+    colorActive: colors.blue300,
     background: 'transparent',
     border: false,
     borderActive: false,
@@ -195,15 +294,15 @@ const button = {
     focusShadow: false,
   },
   disabled: {
-    color: aliases.disabled,
-    colorActive: aliases.disabled,
+    color: alias.disabled,
+    colorActive: alias.disabled,
     border: '#e3e5e6',
     borderActive: '#e3e5e6',
     background: colors.white,
     backgroundActive: colors.white,
     focusShadow: false,
   },
-} as const;
+});
 
 const iconSizes = {
   xs: '12px',
@@ -211,10 +310,11 @@ const iconSizes = {
   md: '20px',
   lg: '24px',
   xl: '32px',
+  xxl: '72px',
 };
 
-const theme = {
-  breakpoints: ['768px', '992px', '1200px', '1440px', '2560px'],
+const commonTheme = {
+  breakpoints: ['800px', '992px', '1200px', '1440px', '2560px'],
 
   ...colors,
 
@@ -240,8 +340,8 @@ const theme = {
     },
     traceView: {
       spanTreeToggler: 900,
-      rowInfoMessage: 900,
       dividerLine: 909,
+      rowInfoMessage: 910,
       minimapContainer: 999,
     },
 
@@ -260,6 +360,9 @@ const theme = {
     },
 
     globalSelectionHeader: 1009,
+
+    settingsSidebarNavMask: 1017,
+    settingsSidebarNav: 1018,
     sidebarPanel: 1019,
     sidebar: 1020,
     orgAndUserMenu: 1030,
@@ -279,6 +382,16 @@ const theme = {
 
   grid: 8,
 
+  borderRadius: '4px',
+  borderRadiusBottom: '0 0 4px 4px',
+  borderRadiusTop: '4px 4px 0 0',
+  headerSelectorRowHeight: 44,
+  headerSelectorLabelHeight: 28,
+
+  dropShadowLightest: '0 1px 2px rgba(0, 0, 0, 0.04)',
+  dropShadowLight: '0 2px 0 rgba(37, 11, 54, 0.04)',
+  dropShadowHeavy: '0 1px 4px 1px rgba(47,40,55,0.08), 0 4px 16px 0 rgba(47,40,55,0.12)',
+
   // Relative font sizes
   fontSizeRelativeSmall: '0.9em',
 
@@ -295,7 +408,7 @@ const theme = {
     maxCrumbWidth: '240px',
 
     containerWidth: '1440px',
-    headerHeight: '115px',
+    headerHeight: '69px',
     sidebarWidth: '220px',
   },
 
@@ -313,17 +426,14 @@ const theme = {
 
   text: {
     family: '"Rubik", "Avenir Next", sans-serif',
-    familyMono: 'Monaco, Consolas, "Courier New", monospace',
+    familyMono: '"IBM Plex", Monaco, Consolas, "Courier New", monospace',
     lineHeightHeading: '1.15',
     lineHeightBody: '1.4',
   },
 
-  // Aliases
-  ...aliases,
-
   alert,
   badge,
-  button,
+  tag,
 
   charts: {
     colors: CHART_PALETTE[CHART_PALETTE.length - 1],
@@ -332,7 +442,7 @@ const theme = {
     getColorPalette: (length: number) =>
       CHART_PALETTE[Math.min(CHART_PALETTE.length - 1, length + 1)],
 
-    previousPeriod: colors.gray400,
+    previousPeriod: colors.gray200,
     symbolSize: 6,
   },
 
@@ -352,8 +462,48 @@ const theme = {
   space: [0, 8, 16, 20, 30],
 } as const;
 
-export type Theme = typeof theme;
+const darkAliases = {
+  bodyBackground: colors.black,
+  headerBackground: colors.gray500,
+  background: colors.black,
+  backgroundSecondary: colors.gray500,
+  border: colors.gray400,
+  innerBorder: colors.gray500,
+  textColor: colors.white,
+  subText: colors.gray200,
+  linkColor: colors.purple200,
+  disabled: colors.gray200,
+  active: colors.pink300,
+  inactive: colors.gray200,
+  error: colors.red300,
+  success: colors.green300,
+  secondaryButton: colors.purple200,
+  sidebarGradient: 'linear-gradient(6.01deg, #0A090F -8.44%, #1B0921 85.02%)',
+  formPlaceholder: colors.gray400,
+  formText: colors.white,
+  rowBackground: colors.gray500,
+  chartLineColor: colors.gray500,
+  chartLabel: colors.gray400,
+} as const;
+
+const theme = {
+  ...commonTheme,
+  ...aliases,
+  button: generateButtonTheme(aliases),
+} as const;
+
+export const darkTheme = {
+  ...commonTheme,
+  ...darkAliases,
+  button: generateButtonTheme(darkAliases),
+} as const;
+
+export type Theme = typeof theme | typeof darkTheme;
 export type Color = keyof typeof colors;
 export type IconSize = keyof typeof iconSizes;
+export type Aliases = typeof aliases;
 
 export default theme;
+
+// This should never be used directly (except in storybook)
+export {aliases};

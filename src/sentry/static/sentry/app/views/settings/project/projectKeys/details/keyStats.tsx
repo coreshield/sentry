@@ -1,13 +1,15 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 
 import {Client} from 'app/api';
-import {Panel, PanelBody, PanelHeader} from 'app/components/panels';
-import {t} from 'app/locale';
-import EmptyMessage from 'app/views/settings/components/emptyMessage';
+import MiniBarChart from 'app/components/charts/miniBarChart';
 import LoadingError from 'app/components/loadingError';
+import {Panel, PanelBody, PanelHeader} from 'app/components/panels';
 import Placeholder from 'app/components/placeholder';
-import StackedBarChart from 'app/components/stackedBarChart';
+import {t} from 'app/locale';
+import {Series} from 'app/types/echarts';
+import theme from 'app/utils/theme';
+import EmptyMessage from 'app/views/settings/components/emptyMessage';
 
 type Props = {
   api: Client;
@@ -23,19 +25,28 @@ type Props = {
   'params'
 >;
 
-const getInitialState = () => {
+type State = {
+  since: number;
+  until: number;
+  loading: boolean;
+  error: boolean;
+  series: Series[];
+  emptyStats: boolean;
+};
+
+const getInitialState = (): State => {
   const until = Math.floor(new Date().getTime() / 1000);
   return {
     since: until - 3600 * 24 * 30,
     until,
     loading: true,
     error: false,
-    stats: null,
+    series: [],
     emptyStats: false,
   };
 };
 
-class KeyStats extends React.Component<Props> {
+class KeyStats extends React.Component<Props, State> {
   state = getInitialState();
 
   componentDidMount() {
@@ -52,17 +63,27 @@ class KeyStats extends React.Component<Props> {
       },
       success: data => {
         let emptyStats = true;
-        const stats = data.map(p => {
+        const dropped: Series['data'] = [];
+        const accepted: Series['data'] = [];
+        data.forEach(p => {
           if (p.total) {
             emptyStats = false;
           }
-          return {
-            x: p.ts,
-            y: [p.accepted, p.dropped],
-          };
+          dropped.push({name: p.ts * 1000, value: p.dropped});
+          accepted.push({name: p.ts * 1000, value: p.accepted});
         });
+        const series = [
+          {
+            seriesName: t('Accepted'),
+            data: accepted,
+          },
+          {
+            seriesName: t('Rate Limited'),
+            data: dropped,
+          },
+        ];
         this.setState({
-          stats,
+          series,
           emptyStats,
           error: false,
           loading: false,
@@ -74,32 +95,6 @@ class KeyStats extends React.Component<Props> {
     });
   };
 
-  renderTooltip = (point, _pointIdx, chart) => {
-    const timeLabel = chart.getTimeLabel(point);
-    const [accepted, dropped, filtered] = point.y;
-
-    return (
-      <div style={{width: '150px'}}>
-        <div className="time-label">{timeLabel}</div>
-        <div className="value-label">
-          {accepted.toLocaleString()} accepted
-          {dropped > 0 && (
-            <React.Fragment>
-              <br />
-              {dropped.toLocaleString()} rate limited
-            </React.Fragment>
-          )}
-          {filtered > 0 && (
-            <React.Fragment>
-              <br />
-              {filtered.toLocaleString()} filtered
-            </React.Fragment>
-          )}
-        </div>
-      </div>
-    );
-  };
-
   render() {
     if (this.state.error) {
       return <LoadingError onRetry={this.fetchData} />;
@@ -108,19 +103,17 @@ class KeyStats extends React.Component<Props> {
     return (
       <Panel>
         <PanelHeader>{t('Key usage in the last 30 days (by day)')}</PanelHeader>
-        <PanelBody>
+        <PanelBody withPadding>
           {this.state.loading ? (
             <Placeholder height="150px" />
           ) : !this.state.emptyStats ? (
-            <StackedBarChart
-              points={this.state.stats}
+            <MiniBarChart
+              isGroupedByDate
+              series={this.state.series}
               height={150}
-              label="events"
-              barClasses={['accepted', 'rate-limited']}
-              minHeights={[1, 0]}
-              className="standard-barchart"
-              style={{border: 'none'}}
-              tooltip={this.renderTooltip}
+              colors={[theme.gray200, theme.red300]}
+              stacked
+              labelYAxisExtents
             />
           ) : (
             <EmptyMessage

@@ -1,17 +1,18 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 import styled from '@emotion/styled';
 
-import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
-import {ProjectKey} from 'app/views/settings/project/projectKeys/types';
-import {t} from 'app/locale';
 import Feature from 'app/components/acl/feature';
 import FeatureDisabled from 'app/components/acl/featureDisabled';
-import Form from 'app/views/settings/components/forms/form';
-import FormField from 'app/views/settings/components/forms/formField';
+import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
+import {IconFlag} from 'app/icons';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
 import InputControl from 'app/views/settings/components/forms/controls/input';
 import RangeSlider from 'app/views/settings/components/forms/controls/rangeSlider';
-import space from 'app/styles/space';
+import Form from 'app/views/settings/components/forms/form';
+import FormField from 'app/views/settings/components/forms/formField';
+import {ProjectKey} from 'app/views/settings/project/projectKeys/types';
 
 const RATE_LIMIT_FORMAT_MAP = new Map([
   [0, 'None'],
@@ -90,7 +91,7 @@ class KeyRateLimitsForm extends React.Component<Props> {
               <PanelHeader>{t('Rate Limits')}</PanelHeader>
 
               <PanelBody>
-                <PanelAlert type="info" icon="icon-circle-exclamation">
+                <PanelAlert type="info" icon={<IconFlag size="md" />}>
                   {t(
                     `Rate limits provide a flexible way to manage your event
                       volume. If you have a noisy project or environment you

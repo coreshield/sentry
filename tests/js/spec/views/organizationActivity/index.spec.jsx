@@ -1,15 +1,15 @@
 import React from 'react';
 
-import {mount} from 'sentry-test/enzyme';
+import {mountWithTheme} from 'sentry-test/enzyme';
 import {initializeOrg} from 'sentry-test/initializeOrg';
 
 import OrganizationActivity from 'app/views/organizationActivity';
 
-describe('OrganizationUserFeedback', function() {
+describe('OrganizationActivity', function () {
   const {router, organization, routerContext} = initializeOrg();
   let params = {};
 
-  beforeEach(function() {
+  beforeEach(function () {
     MockApiClient.addMockResponse({
       url: '/organizations/org-slug/activity/',
       body: [
@@ -29,20 +29,32 @@ describe('OrganizationUserFeedback', function() {
     };
   });
 
-  it('renders', function() {
-    const wrapper = mount(<OrganizationActivity {...params} />, routerContext);
+  it('renders', function () {
+    const wrapper = mountWithTheme(<OrganizationActivity {...params} />, routerContext);
 
     expect(wrapper.find('ActivityItem')).toHaveLength(2);
   });
 
-  it('renders empty', function() {
+  it('renders empty', function () {
     MockApiClient.addMockResponse({
       url: '/organizations/org-slug/activity/',
       body: [],
     });
-    const wrapper = mount(<OrganizationActivity {...params} />, routerContext);
+    const wrapper = mountWithTheme(<OrganizationActivity {...params} />, routerContext);
 
     expect(wrapper.find('ActivityItem')).toHaveLength(0);
-    expect(wrapper.find('EmptyMessage')).toHaveLength(1);
+    expect(wrapper.find('EmptyStateWarning')).toHaveLength(1);
+  });
+
+  it('renders not found', function () {
+    MockApiClient.addMockResponse({
+      url: '/organizations/org-slug/activity/',
+      body: [],
+      statusCode: 404,
+    });
+    const wrapper = mountWithTheme(<OrganizationActivity {...params} />, routerContext);
+
+    expect(wrapper.find('ActivityItem')).toHaveLength(0);
+    expect(wrapper.find('EmptyStateWarning')).toHaveLength(1);
   });
 });

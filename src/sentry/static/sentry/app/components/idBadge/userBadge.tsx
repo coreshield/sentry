@@ -1,29 +1,29 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {AvatarUser} from 'app/types';
 import UserAvatar from 'app/components/avatar/userAvatar';
+import SentryTypes from 'app/sentryTypes';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
 import space from 'app/styles/space';
-import SentryTypes from 'app/sentryTypes';
+import {AvatarUser} from 'app/types';
 
 type Props = {
-  avatarSize: UserAvatar['props']['size'];
-  className?: string;
-  displayName?: string;
+  avatarSize?: UserAvatar['props']['size'];
+  displayName?: React.ReactNode;
   displayEmail?: string;
   user?: AvatarUser;
   hideEmail?: boolean;
+  className?: string;
 };
 
 const UserBadge = ({
-  className,
+  avatarSize = 24,
+  hideEmail = false,
   displayName,
   displayEmail,
-  avatarSize,
-  hideEmail = false,
   user,
+  className,
 }: Props) => {
   const title =
     displayName ||
@@ -34,7 +34,8 @@ const UserBadge = ({
         user.ipAddress ||
         // Because this can be used to render EventUser models, or User *interface*
         // objects from serialized Event models. we try both ipAddress and ip_address.
-        user.ip_address));
+        user.ip_address ||
+        user.id));
 
   return (
     <StyledUserBadge className={className}>
@@ -73,7 +74,7 @@ const StyledNameAndEmail = styled('div')`
 const StyledEmail = styled('div')`
   font-size: 0.875em;
   margin-top: ${space(0.25)};
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
   ${overflowEllipsis};
 `;
 

@@ -1,24 +1,24 @@
-import debounce from 'lodash/debounce';
-import {withRouter} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
+import {withRouter} from 'react-router';
 import styled from '@emotion/styled';
+import debounce from 'lodash/debounce';
+import PropTypes from 'prop-types';
 
 import {addErrorMessage} from 'app/actionCreators/indicator';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
 import {navigateTo} from 'app/actionCreators/navigation';
-import {t} from 'app/locale';
-import ApiSource from 'app/components/search/sources/apiSource';
 import AutoComplete from 'app/components/autoComplete';
-import CommandSource from 'app/components/search/sources/commandSource';
-import FormSource from 'app/components/search/sources/formSource';
 import LoadingIndicator from 'app/components/loadingIndicator';
-import RouteSource from 'app/components/search/sources/routeSource';
 import SearchResult from 'app/components/search/searchResult';
 import SearchResultWrapper from 'app/components/search/searchResultWrapper';
 import SearchSources from 'app/components/search/sources';
-import replaceRouterParams from 'app/utils/replaceRouterParams';
+import ApiSource from 'app/components/search/sources/apiSource';
+import CommandSource from 'app/components/search/sources/commandSource';
+import FormSource from 'app/components/search/sources/formSource';
+import RouteSource from 'app/components/search/sources/routeSource';
+import {t} from 'app/locale';
 import space from 'app/styles/space';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
+import replaceRouterParams from 'app/utils/replaceRouterParams';
 
 // "Omni" search
 class Search extends React.Component {
@@ -60,6 +60,10 @@ class Search extends React.Component {
     searchOptions: PropTypes.object,
     // Passed to the underlying AutoComplete component
     closeOnSelect: PropTypes.bool,
+    /**
+     * Adds a footer below the results when the search is complete
+     */
+    resultFooter: PropTypes.node,
   };
 
   static defaultProps = {
@@ -154,18 +158,15 @@ class Search extends React.Component {
       throw new Error('Invalid `renderItem`');
     }
 
-    return React.cloneElement(
-      renderItem({
-        item,
-        matches,
-        index,
-        highlighted,
-      }),
-      {
-        ...itemProps,
-        key,
-      }
-    );
+    const renderedItem = renderItem({
+      item,
+      matches,
+      index,
+      highlighted,
+      itemProps,
+    });
+
+    return React.cloneElement(renderedItem, {key});
   };
 
   render() {
@@ -178,6 +179,7 @@ class Search extends React.Component {
       renderInput,
       sources,
       closeOnSelect,
+      resultFooter,
     } = this.props;
 
     return (
@@ -233,6 +235,9 @@ class Search extends React.Component {
                       {!isLoading && !hasAnyResults && (
                         <EmptyItem>{t('No results found')}</EmptyItem>
                       )}
+                      {!isLoading && resultFooter && (
+                        <ResultFooter>{resultFooter}</ResultFooter>
+                      )}
                     </DropdownBox>
                   )}
                 </SearchSources>
@@ -248,19 +253,27 @@ class Search extends React.Component {
 export default withRouter(Search);
 
 const DropdownBox = styled('div')`
-  background: #fff;
-  border: 1px solid ${p => p.theme.borderDark};
+  background: ${p => p.theme.background};
+  border: 1px solid ${p => p.theme.border};
   box-shadow: ${p => p.theme.dropShadowHeavy};
   position: absolute;
   top: 36px;
   right: 0;
   width: 400px;
   border-radius: 5px;
-  overflow: hidden;
+  overflow: auto;
+  max-height: 60vh;
 `;
 
 const SearchWrapper = styled('div')`
   position: relative;
+`;
+
+const ResultFooter = styled('div')`
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
 `;
 
 const EmptyItem = styled(SearchResultWrapper)`

@@ -1,30 +1,35 @@
-import Papa from 'papaparse';
-import {Location, Query} from 'history';
 import {browserHistory} from 'react-router';
+import {Location, Query} from 'history';
+import Papa from 'papaparse';
 
-import {tokenizeSearch, stringifyQueryObject} from 'app/utils/tokenizeSearch';
-import {t} from 'app/locale';
-import {Event, Organization, OrganizationSummary, SelectValue} from 'app/types';
-import {getTitle} from 'app/utils/events';
-import {getUtcDateString} from 'app/utils/dates';
-import {URL_PARAM} from 'app/constants/globalSelectionHeader';
-import {disableMacros} from 'app/views/discover/result/utils';
 import {COL_WIDTH_UNDEFINED} from 'app/components/gridEditable';
+import {URL_PARAM} from 'app/constants/globalSelectionHeader';
+import {t} from 'app/locale';
+import {Event, LightWeightOrganization, Organization, SelectValue} from 'app/types';
+import {getUtcDateString} from 'app/utils/dates';
+import {TableDataRow} from 'app/utils/discover/discoverQuery';
 import EventView from 'app/utils/discover/eventView';
 import {
-  Field,
+  aggregateFunctionOutputType,
+  Aggregation,
+  AGGREGATIONS,
   Column,
   ColumnType,
-  AGGREGATIONS,
-  FIELDS,
   explodeFieldString,
+  Field,
+  FIELDS,
   getAggregateAlias,
+  isMeasurement,
+  measurementType,
   TRACING_FIELDS,
-  Aggregation,
 } from 'app/utils/discover/fields';
+import {getTitle} from 'app/utils/events';
+import localStorage from 'app/utils/localStorage';
+import {stringifyQueryObject, tokenizeSearch} from 'app/utils/tokenizeSearch';
+import {disableMacros} from 'app/views/discover/result/utils';
 
-import {ALL_VIEWS, TRANSACTION_VIEWS} from './data';
-import {TableColumn, TableDataRow, FieldValue, FieldValueKind} from './table/types';
+import {FieldValue, FieldValueKind, TableColumn} from './table/types';
+import {ALL_VIEWS, TRANSACTION_VIEWS, WEB_VITALS_VIEWS} from './data';
 
 export type QueryWithColumnState =
   | Query
@@ -44,15 +49,6 @@ const TEMPLATE_TABLE_COLUMN: TableColumn<React.ReactText> = {
   width: COL_WIDTH_UNDEFINED,
 };
 
-function normalizeUserTag(key: string, value: string) {
-  const parts = value.split(':', 2);
-  if (parts.length !== 2) {
-    return [key, parts[0]];
-  }
-  const normalizedKey = [key, parts[0]].join('.');
-  return [normalizedKey, parts[1]];
-}
-
 // TODO(mark) these types are coupled to the gridEditable component types and
 // I'd prefer the types to be more general purpose but that will require a second pass.
 export function decodeColumnOrder(
@@ -69,15 +65,18 @@ export function decodeColumnOrder(
     if (col.kind === 'function') {
       // Aggregations can have a strict outputType or they can inherit from their field.
       // Otherwise use the FIELDS data to infer types.
-      const aggregate = AGGREGATIONS[col.function[0]];
-      if (aggregate && aggregate.outputType) {
-        column.type = aggregate.outputType;
-      } else if (FIELDS.hasOwnProperty(col.function[1])) {
-        column.type = FIELDS[col.function[1]];
+      const outputType = aggregateFunctionOutputType(col.function[0], col.function[1]);
+      if (outputType !== null) {
+        column.type = outputType;
       }
+      const aggregate = AGGREGATIONS[col.function[0]];
       column.isSortable = aggregate && aggregate.isSortable;
     } else if (col.kind === 'field') {
-      column.type = FIELDS[col.field];
+      if (FIELDS.hasOwnProperty(col.field)) {
+        column.type = FIELDS[col.field];
+      } else if (isMeasurement(col.field)) {
+        column.type = measurementType(col.field);
+      }
     }
     column.column = col;
 
@@ -103,7 +102,15 @@ export function pushEventViewToLocation(props: {
   });
 }
 
-export function generateTitle({eventView, event}: {eventView: EventView; event?: Event}) {
+export function generateTitle({
+  eventView,
+  event,
+  organization,
+}: {
+  eventView: EventView;
+  event?: Event;
+  organization?: Organization;
+}) {
   const titles = [t('Discover')];
 
   const eventViewName = eventView.name;
@@ -111,7 +118,7 @@ export function generateTitle({eventView, event}: {eventView: EventView; event?:
     titles.push(String(eventViewName).trim());
   }
 
-  const eventTitle = event ? getTitle(event).title : undefined;
+  const eventTitle = event ? getTitle(event, organization).title : undefined;
   if (eventTitle) {
     titles.push(eventTitle);
   }
@@ -120,13 +127,12 @@ export function generateTitle({eventView, event}: {eventView: EventView; event?:
   return titles.join(' - ');
 }
 
-export function getPrebuiltQueries(organization: Organization) {
-  let views = ALL_VIEWS;
+export function getPrebuiltQueries(organization: LightWeightOrganization) {
+  const views = [...ALL_VIEWS];
   if (organization.features.includes('performance-view')) {
     // insert transactions queries at index 2
-    const cloned = [...ALL_VIEWS];
-    cloned.splice(2, 0, ...TRANSACTION_VIEWS);
-    views = cloned;
+    views.splice(2, 0, ...TRANSACTION_VIEWS);
+    views.push(...WEB_VITALS_VIEWS);
   }
 
   return views;
@@ -141,16 +147,6 @@ export function downloadAsCsv(tableData, columnOrder, filename) {
     data: data.map(row =>
       headings.map(col => {
         col = getAggregateAlias(col);
-        // This needs to match the order done in the userBadge component
-        if (col === 'user') {
-          return disableMacros(
-            row.user ||
-              row['user.name'] ||
-              row['user.email'] ||
-              row['user.username'] ||
-              row['user.ip']
-          );
-        }
         return disableMacros(row[col]);
       })
     ),
@@ -171,27 +167,42 @@ export function downloadAsCsv(tableData, columnOrder, filename) {
   return encodedDataUrl;
 }
 
-// A map between aggregate function names and its un-aggregated form
-const TRANSFORM_AGGREGATES = {
+const ALIASED_AGGREGATES_COLUMN = {
   last_seen: 'timestamp',
-  latest_event: '',
-  apdex: '',
-  impact: '',
-  user_misery: '',
-  failure_rate: '',
-} as const;
+};
 
-function transformAggregate(fieldName: string): string {
-  // test if a field name is a percentile field name. for example: p50
-  if (/^p\d+$/.test(fieldName)) {
-    return 'transaction.duration';
+/**
+ * Convert an aggregate into the resulting column from a drilldown action.
+ * The result is null if the drilldown results in the aggregate being removed.
+ */
+function drilldownAggregate(
+  func: Extract<Column, {kind: 'function'}>
+): Extract<Column, {kind: 'field'}> | null {
+  const key = func.function[0];
+  const aggregation = AGGREGATIONS[key];
+  let column = func.function[1];
+
+  if (ALIASED_AGGREGATES_COLUMN.hasOwnProperty(key)) {
+    // Some aggregates are just shortcuts to other aggregates with
+    // predefined arguments so we can directly map them to the result.
+    column = ALIASED_AGGREGATES_COLUMN[key];
+  } else if (aggregation?.parameters?.[0]) {
+    const parameter = aggregation.parameters[0];
+    if (parameter.kind !== 'column') {
+      // The aggregation does not accept a column as a parameter,
+      // so we clear the column.
+      column = '';
+    } else if (!column && parameter.required === false) {
+      // The parameter was not given for a non-required parameter,
+      // so we fall back to the default.
+      column = parameter.defaultValue;
+    }
+  } else {
+    // The aggregation does not exist or does not have any parameters,
+    // so we clear the column.
+    column = '';
   }
-
-  return TRANSFORM_AGGREGATES[fieldName] || '';
-}
-
-function isTransformAggregate(fieldName: string): boolean {
-  return transformAggregate(fieldName) !== '';
+  return column ? {kind: 'field', field: column} : null;
 }
 
 /**
@@ -205,99 +216,38 @@ export function getExpandedResults(
   additionalConditions: Record<string, string>,
   dataRow?: TableDataRow | Event
 ): EventView {
-  // Find aggregate fields and flag them for updates.
-  const fieldsToUpdate: number[] = [];
-  eventView.fields.forEach((field: Field, index: number) => {
-    const column = explodeFieldString(field.field);
-    if (column.kind === 'function') {
-      fieldsToUpdate.push(index);
-    }
-  });
-
-  let nextView = eventView.clone();
-  const transformedFields = new Set();
-  const fieldsToDelete: number[] = [];
-
-  // make a best effort to replace aggregated columns with their non-aggregated form
-  fieldsToUpdate.forEach((indexToUpdate: number) => {
-    const currentField: Field = nextView.fields[indexToUpdate];
-    const exploded = explodeFieldString(currentField.field);
-
-    let fieldNameAlias: string = '';
-    if (exploded.kind === 'function' && isTransformAggregate(exploded.function[0])) {
-      fieldNameAlias = exploded.function[0];
-    } else if (exploded.kind === 'field' && exploded.field !== 'id') {
-      // Skip id fields as they are implicitly part of all non-aggregate results.
-      fieldNameAlias = exploded.field;
-    }
-
-    if (fieldNameAlias !== undefined && isTransformAggregate(fieldNameAlias)) {
-      const nextFieldName = transformAggregate(fieldNameAlias);
-      if (!nextFieldName || transformedFields.has(nextFieldName)) {
-        // this field is either duplicated in another column, or nextFieldName is undefined.
-        // in either case, we remove this column
-        fieldsToDelete.push(indexToUpdate);
-        return;
-      }
-      transformedFields.add(nextFieldName);
-
-      const updatedColumn: Column = {
-        kind: 'field',
-        field: nextFieldName,
-      };
-      nextView = nextView.withUpdatedColumn(indexToUpdate, updatedColumn, undefined);
-
-      return;
-    }
+  const fieldSet = new Set();
+  // Expand any functions in the resulting column, and dedupe the result.
+  // Mark any column as null to remove it.
+  const expandedColumns: (Column | null)[] = eventView.fields.map((field: Field) => {
+    const exploded = explodeFieldString(field.field);
+    const column = exploded.kind === 'function' ? drilldownAggregate(exploded) : exploded;
 
     if (
-      (exploded.kind === 'field' && transformedFields.has(exploded.field)) ||
-      (exploded.kind === 'function' && transformedFields.has(exploded.function[1]))
+      // if expanding the function failed
+      column === null ||
+      // id is implicitly a part of all non-aggregate results
+      column.field === 'id' ||
+      // the new column is already present
+      fieldSet.has(column.field)
     ) {
-      // If we already have this field we can delete the new instance.
-      fieldsToDelete.push(indexToUpdate);
-      return;
+      return null;
     }
 
-    if (exploded.kind === 'function') {
-      const field = exploded.function[1];
+    fieldSet.add(column.field);
 
-      // Remove count an aggregates on id, as results have an implicit id in them.
-      if (exploded.function[0] === 'count' || field === 'id') {
-        fieldsToDelete.push(indexToUpdate);
-        return;
-      }
-
-      // if at least one of the parameters to the function is an available column,
-      // then we should proceed to replace it with the column, however, for functions
-      // like apdex that takes a number as its parameter we should delete it
-      const {parameters = []} = AGGREGATIONS[exploded.function[0]] ?? {};
-      if (
-        !field ||
-        (parameters.length > 0 &&
-          parameters.every(parameter => parameter.kind !== 'column'))
-      ) {
-        // This is a function with no field alias. We delete this column as it'll add a blank column in the drilldown.
-        fieldsToDelete.push(indexToUpdate);
-        return;
-      }
-      transformedFields.add(field);
-
-      const updatedColumn: Column = {
-        kind: 'field',
-        field,
-      };
-      nextView = nextView.withUpdatedColumn(indexToUpdate, updatedColumn, undefined);
-    }
+    return column;
   });
 
-  // delete any columns marked for deletion
-  fieldsToDelete.reverse().forEach((index: number) => {
-    nextView = nextView.withDeletedColumn(index, undefined);
-  });
-
+  // update the columns according the the expansion above
+  const nextView = expandedColumns.reduceRight(
+    (newView, column, index) =>
+      column === null
+        ? newView.withDeletedColumn(index, undefined)
+        : newView.withUpdatedColumn(index, column, undefined),
+    eventView.clone()
+  );
   nextView.query = generateExpandedConditions(nextView, additionalConditions, dataRow);
-
   return nextView;
 }
 
@@ -331,16 +281,29 @@ function generateAdditionalConditions(
     // match their name.
     if (dataRow.hasOwnProperty(dataKey)) {
       const value = dataRow[dataKey];
-      const nextValue = value === null || value === undefined ? '' : String(value).trim();
+      // if the value will be quoted, then do not trim it as the whitespaces
+      // may be important to the query and should not be trimmed
+      const shouldQuote =
+        value === null || value === undefined
+          ? false
+          : /[\s\(\)\\"]/g.test(String(value).trim());
+      const nextValue =
+        value === null || value === undefined
+          ? ''
+          : shouldQuote
+          ? String(value)
+          : String(value).trim();
+
+      if (isMeasurement(column.field) && !nextValue) {
+        // Do not add measurement conditions if nextValue is falsey.
+        // It's expected that nextValue is a numeric value.
+        return;
+      }
 
       switch (column.field) {
         case 'timestamp':
           // normalize the "timestamp" field to ensure the payload works
           conditions[column.field] = getUtcDateString(nextValue);
-          break;
-        case 'user':
-          const normalized = normalizeUserTag(dataKey, nextValue);
-          conditions[normalized[0]] = normalized[1];
           break;
         default:
           conditions[column.field] = nextValue;
@@ -356,14 +319,6 @@ function generateAdditionalConditions(
           : column.field;
 
         const tagValue = dataRow.tags[tagIndex].value;
-        if (key === 'user') {
-          // Remove the user condition that might have been added
-          // from the user context.
-          delete conditions[key];
-          const normalized = normalizeUserTag(key, tagValue);
-          conditions[normalized[0]] = normalized[1];
-          return;
-        }
         conditions[key] = tagValue;
       }
     }
@@ -380,10 +335,10 @@ function generateExpandedConditions(
 
   // Remove any aggregates from the search conditions.
   // otherwise, it'll lead to an invalid query result.
-  for (const key in parsedQuery) {
+  for (const key in parsedQuery.tagValues) {
     const column = explodeFieldString(key);
     if (column.kind === 'function') {
-      delete parsedQuery[key];
+      parsedQuery.removeTag(key);
     }
   }
 
@@ -395,18 +350,15 @@ function generateExpandedConditions(
 
   // Add additional conditions provided and generated.
   for (const key in conditions) {
-    const value = additionalConditions[key];
+    const value = conditions[key];
     if (key === 'project.id') {
       eventView.project = [...eventView.project, parseInt(value, 10)];
       continue;
     }
     if (key === 'environment') {
-      eventView.environment = [...eventView.environment, value];
-      continue;
-    }
-    if (key === 'user' && typeof value === 'string') {
-      const normalized = normalizeUserTag(key, value);
-      parsedQuery[normalized[0]] = [normalized[1]];
+      if (!eventView.environment.includes(value)) {
+        eventView.environment = [...eventView.environment, value];
+      }
       continue;
     }
     const column = explodeFieldString(key);
@@ -414,15 +366,17 @@ function generateExpandedConditions(
     if (column.kind === 'function') {
       continue;
     }
-    parsedQuery[key] = [conditions[key]];
+
+    parsedQuery.setTagValues(key, [conditions[key]]);
   }
 
   return stringifyQueryObject(parsedQuery);
 }
 
 type FieldGeneratorOpts = {
-  organization: OrganizationSummary;
+  organization: LightWeightOrganization;
   tagKeys?: string[] | null;
+  measurementKeys?: string[] | null;
   aggregations?: Record<string, Aggregation>;
   fields?: Record<string, ColumnType>;
 };
@@ -430,6 +384,7 @@ type FieldGeneratorOpts = {
 export function generateFieldOptions({
   organization,
   tagKeys,
+  measurementKeys,
   aggregations = AGGREGATIONS,
   fields = FIELDS,
 }: FieldGeneratorOpts) {
@@ -448,13 +403,24 @@ export function generateFieldOptions({
   // later as well.
   functions.forEach(func => {
     const ellipsis = aggregations[func].parameters.length ? '\u2026' : '';
+    const parameters = aggregations[func].parameters.map(param => {
+      const generator = aggregations[func].generateDefaultValue;
+      if (typeof generator === 'undefined') {
+        return param;
+      }
+      return {
+        ...param,
+        defaultValue: generator({parameter: param, organization}),
+      };
+    });
+
     fieldOptions[`function:${func}`] = {
       label: `${func}(${ellipsis})`,
       value: {
         kind: FieldValueKind.FUNCTION,
         meta: {
           name: func,
-          parameters: [...aggregations[func].parameters],
+          parameters,
         },
       },
     };
@@ -489,5 +455,36 @@ export function generateFieldOptions({
     });
   }
 
+  if (measurementKeys !== undefined && measurementKeys !== null) {
+    measurementKeys.forEach(measurement => {
+      fieldOptions[`measurement:${measurement}`] = {
+        label: measurement,
+        value: {
+          kind: FieldValueKind.MEASUREMENT,
+          meta: {name: measurement, dataType: measurementType(measurement)},
+        },
+      };
+    });
+  }
+
   return fieldOptions;
+}
+
+const BANNER_DISMISSED_KEY = 'discover-banner-dismissed';
+
+export function isBannerHidden(): boolean {
+  return localStorage.getItem(BANNER_DISMISSED_KEY) === 'true';
+}
+export function setBannerHidden(value: boolean) {
+  localStorage.setItem(BANNER_DISMISSED_KEY, value ? 'true' : 'false');
+}
+
+const RENDER_PREBUILT_KEY = 'discover-render-prebuilt';
+
+export function shouldRenderPrebuilt(): boolean {
+  const shouldRender = localStorage.getItem(RENDER_PREBUILT_KEY);
+  return shouldRender === 'true' || shouldRender === null;
+}
+export function setRenderPrebuilt(value: boolean) {
+  localStorage.setItem(RENDER_PREBUILT_KEY, value ? 'true' : 'false');
 }

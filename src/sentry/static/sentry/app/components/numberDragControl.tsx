@@ -3,6 +3,7 @@ import styled from '@emotion/styled';
 
 import {IconArrow} from 'app/icons';
 import space from 'app/styles/space';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
 
 type NumberDragControlProps = {
   onChange: (delta: number, event: React.MouseEvent<HTMLDivElement>) => void;
@@ -40,6 +41,14 @@ class NumberDragControl extends React.Component<Props, State> {
           if (event.button !== 0) {
             return;
           }
+
+          // XXX(epurkhiser): We can remove this later, just curious if people
+          // are actually using the drag control
+          trackAnalyticsEvent({
+            eventName: 'Number Drag Control: Clicked',
+            eventKey: 'number_drag_control.clicked',
+          });
+
           event.currentTarget.requestPointerLock();
           this.setState({isClicked: true});
         }}
@@ -75,8 +84,8 @@ const Wrapper = styled('div')<{isActive: boolean; isX: boolean}>`
       ? 'grid-template-columns: max-content max-content'
       : 'grid-template-rows: max-content max-content'};
   cursor: ${p => (p.isX ? 'ew-resize' : 'ns-resize')};
-  color: ${p => (p.isActive ? p.theme.gray800 : p.theme.gray500)};
-  background: ${p => p.isActive && p.theme.gray200};
+  color: ${p => (p.isActive ? p.theme.gray500 : p.theme.gray300)};
+  background: ${p => p.isActive && p.theme.backgroundSecondary};
   border-radius: 2px;
 `;
 

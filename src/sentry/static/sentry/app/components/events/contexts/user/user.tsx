@@ -1,15 +1,17 @@
 import React from 'react';
 
 import UserAvatar from 'app/components/avatar/userAvatar';
-import {AvatarUser as UserType} from 'app/types';
-import {removeFilterMaskedEntries} from 'app/components/events/interfaces/utils';
-import ContextBlock from 'app/components/events/contexts/contextBlock';
 import ErrorBoundary from 'app/components/errorBoundary';
+import ContextBlock from 'app/components/events/contexts/contextBlock';
 import KeyValueList from 'app/components/events/interfaces/keyValueList/keyValueList';
+import {removeFilterMaskedEntries} from 'app/components/events/interfaces/utils';
+import {AvatarUser as UserType} from 'app/types';
 import {defined} from 'app/utils';
 
+import getUnknownData from '../getUnknownData';
+
 import getUserKnownData from './getUserKnownData';
-import {UserKnownDataType} from './types';
+import {UserIgnoredDataType, UserKnownDataType} from './types';
 
 type Props = {
   data: Data;
@@ -27,6 +29,8 @@ const userKnownDataValues = [
   UserKnownDataType.NAME,
 ];
 
+const userIgnoredDataValues = [UserIgnoredDataType.DATA];
+
 const User = ({data}: Props) => {
   const getKeyValueData = (val: object) => Object.keys(val).map(key => [key, val[key]]);
 
@@ -35,7 +39,10 @@ const User = ({data}: Props) => {
       <div className="pull-left">
         <UserAvatar user={removeFilterMaskedEntries(data)} size={48} gravatar={false} />
       </div>
-      <ContextBlock knownData={getUserKnownData(data, userKnownDataValues)} />
+      <ContextBlock data={getUserKnownData(data, userKnownDataValues)} />
+      <ContextBlock
+        data={getUnknownData(data, [...userKnownDataValues, ...userIgnoredDataValues])}
+      />
       {defined(data?.data) && (
         <ErrorBoundary mini>
           <KeyValueList data={getKeyValueData(data.data)} isContextData />

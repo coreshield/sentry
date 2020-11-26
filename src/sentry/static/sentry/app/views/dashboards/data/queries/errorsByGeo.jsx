@@ -1,5 +1,5 @@
-import {OPERATOR} from 'app/views/discover/data';
 import {t} from 'app/locale';
+import {OPERATOR} from 'app/views/discover/data';
 
 /**
  * Top Errors by geo location
@@ -8,7 +8,10 @@ import {t} from 'app/locale';
 const errorsByGeo = {
   name: t('Errors By Country'),
   fields: ['geo.country_code'],
-  conditions: [['geo.country_code', OPERATOR.IS_NOT_NULL, null]],
+  conditions: [
+    ['event.type', OPERATOR.NOT_EQUAL, 'transaction'],
+    ['geo.country_code', OPERATOR.IS_NOT_NULL, null],
+  ],
   aggregations: [['count()', null, 'count']],
   limit: 10,
 

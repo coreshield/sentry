@@ -1,26 +1,26 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {Panel, PanelHeader, PanelBody, PanelItem} from 'app/components/panels';
 import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
-import {sortProjects} from 'app/utils';
-import {t} from 'app/locale';
+import ProjectActions from 'app/actions/projectActions';
 import Button from 'app/components/button';
 import DropdownAutoComplete from 'app/components/dropdownAutoComplete';
 import DropdownButton from 'app/components/dropdownButton';
-import EmptyMessage from 'app/views/settings/components/emptyMessage';
-import InlineSvg from 'app/components/inlineSvg';
 import LoadingError from 'app/components/loadingError';
 import LoadingIndicator from 'app/components/loadingIndicator';
 import Pagination from 'app/components/pagination';
-import ProjectActions from 'app/actions/projectActions';
-import ProjectListItem from 'app/views/settings/components/settingsProjectItem';
-import SentryTypes from 'app/sentryTypes';
+import {Panel, PanelBody, PanelHeader, PanelItem} from 'app/components/panels';
 import Tooltip from 'app/components/tooltip';
+import {IconFlag, IconSubtract} from 'app/icons';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
 import space from 'app/styles/space';
+import {sortProjects} from 'app/utils';
 import withApi from 'app/utils/withApi';
 import withOrganization from 'app/utils/withOrganization';
+import EmptyMessage from 'app/views/settings/components/emptyMessage';
+import ProjectListItem from 'app/views/settings/components/settingsProjectItem';
 
 class TeamProjects extends React.Component {
   static propTypes = {
@@ -148,17 +148,18 @@ class TeamProjects extends React.Component {
             <Button
               size="small"
               disabled={!canWrite}
+              icon={<IconSubtract isCircled size="xs" />}
               onClick={() => {
                 this.handleLinkProject(project, 'remove');
               }}
             >
-              <RemoveIcon /> {t('Remove')}
+              {t('Remove')}
             </Button>
           </Tooltip>
         </StyledPanelItem>
       ))
     ) : (
-      <EmptyMessage size="large" icon="icon-circle-exclamation">
+      <EmptyMessage size="large" icon={<IconFlag size="xl" />}>
         {t("This team doesn't have access to any projects.")}
       </EmptyMessage>
     );
@@ -203,6 +204,7 @@ class TeamProjects extends React.Component {
                   onChange={this.handleQueryUpdate}
                   onSelect={this.handleProjectSelected}
                   emptyMessage={t('No projects')}
+                  alignMenu="right"
                 >
                   {({isOpen}) => (
                     <DropdownButton isOpen={isOpen} size="xsmall">
@@ -220,16 +222,6 @@ class TeamProjects extends React.Component {
     );
   }
 }
-
-const RemoveIcon = styled(props => (
-  <InlineSvg {...props} src="icon-circle-subtract">
-    {t('Remove')}
-  </InlineSvg>
-))`
-  min-height: 1.25em;
-  min-width: 1.25em;
-  margin-right: ${space(1)};
-`;
 
 const StyledPanelItem = styled(PanelItem)`
   display: flex;

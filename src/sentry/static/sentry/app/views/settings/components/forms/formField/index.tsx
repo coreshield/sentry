@@ -1,21 +1,21 @@
-import {Observer} from 'mobx-react';
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import {Observer} from 'mobx-react';
+import PropTypes from 'prop-types';
 
+import Alert from 'app/components/alert';
+import Button from 'app/components/button';
+import PanelAlert from 'app/components/panels/panelAlert';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
 import {defined} from 'app/utils';
 import {sanitizeQuerySelector} from 'app/utils/sanitizeQuerySelector';
-import {t} from 'app/locale';
-import Button from 'app/components/button';
 import Field from 'app/views/settings/components/forms/field';
 import FieldControl from 'app/views/settings/components/forms/field/fieldControl';
 import FieldErrorReason from 'app/views/settings/components/forms/field/fieldErrorReason';
 import FormFieldControlState from 'app/views/settings/components/forms/formField/controlState';
-import PanelAlert from 'app/components/panels/panelAlert';
-import ReturnButton from 'app/views/settings/components/forms/returnButton';
-import space from 'app/styles/space';
-import Alert from 'app/components/alert';
 import FormModel from 'app/views/settings/components/forms/model';
+import ReturnButton from 'app/views/settings/components/forms/returnButton';
 
 /**
  * Some fields don't need to implement their own onChange handlers, in
@@ -74,7 +74,7 @@ type ObserverOrValue<T> = T | ObserverReducerFn<T>;
 
 type Props = {
   name: string;
-  style?: Object;
+  style?: React.CSSProperties;
   saveOnBlur?: boolean;
   saveMessage?: React.ReactNode | Function;
   saveMessageAlertType?: React.ComponentProps<typeof Alert>['type'];
@@ -85,11 +85,19 @@ type Props = {
   hideErrorMessage?: boolean;
   selectionInfoFunction?: (props) => null | React.ReactNode;
   inline?: ObserverOrValue<boolean>;
-  placeholder?: ObserverOrValue<string>;
+  placeholder?: ObserverOrValue<React.ReactNode>;
   visible?: boolean | ((props: Props) => boolean);
   formatMessageValue?: boolean | Function; //used in prettyFormString
   defaultValue?: any; //TODO(TS): Do we need this?
   resetOnError?: boolean;
+  /**
+   * Tranform input when a value is set to the model.
+   */
+  transformInput?: (value: any) => any;
+  /**
+   * Transform data when saving on blur.
+   */
+  getData?: (value: any) => any;
 } & Omit<FieldControl['props'], typeof propsToObserver[number]> &
   Omit<Field['props'], 'inline'>;
 

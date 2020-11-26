@@ -4,9 +4,8 @@ import random
 import logging
 from importlib import import_module
 import six
-from six.moves.urllib.parse import parse_qs as urlparse_parse_qs
+from six.moves.urllib.parse import parse_qs as urlparse_parse_qs, parse_qsl
 
-from cgi import parse_qsl
 from django.conf import settings
 from django.db.models import Model
 from django.contrib.contenttypes.models import ContentType
@@ -108,7 +107,7 @@ def url_add_parameters(url, params):
     """Adds parameters to URL, parameter will be repeated if already present"""
     if params:
         fragments = list(urlparse(url))
-        fragments[4] = urlencode(parse_qsl(fragments[4]) + params.items())
+        fragments[4] = urlencode(parse_qsl(fragments[4]) + list(params.items()))
         url = urlunparse(fragments)
     return url
 

@@ -3,26 +3,26 @@ import {Params} from 'react-router/lib/Router';
 import {Location} from 'history';
 import PropTypes from 'prop-types';
 
-import {t} from 'app/locale';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
-import {Client} from 'app/api';
-import withApi from 'app/utils/withApi';
-import {Organization, Event, EventTag} from 'app/types';
-import SentryTypes from 'app/sentryTypes';
-import EventMetadata from 'app/components/events/eventMetadata';
-import {BorderlessEventEntries} from 'app/components/events/eventEntries';
-import * as SpanEntryContext from 'app/components/events/interfaces/spans/context';
-import Button from 'app/components/button';
-import LoadingError from 'app/components/loadingError';
-import NotFound from 'app/components/errors/notFound';
 import AsyncComponent from 'app/components/asyncComponent';
-import SentryDocumentTitle from 'app/components/sentryDocumentTitle';
+import Button from 'app/components/button';
+import NotFound from 'app/components/errors/notFound';
+import {BorderlessEventEntries} from 'app/components/events/eventEntries';
+import EventMetadata from 'app/components/events/eventMetadata';
+import * as SpanEntryContext from 'app/components/events/interfaces/spans/context';
 import OpsBreakdown from 'app/components/events/opsBreakdown';
-import TagsTable from 'app/components/tagsTable';
-import Projects from 'app/utils/projects';
+import RealUserMonitoring from 'app/components/events/realUserMonitoring';
+import RootSpanStatus from 'app/components/events/rootSpanStatus';
 import * as Layout from 'app/components/layouts/thirds';
+import LoadingError from 'app/components/loadingError';
+import SentryDocumentTitle from 'app/components/sentryDocumentTitle';
+import TagsTable from 'app/components/tagsTable';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import {Event, EventTag, Organization} from 'app/types';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
+import Projects from 'app/utils/projects';
+import {appendTagCondition, decodeScalar} from 'app/utils/queryString';
 import Breadcrumb from 'app/views/performance/breadcrumb';
-import {decodeScalar, appendTagCondition} from 'app/utils/queryString';
 
 import {transactionSummaryRouteWithQuery} from '../transactionSummary/utils';
 import {getTransactionDetailsUrl} from '../utils';
@@ -31,7 +31,6 @@ type Props = {
   organization: Organization;
   location: Location;
   params: Params;
-  api: Client;
   eventSlug: string;
 };
 
@@ -63,7 +62,7 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
     this.setState({isSidebarVisible: !this.state.isSidebarVisible});
   };
 
-  getEndpoints(): Array<[string, string]> {
+  getEndpoints(): ReturnType<AsyncComponent['getEndpoints']> {
     const {organization, params} = this.props;
     const {eventSlug} = params;
 
@@ -99,14 +98,14 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
     const {event} = this.state;
 
     if (!event) {
-      return this.renderWrapper(<NotFound />);
+      return <NotFound />;
     }
 
-    return this.renderWrapper(this.renderContent(event));
+    return this.renderContent(event);
   }
 
   renderContent(event: Event) {
-    const {api, organization, location, eventSlug} = this.props;
+    const {organization, location, eventSlug} = this.props;
 
     // metrics
     trackAnalyticsEvent({
@@ -155,13 +154,12 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
                   }}
                 >
                   <BorderlessEventEntries
-                    api={api}
                     organization={organization}
                     event={event}
                     project={projects[0]}
-                    location={location}
                     showExampleCommit={false}
                     showTagSummary={false}
+                    location={location}
                   />
                 </SpanEntryContext.Provider>
               )}
@@ -174,7 +172,9 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
                 organization={organization}
                 projectId={this.projectId}
               />
+              <RootSpanStatus event={event} />
               <OpsBreakdown event={event} />
+              <RealUserMonitoring event={event} />
               <TagsTable event={event} query={query} generateUrl={this.generateTagUrl} />
             </Layout.Side>
           )}
@@ -192,22 +192,18 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
     );
 
     if (notFound) {
-      return this.renderWrapper(<NotFound />);
+      return <NotFound />;
     }
     if (permissionDenied) {
-      return this.renderWrapper(
+      return (
         <LoadingError message={t('You do not have permission to view that event.')} />
       );
     }
 
-    return this.renderWrapper(super.renderError(error, true, true));
+    return super.renderError(error, true, true);
   }
 
-  renderLoading() {
-    return this.renderWrapper(super.renderLoading());
-  }
-
-  renderWrapper(children: React.ReactNode) {
+  renderComponent() {
     const {organization} = this.props;
 
     return (
@@ -215,10 +211,10 @@ class EventDetailsContent extends AsyncComponent<Props, State> {
         title={t('Performance - Event Details')}
         objSlug={organization.slug}
       >
-        <React.Fragment>{children}</React.Fragment>
+        {super.renderComponent()}
       </SentryDocumentTitle>
     );
   }
 }
 
-export default withApi(EventDetailsContent);
+export default EventDetailsContent;

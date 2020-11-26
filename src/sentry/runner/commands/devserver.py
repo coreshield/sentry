@@ -2,7 +2,9 @@ from __future__ import absolute_import, print_function
 
 import click
 import six
+import types
 from six.moves.urllib.parse import urlparse
+import threading
 
 from sentry.runner.decorators import configuration, log_options
 
@@ -19,11 +21,24 @@ _DEFAULT_DAEMONS = {
     "ingest": ["sentry", "run", "ingest-consumer", "--all-consumer-types"],
     "server": ["sentry", "run", "web"],
     "storybook": ["yarn", "storybook"],
+    "subscription-consumer": [
+        "sentry",
+        "run",
+        "query-subscription-consumer",
+        "--commit-batch-size",
+        "1",
+        "--force-offset-reset",
+        "latest",
+    ],
 }
 
 
-def _get_daemon(name):
-    return (name, _DEFAULT_DAEMONS[name])
+def _get_daemon(name, *args, **kwargs):
+    display_name = name
+    if "suffix" in kwargs:
+        display_name = u"{}-{}".format(name, kwargs["suffix"])
+
+    return (display_name, _DEFAULT_DAEMONS[name] + list(args))
 
 
 @click.command()
@@ -36,18 +51,19 @@ def _get_daemon(name):
     "--prefix/--no-prefix", default=True, help="Show the service name prefix and timestamp"
 )
 @click.option(
+    "--pretty/--no-pretty", default=False, help="Styleize various outputs from the devserver"
+)
+@click.option(
     "--styleguide/--no-styleguide",
     default=False,
     help="Start local styleguide web server on port 9001",
 )
 @click.option("--environment", default="development", help="The environment name.")
 @click.option(
-    "--skip-daemons",
-    default=None,
+    "--debug-server/--no-debug-server",
+    default=False,
     required=False,
-    help="List (comma-delimited) of daemons not to start (values: {})".format(
-        ", ".join(sorted(_DEFAULT_DAEMONS.keys()))
-    ),
+    help="Start web server in same process",
 )
 @click.option(
     "--experimental-spa/--no-experimental-spa",
@@ -60,22 +76,21 @@ def _get_daemon(name):
 @log_options()
 @configuration
 def devserver(
-    reload, watchers, workers, experimental_spa, styleguide, prefix, environment, skip_daemons, bind
+    reload,
+    watchers,
+    workers,
+    experimental_spa,
+    styleguide,
+    prefix,
+    pretty,
+    environment,
+    debug_server,
+    bind,
 ):
     "Starts a lightweight web server for development."
-    skip_daemons = set(skip_daemons.split(",")) if skip_daemons else set()
-    if skip_daemons.difference(_DEFAULT_DAEMONS.keys()):
-        unrecognized_daemons = skip_daemons.difference(_DEFAULT_DAEMONS.keys())
-        raise click.ClickException("Not a daemon name: {}".format(", ".join(unrecognized_daemons)))
 
     if bind is None:
-        # default configuration, the dev server address depends on weather we have a reverse proxy
-        # in front that splits the requests between Relay and the dev server or we pass everything
-        # to the dev server
-        from django.conf import settings
-
-        port = 8888 if settings.SENTRY_USE_RELAY else 8000
-        bind = "127.0.0.1:{}".format(port)
+        bind = "127.0.0.1:8000"
 
     if ":" in bind:
         host, port = bind.split(":", 1)
@@ -202,6 +217,15 @@ def devserver(
         if eventstream.requires_post_process_forwarder():
             daemons += [_get_daemon("post-process-forwarder")]
 
+        if settings.SENTRY_DEV_PROCESS_SUBSCRIPTIONS:
+            if not settings.SENTRY_EVENTSTREAM == "sentry.eventstream.kafka.KafkaEventStream":
+                raise click.ClickException(
+                    "`SENTRY_DEV_PROCESS_SUBSCRIPTIONS` can only be used when "
+                    "`SENTRY_EVENTSTREAM=sentry.eventstream.kafka.KafkaEventStream`."
+                )
+            for name, topic in settings.KAFKA_SUBSCRIPTION_RESULT_TOPICS.items():
+                daemons += [_get_daemon("subscription-consumer", "--topic", topic, suffix=name)]
+
     if settings.SENTRY_USE_RELAY:
         daemons += [_get_daemon("ingest")]
 
@@ -232,11 +256,13 @@ def devserver(
     # A better log-format for local dev when running through honcho,
     # but if there aren't any other daemons, we don't want to override.
     if daemons:
-        uwsgi_overrides["log-format"] = '"%(method) %(status) %(uri) %(proto)" %(size)'
+        uwsgi_overrides["log-format"] = "%(method) %(status) %(uri) %(proto) %(size)"
     else:
-        uwsgi_overrides["log-format"] = '[%(ltime)] "%(method) %(status) %(uri) %(proto)" %(size)'
+        uwsgi_overrides["log-format"] = "[%(ltime)] %(method) %(status) %(uri) %(proto) %(size)"
 
-    server = SentryHTTPServer(host=host, port=port, workers=1, extra_options=uwsgi_overrides)
+    server = SentryHTTPServer(
+        host=host, port=port, workers=1, extra_options=uwsgi_overrides, debug=debug_server
+    )
 
     # If we don't need any other daemons, just launch a normal uwsgi webserver
     # and avoid dealing with subprocesses
@@ -250,20 +276,29 @@ def devserver(
 
     os.environ["PYTHONUNBUFFERED"] = "true"
 
-    # Make sure that the environment is prepared before honcho takes over
-    # This sets all the appropriate uwsgi env vars, etc
-    server.prepare_environment()
-    daemons += [_get_daemon("server")]
+    if debug_server:
+        threading.Thread(target=server.run).start()
+    else:
+        # Make sure that the environment is prepared before honcho takes over
+        # This sets all the appropriate uwsgi env vars, etc
+        server.prepare_environment()
+        daemons += [_get_daemon("server")]
 
     if styleguide:
         daemons += [_get_daemon("storybook")]
 
     cwd = os.path.realpath(os.path.join(settings.PROJECT_ROOT, os.pardir, os.pardir))
 
-    manager = Manager(Printer(prefix=prefix))
+    honcho_printer = Printer(prefix=prefix)
+
+    if pretty:
+        from sentry.runner.formatting import monkeypatch_honcho_write
+
+        honcho_printer.write = types.MethodType(monkeypatch_honcho_write, honcho_printer)
+
+    manager = Manager(honcho_printer)
     for name, cmd in daemons:
-        if name not in skip_daemons:
-            manager.add_process(name, list2cmdline(cmd), quiet=False, cwd=cwd)
+        manager.add_process(name, list2cmdline(cmd), quiet=False, cwd=cwd)
 
     manager.loop()
     sys.exit(manager.returncode)

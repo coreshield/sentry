@@ -1,51 +1,50 @@
-import {ClassNames} from '@emotion/core';
-import {browserHistory} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
-import Reflux from 'reflux';
-import createReactClass from 'create-react-class';
-import debounce from 'lodash/debounce';
+import {browserHistory} from 'react-router';
+import {ClassNames} from '@emotion/core';
 import styled from '@emotion/styled';
 import * as Sentry from '@sentry/react';
+import createReactClass from 'create-react-class';
+import debounce from 'lodash/debounce';
+import PropTypes from 'prop-types';
+import Reflux from 'reflux';
 
 import {addErrorMessage} from 'app/actionCreators/indicator';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
-import {callIfFunction} from 'app/utils/callIfFunction';
-import {defined} from 'app/utils';
-import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
-import {t} from 'app/locale';
-import Button from 'app/components/button';
-import ButtonBar from 'app/components/buttonBar';
-import CreateSavedSearchButton from 'app/views/issueList/createSavedSearchButton';
-import DropdownLink from 'app/components/dropdownLink';
-import {IconEllipsis, IconSearch, IconSliders, IconClose, IconPin} from 'app/icons';
-import MemberListStore from 'app/stores/memberListStore';
-import space from 'app/styles/space';
-import theme from 'app/utils/theme';
-import withApi from 'app/utils/withApi';
-import withOrganization from 'app/utils/withOrganization';
-import {Client} from 'app/api';
-import {LightWeightOrganization, SavedSearch, Tag} from 'app/types';
 import {
   fetchRecentSearches,
   pinSearch,
   saveRecentSearch,
   unpinSearch,
 } from 'app/actionCreators/savedSearches';
+import {Client} from 'app/api';
+import Button from 'app/components/button';
+import ButtonBar from 'app/components/buttonBar';
+import DropdownLink from 'app/components/dropdownLink';
+import {getParams} from 'app/components/organizations/globalSelectionHeader/getParams';
 import {
   DEFAULT_DEBOUNCE_DURATION,
   MAX_AUTOCOMPLETE_RELEASES,
   NEGATION_OPERATOR,
-  SEARCH_WILDCARD,
 } from 'app/constants';
+import {IconClose, IconEllipsis, IconPin, IconSearch, IconSliders} from 'app/icons';
+import {t} from 'app/locale';
+import MemberListStore from 'app/stores/memberListStore';
+import space from 'app/styles/space';
+import {LightWeightOrganization, SavedSearch, SavedSearchType, Tag} from 'app/types';
+import {defined} from 'app/utils';
+import {trackAnalyticsEvent} from 'app/utils/analytics';
+import {callIfFunction} from 'app/utils/callIfFunction';
+import theme from 'app/utils/theme';
+import withApi from 'app/utils/withApi';
+import withOrganization from 'app/utils/withOrganization';
+import CreateSavedSearchButton from 'app/views/issueList/createSavedSearchButton';
 
 import SearchDropdown from './searchDropdown';
-import {SearchItem, SearchType, SearchGroup, ItemType} from './types';
+import {ItemType, SearchGroup, SearchItem} from './types';
 import {
   addSpace,
-  removeSpace,
   createSearchGroups,
   filterSearchGroupsByIndex,
+  removeSpace,
 } from './utils';
 
 const DROPDOWN_BLUR_DURATION = 200;
@@ -62,7 +61,7 @@ const getInputButtonStyles = (p: {
   isActive?: boolean;
   collapseIntoEllipsisMenu?: number;
 }) => `
-  color: ${p.isActive ? theme.blue300 : theme.gray500};
+  color: ${p.isActive ? theme.blue300 : theme.gray300};
   margin-left: ${space(0.5)};
   width: 18px;
 
@@ -73,18 +72,20 @@ const getInputButtonStyles = (p: {
   }
 
   &:hover {
-    color: ${theme.gray600};
+    color: ${theme.gray400};
   }
 
-  ${p.collapseIntoEllipsisMenu &&
-    getMediaQuery(theme.breakpoints[p.collapseIntoEllipsisMenu], 'none')};
+  ${
+    p.collapseIntoEllipsisMenu &&
+    getMediaQuery(theme.breakpoints[p.collapseIntoEllipsisMenu], 'none')
+  };
 `;
 
 const getDropdownElementStyles = (p: {showBelowMediaQuery: number; last?: boolean}) => `
   padding: 0 ${space(1)} ${p.last ? null : space(0.5)};
   margin-bottom: ${p.last ? null : space(0.5)};
   display: none;
-  color: ${theme.gray700};
+  color: ${theme.textColor};
   align-items: center;
   min-width: 190px;
   height: 38px;
@@ -94,19 +95,21 @@ const getDropdownElementStyles = (p: {showBelowMediaQuery: number; last?: boolea
   &,
   &:hover,
   &:focus {
-    border-bottom: ${p.last ? null : `1px solid ${theme.borderDark}`};
+    border-bottom: ${p.last ? null : `1px solid ${theme.border}`};
     border-radius: 0;
   }
 
   &:hover {
-    color: ${theme.blue500};
+    color: ${theme.blue300};
   }
   & > svg {
     margin-right: ${space(1)};
   }
 
-  ${p.showBelowMediaQuery &&
-    getMediaQuery(theme.breakpoints[p.showBelowMediaQuery], 'flex')}
+  ${
+    p.showBelowMediaQuery &&
+    getMediaQuery(theme.breakpoints[p.showBelowMediaQuery], 'flex')
+  }
 `;
 
 type Props = {
@@ -167,7 +170,7 @@ type Props = {
    * If this is defined, attempt to save search term scoped to the user and
    * the current org
    */
-  savedSearchType?: SearchType;
+  savedSearchType?: SavedSearchType;
   /**
    * Has pinned search feature
    */
@@ -275,13 +278,14 @@ class SmartSearchBar extends React.Component<Props, State> {
   static defaultProps = {
     defaultQuery: '',
     query: null,
-    onSearch: function() {},
+    onSearch: function () {},
     excludeEnvironment: false,
     placeholder: t('Search for events, users, tags, and everything else.'),
     supportedTags: {},
     defaultSearchItems: [[], []],
     hasPinnedSearch: false,
     useFormWrapper: true,
+    savedSearchType: SavedSearchType.ISSUE,
   };
 
   state: State = {
@@ -607,9 +611,10 @@ class SmartSearchBar extends React.Component<Props, State> {
 
       return values.map(value => {
         // Wrap in quotes if there is a space
-        const escapedValue = value.includes(' ')
-          ? `"${value.replace('"', '\\"')}"`
-          : value;
+        const escapedValue =
+          value.includes(' ') || value.includes('"')
+            ? `"${value.replace(/"/g, '\\"')}"`
+            : value;
 
         return {value: escapedValue, desc: escapedValue, type: 'tag-value' as ItemType};
       });
@@ -628,6 +633,7 @@ class SmartSearchBar extends React.Component<Props, State> {
       .map(value => ({
         value,
         desc: value,
+        type: 'tag-value',
       }));
 
   /**
@@ -651,6 +657,9 @@ class SmartSearchBar extends React.Component<Props, State> {
 
   fetchRecentSearches = async (fullQuery: string): Promise<SearchItem[]> => {
     const {api, organization, savedSearchType} = this.props;
+    if (savedSearchType === undefined) {
+      return [];
+    }
 
     try {
       const recentSearches: any[] = await fetchRecentSearches(
@@ -905,7 +914,7 @@ class SmartSearchBar extends React.Component<Props, State> {
     evt.preventDefault();
     evt.stopPropagation();
 
-    if (!defined(savedSearchType) || !hasPinnedSearch) {
+    if (savedSearchType === undefined || !hasPinnedSearch) {
       return;
     }
 
@@ -993,22 +1002,17 @@ class SmartSearchBar extends React.Component<Props, State> {
       newQuery = query.slice(0, lastTermIndex); // get text preceding last term
 
       const prefix = last.startsWith(NEGATION_OPERATOR) ? NEGATION_OPERATOR : '';
-      const valuePrefix = newQuery.endsWith(SEARCH_WILDCARD) ? SEARCH_WILDCARD : '';
 
       // newQuery is all the terms up to the current term: "... <term>:"
       // replaceText should be the selected value
       if (last.indexOf(':') > -1) {
-        let replacement = `:${valuePrefix}${replaceText}`;
+        let replacement = `:${replaceText}`;
 
-        // NOTE: The user tag is a special case here as it store values like
-        // `id:1` or `ip:127.0.0.1`. To handle autocompletion for it correctly,
-        // and efficiently, we convert the tag to be `user.id` or `user.ip` etc.
+        // The user tag often contains : within its value and we need to quote it.
         if (last.startsWith('user:')) {
           const colonIndex = replaceText.indexOf(':');
           if (colonIndex > -1) {
-            const tagEnding = replaceText.substring(0, colonIndex);
-            const tagValue = replaceText.substring(colonIndex + 1);
-            replacement = `.${tagEnding}:${valuePrefix}` + tagValue;
+            replacement = `:"${replaceText.trim()}"`;
           }
         }
 
@@ -1030,6 +1034,7 @@ class SmartSearchBar extends React.Component<Props, State> {
 
       // then update the autocomplete box with new contextTypes
       this.updateAutoCompleteItems();
+      this.props.onChange?.(newQuery, new MouseEvent('click') as any);
     });
   };
 
@@ -1140,7 +1145,6 @@ class SmartSearchBar extends React.Component<Props, State> {
                 <CreateSavedSearchButton
                   query={this.state.query}
                   organization={organization}
-                  disabled={!hasQuery}
                   withTooltip
                   iconOnly
                   buttonClassName={css`
@@ -1200,7 +1204,6 @@ class SmartSearchBar extends React.Component<Props, State> {
                     <CreateSavedSearchButton
                       query={this.state.query}
                       organization={organization}
-                      disabled={!hasQuery}
                       buttonClassName={css`
                         ${getDropdownElementStyles({
                           showBelowMediaQuery: 2,
@@ -1247,10 +1250,10 @@ const SmartSearchBarContainer = createReactClass<Props>({
 });
 
 export default withApi(withOrganization(SmartSearchBarContainer));
-export {SmartSearchBar, SearchType};
+export {SmartSearchBar};
 
 const Container = styled('div')<{isOpen: boolean}>`
-  border: 1px solid ${p => (p.isOpen ? p.theme.borderDark : p.theme.borderLight)};
+  border: 1px solid ${p => p.theme.border};
   border-radius: ${p =>
     p.isOpen
       ? `${p.theme.borderRadius} ${p.theme.borderRadius} 0 0`
@@ -1258,14 +1261,14 @@ const Container = styled('div')<{isOpen: boolean}>`
   /* match button height */
   height: 40px;
   box-shadow: inset ${p => p.theme.dropShadowLight};
-  background: #fff;
+  background: ${p => p.theme.background};
 
   position: relative;
 
   display: flex;
 
   .show-sidebar & {
-    background: ${p => p.theme.gray100};
+    background: ${p => p.theme.backgroundSecondary};
   }
 `;
 
@@ -1278,7 +1281,7 @@ const StyledForm = styled('form')`
 `;
 
 const StyledInput = styled('input')`
-  color: ${p => p.theme.gray700};
+  color: ${p => p.theme.textColor};
   background: transparent;
   border: 0;
   outline: none;
@@ -1290,10 +1293,10 @@ const StyledInput = styled('input')`
   padding: 0 0 0 ${space(1)};
 
   &::placeholder {
-    color: ${p => p.theme.gray400};
+    color: ${p => p.theme.formPlaceholder};
   }
   &:focus {
-    border-color: ${p => p.theme.borderDark};
+    border-color: ${p => p.theme.border};
     border-bottom-right-radius: 0;
   }
 
@@ -1344,5 +1347,5 @@ const SearchLabel = styled('label')`
   align-items: center;
   margin: 0;
   padding-left: ${space(1)};
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
 `;

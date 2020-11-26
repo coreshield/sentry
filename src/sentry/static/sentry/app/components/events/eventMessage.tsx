@@ -1,11 +1,11 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {Level} from 'app/types';
 import ErrorLevel from 'app/components/events/errorLevel';
 import overflowEllipsis from 'app/styles/overflowEllipsis';
 import space from 'app/styles/space';
+import {Level} from 'app/types';
 
 type Props = {
   level?: Level;
@@ -49,10 +49,7 @@ const StyledEventMessage = styled(EventMessage)`
   align-items: center;
   position: relative;
   line-height: 1.2;
-
-  @media (max-width: ${p => p.theme.breakpoints[0]}) {
-    margin-bottom: ${space(2)};
-  }
+  overflow: hidden;
 `;
 
 const StyledErrorLevel = styled(ErrorLevel)`

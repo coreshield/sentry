@@ -1,16 +1,19 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import moment from 'moment-timezone';
+import PropTypes from 'prop-types';
 
-import {AvatarUser} from 'app/types';
 import DateTime from 'app/components/dateTime';
 import TimeSince from 'app/components/timeSince';
 import space from 'app/styles/space';
 import textStyles from 'app/styles/text';
+import {AvatarUser} from 'app/types';
 import {isRenderFunc} from 'app/utils/isRenderFunc';
 
 import ActivityAvatar from './avatar';
 import ActivityBubble from './bubble';
+
+export type ActivityAuthorType = 'user' | 'system';
 
 type ChildFunction = () => React.ReactNode;
 
@@ -23,9 +26,14 @@ type Props = {
   id?: string;
 
   /**
-   * If supplied, will show the time since this date
+   * If supplied, will show the time that the activity started
    */
   date?: string | Date;
+
+  /**
+   * If supplied, will show the interval that the activity occurred in
+   */
+  interval?: number;
 
   /**
    * Used to render an avatar for the author. Currently can be a user, otherwise
@@ -34,7 +42,7 @@ type Props = {
    * `user` is required if `type` is "user"
    */
   author?: {
-    type: 'user' | 'system';
+    type: ActivityAuthorType;
     user?: AvatarUser;
   };
 
@@ -67,13 +75,21 @@ function ActivityItem({
   className,
   children,
   date,
+  interval,
   footer,
   id,
   header,
   hideDate = false,
   showTime = false,
 }: Props) {
-  const showDate = !hideDate && date;
+  const showDate = !hideDate && date && !interval;
+  const showRange = !hideDate && date && interval;
+  const dateEnded = showRange
+    ? moment(date).add(interval, 'minutes').utc().format()
+    : undefined;
+  const timeOnly = Boolean(
+    date && dateEnded && moment(date).date() === moment(dateEnded).date()
+  );
 
   return (
     <ActivityItemWrapper data-test-id="activity-item" className={className}>
@@ -88,9 +104,20 @@ function ActivityItem({
         {header && !isRenderFunc<ChildFunction>(header) && (
           <ActivityHeader>
             <ActivityHeaderContent>{header}</ActivityHeaderContent>
-
             {date && showDate && !showTime && <StyledTimeSince date={date} />}
             {date && showDate && showTime && <StyledDateTime timeOnly date={date} />}
+
+            {showRange && (
+              <StyledDateTimeWindow>
+                <StyledDateTime timeOnly={timeOnly} timeAndDate={!timeOnly} date={date} />
+                {' — '}
+                <StyledDateTime
+                  timeOnly={timeOnly}
+                  timeAndDate={!timeOnly}
+                  date={dateEnded}
+                />
+              </StyledDateTimeWindow>
+            )}
           </ActivityHeader>
         )}
 
@@ -134,7 +161,7 @@ const HeaderAndFooter = styled('div')`
 
 const ActivityHeader = styled(HeaderAndFooter)`
   display: flex;
-  border-bottom: 1px solid ${p => p.theme.borderLight};
+  border-bottom: 1px solid ${p => p.theme.border};
   font-size: ${p => p.theme.fontSizeMedium};
 
   &:last-child {
@@ -148,7 +175,7 @@ const ActivityHeaderContent = styled('div')`
 
 const ActivityFooter = styled(HeaderAndFooter)`
   display: flex;
-  border-top: 1px solid ${p => p.theme.borderLight};
+  border-top: 1px solid ${p => p.theme.border};
   font-size: ${p => p.theme.fontSizeMedium};
 `;
 
@@ -162,11 +189,15 @@ const StyledActivityAvatar = styled(ActivityAvatar)`
 `;
 
 const StyledTimeSince = styled(TimeSince)`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
 `;
 
 const StyledDateTime = styled(DateTime)`
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
+`;
+
+const StyledDateTimeWindow = styled('div')`
+  color: ${p => p.theme.gray300};
 `;
 
 const StyledActivityBubble = styled(ActivityBubble)`

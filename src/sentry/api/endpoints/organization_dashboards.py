@@ -3,7 +3,6 @@ from __future__ import absolute_import
 from django.db import IntegrityError, transaction
 from rest_framework import serializers
 
-from sentry.api.base import DocSection
 from sentry.api.bases.organization import OrganizationEndpoint
 from sentry.api.paginator import OffsetPaginator
 from sentry.api.serializers import serialize
@@ -16,11 +15,9 @@ class DashboardSerializer(serializers.Serializer):
 
 
 class OrganizationDashboardsEndpoint(OrganizationEndpoint):
-    doc_section = DocSection.ORGANIZATIONS
-
     def get(self, request, organization):
         """
-        Retrieve an Organizations Dashboards
+        Retrieve an Organization's Dashboards
         `````````````````````````````````````
         Retrieve a list of dashboards that are associated with the given organization.
         :pparam string organization_slug: the slug of the organization the
@@ -63,6 +60,6 @@ class OrganizationDashboardsEndpoint(OrganizationEndpoint):
                     organization_id=organization.id, title=result["title"], created_by=request.user
                 )
         except IntegrityError:
-            return Response("This dashboard already exists", status=409)
+            return Response("Dashboard title already taken", status=409)
 
         return Response(serialize(dashboard, request.user), status=201)

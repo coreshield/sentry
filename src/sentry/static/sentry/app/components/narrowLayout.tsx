@@ -1,10 +1,11 @@
 import React from 'react';
-import PropTypes from 'prop-types';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
-import {t} from 'app/locale';
 import {logout} from 'app/actionCreators/account';
 import {Client} from 'app/api';
+import {IconSentry} from 'app/icons';
+import {t} from 'app/locale';
 
 type Props = {
   showLogout?: boolean;
@@ -40,7 +41,7 @@ class NarrowLayout extends React.Component<Props> {
           <div className="box box-modal">
             <div className="box-header">
               <a href="/">
-                <span className="icon-sentry-logo" />
+                <IconSentry size="lg" />
               </a>
               {this.props.showLogout && (
                 <a className="logout pull-right" onClick={this.handleLogout}>

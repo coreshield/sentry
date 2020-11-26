@@ -2,16 +2,16 @@ import React from 'react';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
 
+import OrganizationStore from 'app/stores/organizationStore';
+import ProjectsStore from 'app/stores/projectsStore';
 import OrganizationDetails, {
   LightWeightOrganizationDetails,
 } from 'app/views/organizationDetails';
-import OrganizationStore from 'app/stores/organizationStore';
-import ProjectsStore from 'app/stores/projectsStore';
 
 let wrapper;
 
-describe('OrganizationDetails', function() {
-  beforeEach(async function() {
+describe('OrganizationDetails', function () {
+  beforeEach(async function () {
     OrganizationStore.reset();
     // wait for store reset changes to propagate
     await tick();
@@ -27,14 +27,14 @@ describe('OrganizationDetails', function() {
     });
   });
 
-  afterEach(function() {
+  afterEach(function () {
     // necessary to unsubscribe successfully from org store
     wrapper.unmount();
   });
 
-  describe('render()', function() {
+  describe('render()', function () {
     describe('pending deletion', () => {
-      it('should render a restoration prompt', async function() {
+      it('should render a restoration prompt', async function () {
         MockApiClient.addMockResponse({
           url: '/organizations/org-slug/',
           body: TestStubs.Organization({
@@ -58,7 +58,7 @@ describe('OrganizationDetails', function() {
         );
         expect(wrapper.find('button[aria-label="Restore Organization"]')).toHaveLength(1);
       });
-      it('should render a restoration prompt without action for members', async function() {
+      it('should render a restoration prompt without action for members', async function () {
         MockApiClient.addMockResponse({
           url: '/organizations/org-slug/',
           body: TestStubs.Organization({
@@ -101,7 +101,7 @@ describe('OrganizationDetails', function() {
         });
       });
 
-      it('should render a deletion in progress prompt', async function() {
+      it('should render a deletion in progress prompt', async function () {
         wrapper = mountWithTheme(
           <OrganizationDetails params={{orgId: 'org-slug'}} location={{}} routes={[]} />,
           TestStubs.routerContext()
@@ -116,7 +116,7 @@ describe('OrganizationDetails', function() {
       });
     });
   });
-  it('can render a lightweight version of itself and fetches teams', async function() {
+  it('can render a lightweight version of itself and fetches teams', async function () {
     ProjectsStore.reset();
     MockApiClient.addMockResponse({
       url: '/organizations/org-slug/',

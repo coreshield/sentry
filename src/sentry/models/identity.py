@@ -65,7 +65,7 @@ class Identity(Model):
 
     idp = FlexibleForeignKey("sentry.IdentityProvider")
     user = FlexibleForeignKey(settings.AUTH_USER_MODEL)
-    external_id = models.CharField(max_length=64)
+    external_id = models.TextField()
     data = EncryptedJsonField()
     status = BoundedPositiveIntegerField(default=IdentityStatus.UNKNOWN)
     scopes = ArrayField()
@@ -105,6 +105,26 @@ class Identity(Model):
                 "external_id": external_id,
                 "object_id": identity_model.id,
                 "user_id": user.id,
+            },
+        )
+        return identity_model
+
+    @classmethod
+    def update_external_id_and_defaults(cls, idp, external_id, user, defaults):
+        """
+        Updates the identity object for a given user and identity provider
+        with the new external id and other fields related to the identity status
+        """
+        query = Identity.objects.filter(user=user, idp=idp)
+        query.update(external_id=external_id, **defaults)
+        identity_model = query.first()
+        logger.info(
+            "updated-identity",
+            extra={
+                "external_id": external_id,
+                "idp_id": idp.id,
+                "user_id": user.id,
+                "identity_id": identity_model.id,
             },
         )
         return identity_model

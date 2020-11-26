@@ -1,28 +1,39 @@
 import React from 'react';
-import {Params} from 'react-router/lib/Router';
 import {browserHistory} from 'react-router';
-import {Location} from 'history';
+import {Params} from 'react-router/lib/Router';
 import styled from '@emotion/styled';
+import {Location} from 'history';
 import isEqual from 'lodash/isEqual';
-import * as Sentry from '@sentry/react';
 
-import {Client} from 'app/api';
-import {t} from 'app/locale';
-import {fetchTotalCount} from 'app/actionCreators/events';
 import {loadOrganizationTags} from 'app/actionCreators/tags';
-import {Organization, Project, GlobalSelection} from 'app/types';
-import SentryDocumentTitle from 'app/components/sentryDocumentTitle';
-import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
-import {PageContent} from 'app/styles/organization';
-import EventView, {isAPIPayloadSimilar} from 'app/utils/discover/eventView';
-import {isAggregateField} from 'app/utils/discover/fields';
-import {decodeScalar} from 'app/utils/queryString';
-import {tokenizeSearch, stringifyQueryObject} from 'app/utils/tokenizeSearch';
+import {Client} from 'app/api';
 import LightWeightNoProjectMessage from 'app/components/lightWeightNoProjectMessage';
+import LoadingIndicator from 'app/components/loadingIndicator';
+import GlobalSelectionHeader from 'app/components/organizations/globalSelectionHeader';
+import SentryDocumentTitle from 'app/components/sentryDocumentTitle';
+import {t} from 'app/locale';
+import {PageContent} from 'app/styles/organization';
+import {GlobalSelection, Organization, Project} from 'app/types';
+import DiscoverQuery from 'app/utils/discover/discoverQuery';
+import EventView from 'app/utils/discover/eventView';
+import {
+  Column,
+  getAggregateAlias,
+  isAggregateField,
+  WebVital,
+} from 'app/utils/discover/fields';
+import {decodeScalar} from 'app/utils/queryString';
+import {stringifyQueryObject, tokenizeSearch} from 'app/utils/tokenizeSearch';
 import withApi from 'app/utils/withApi';
 import withGlobalSelection from 'app/utils/withGlobalSelection';
 import withOrganization from 'app/utils/withOrganization';
 import withProjects from 'app/utils/withProjects';
+
+import {
+  PERCENTILE as VITAL_PERCENTILE,
+  VITAL_GROUPS,
+} from '../transactionVitals/constants';
+import {addRoutePerformanceContext, getTransactionName} from '../utils';
 
 import SummaryContent from './content';
 
@@ -38,16 +49,18 @@ type Props = {
 
 type State = {
   eventView: EventView | undefined;
-  totalValues: number | null;
 };
+
+// Used to cast the totals request to numbers
+// as React.ReactText
+type TotalValues = Record<string, number>;
 
 class TransactionSummary extends React.Component<Props, State> {
   state: State = {
     eventView: generateSummaryEventView(
       this.props.location,
-      getTransactionName(this.props)
+      getTransactionName(this.props.location)
     ),
-    totalValues: null,
   };
 
   static getDerivedStateFromProps(nextProps: Props, prevState: State): State {
@@ -55,59 +68,31 @@ class TransactionSummary extends React.Component<Props, State> {
       ...prevState,
       eventView: generateSummaryEventView(
         nextProps.location,
-        getTransactionName(nextProps)
+        getTransactionName(nextProps.location)
       ),
     };
   }
 
   componentDidMount() {
     const {api, organization, selection} = this.props;
-    this.fetchTotalCount();
     loadOrganizationTags(api, organization.slug, selection);
+    addRoutePerformanceContext(selection);
   }
 
-  componentDidUpdate(prevProps: Props, prevState: State) {
-    const {api, organization, location, selection} = this.props;
-    const {eventView} = this.state;
-
-    if (eventView && prevState.eventView) {
-      const currentQuery = eventView.getEventsAPIPayload(location);
-      const prevQuery = prevState.eventView.getEventsAPIPayload(prevProps.location);
-      if (!isAPIPayloadSimilar(currentQuery, prevQuery)) {
-        this.fetchTotalCount();
-      }
-    }
+  componentDidUpdate(prevProps: Props) {
+    const {api, organization, selection} = this.props;
 
     if (
       !isEqual(prevProps.selection.projects, selection.projects) ||
       !isEqual(prevProps.selection.datetime, selection.datetime)
     ) {
       loadOrganizationTags(api, organization.slug, selection);
-    }
-  }
-
-  async fetchTotalCount() {
-    const {api, organization, location} = this.props;
-    const {eventView} = this.state;
-    if (!eventView || !eventView.isValid()) {
-      return;
-    }
-
-    this.setState({totalValues: null});
-    try {
-      const totals = await fetchTotalCount(
-        api,
-        organization.slug,
-        eventView.getEventsAPIPayload(location)
-      );
-      this.setState({totalValues: totals});
-    } catch (err) {
-      Sentry.captureException(err);
+      addRoutePerformanceContext(selection);
     }
   }
 
   getDocumentTitle(): string {
-    const name = getTransactionName(this.props);
+    const name = getTransactionName(this.props.location);
 
     const hasTransactionName = typeof name === 'string' && String(name).trim().length > 0;
 
@@ -118,10 +103,60 @@ class TransactionSummary extends React.Component<Props, State> {
     return [t('Summary'), t('Performance')].join(' - ');
   }
 
+  getTotalsEventView(
+    organization: Organization,
+    eventView: EventView
+  ): [EventView, TotalValues] {
+    const threshold = organization.apdexThreshold.toString();
+
+    const vitals = VITAL_GROUPS.map(({vitals: vs}) => vs).reduce(
+      (keys: WebVital[], vs) => {
+        vs.forEach(vital => keys.push(vital));
+        return keys;
+      },
+      []
+    );
+
+    const totalsView = eventView.withColumns([
+      {
+        kind: 'function',
+        function: ['apdex', threshold, undefined],
+      },
+      {
+        kind: 'function',
+        function: ['user_misery', threshold, undefined],
+      },
+      {
+        kind: 'function',
+        function: ['p95', '', undefined],
+      },
+      {
+        kind: 'function',
+        function: ['count', '', undefined],
+      },
+      {
+        kind: 'function',
+        function: ['count_unique', 'user', undefined],
+      },
+      ...vitals.map(
+        vital =>
+          ({
+            kind: 'function',
+            function: ['percentile', vital, VITAL_PERCENTILE.toString()],
+          } as Column)
+      ),
+    ]);
+    const emptyValues = totalsView.fields.reduce((values, field) => {
+      values[getAggregateAlias(field.field)] = 0;
+      return values;
+    }, {});
+    return [totalsView, emptyValues];
+  }
+
   render() {
-    const {organization, location} = this.props;
-    const {eventView, totalValues} = this.state;
-    const transactionName = getTransactionName(this.props);
+    const {organization, projects, location} = this.props;
+    const {eventView} = this.state;
+    const transactionName = getTransactionName(location);
     if (!eventView || transactionName === undefined) {
       // If there is no transaction name, redirect to the Performance landing page
 
@@ -133,19 +168,52 @@ class TransactionSummary extends React.Component<Props, State> {
       });
       return null;
     }
+    const [totalsView, emptyValues] = this.getTotalsEventView(organization, eventView);
+
+    const shouldForceProject = eventView.project.length === 1;
+    const forceProject = shouldForceProject
+      ? projects.find(p => parseInt(p.id, 10) === eventView.project[0])
+      : undefined;
+    const projectSlugs = eventView.project
+      .map(projectId => projects.find(p => parseInt(p.id, 10) === projectId))
+      .filter((p: Project | undefined): p is Project => p !== undefined)
+      .map(p => p.slug);
 
     return (
       <SentryDocumentTitle title={this.getDocumentTitle()} objSlug={organization.slug}>
-        <GlobalSelectionHeader>
+        <GlobalSelectionHeader
+          lockedMessageSubject={t('transaction')}
+          shouldForceProject={shouldForceProject}
+          forceProject={forceProject}
+          specificProjectSlugs={projectSlugs}
+          disableMultipleProjectSelection
+          showProjectSettingsLink
+        >
           <StyledPageContent>
             <LightWeightNoProjectMessage organization={organization}>
-              <SummaryContent
+              <DiscoverQuery
+                eventView={totalsView}
+                orgSlug={organization.slug}
                 location={location}
-                organization={organization}
-                eventView={eventView}
-                transactionName={transactionName}
-                totalValues={totalValues}
-              />
+              >
+                {({tableData, isLoading}) => {
+                  if (isLoading) {
+                    return <LoadingIndicator />;
+                  }
+                  const totals = (tableData && tableData.data.length
+                    ? tableData.data[0]
+                    : emptyValues) as TotalValues;
+                  return (
+                    <SummaryContent
+                      location={location}
+                      organization={organization}
+                      eventView={eventView}
+                      transactionName={transactionName}
+                      totalValues={totals}
+                    />
+                  );
+                }}
+              </DiscoverQuery>
             </LightWeightNoProjectMessage>
           </StyledPageContent>
         </GlobalSelectionHeader>
@@ -158,13 +226,6 @@ const StyledPageContent = styled(PageContent)`
   padding: 0;
 `;
 
-function getTransactionName(props: Props): string | undefined {
-  const {location} = props;
-  const {transaction} = location.query;
-
-  return decodeScalar(transaction);
-}
-
 function generateSummaryEventView(
   location: Location,
   transactionName: string | undefined
@@ -175,23 +236,26 @@ function generateSummaryEventView(
   // Use the user supplied query but overwrite any transaction or event type
   // conditions they applied.
   const query = decodeScalar(location.query.query) || '';
-  const conditions = Object.assign(tokenizeSearch(query), {
-    'event.type': ['transaction'],
-    transaction: [transactionName],
-  });
+  const conditions = tokenizeSearch(query);
+  conditions
+    .setTagValues('event.type', ['transaction'])
+    .setTagValues('transaction', [transactionName]);
 
-  Object.keys(conditions).forEach(field => {
-    if (isAggregateField(field)) delete conditions[field];
+  Object.keys(conditions.tagValues).forEach(field => {
+    if (isAggregateField(field)) conditions.removeTag(field);
   });
 
   // Handle duration filters from the latency chart
   if (location.query.startDuration || location.query.endDuration) {
-    conditions['transaction.duration'] = [
-      decodeScalar(location.query.startDuration),
-      decodeScalar(location.query.endDuration),
-    ]
-      .filter(item => item)
-      .map((item, index) => (index === 0 ? `>${item}` : `<${item}`));
+    conditions.setTagValues(
+      'transaction.duration',
+      [
+        decodeScalar(location.query.startDuration),
+        decodeScalar(location.query.endDuration),
+      ]
+        .filter(item => item)
+        .map((item, index) => (index === 0 ? `>${item}` : `<${item}`))
+    );
   }
 
   return EventView.fromNewQueryWithLocation(
@@ -199,7 +263,7 @@ function generateSummaryEventView(
       id: undefined,
       version: 2,
       name: transactionName,
-      fields: ['id', 'user', 'transaction.duration', 'timestamp'],
+      fields: ['id', 'user.display', 'transaction.duration', 'timestamp'],
       query: stringifyQueryObject(conditions),
       projects: [],
     },

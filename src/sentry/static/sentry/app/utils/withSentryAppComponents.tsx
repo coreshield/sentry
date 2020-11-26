@@ -1,9 +1,9 @@
 import React from 'react';
-import Reflux from 'reflux';
 import createReactClass from 'create-react-class';
+import Reflux from 'reflux';
 
-import getDisplayName from 'app/utils/getDisplayName';
 import SentryAppComponentsStore from 'app/stores/sentryAppComponentsStore';
+import getDisplayName from 'app/utils/getDisplayName';
 
 // TODO(ts): Update when component type is defined
 type Component = {};
@@ -32,12 +32,14 @@ const withSentryAppComponents = <P extends InjectedAppComponentsProps>(
     mixins: [Reflux.connect(SentryAppComponentsStore, 'components') as any],
 
     render() {
+      const {components, ...props} = this.props as P;
       return (
         <WrappedComponent
-          components={
-            SentryAppComponentsStore.getComponentByType(componentType) as Component[]
-          }
-          {...(this.props as P)}
+          {...({
+            components:
+              components ?? SentryAppComponentsStore.getComponentByType(componentType),
+            ...props,
+          } as P)}
         />
       );
     },

@@ -2,16 +2,16 @@ import React from 'react';
 import styled from '@emotion/styled';
 import flatten from 'lodash/flatten';
 
-import {defined, objectIsEmpty} from 'app/utils';
-import {t} from 'app/locale';
+import Alert from 'app/components/alert';
 import Button from 'app/components/button';
+import Confirm from 'app/components/confirm';
+import {IconAdd, IconDelete} from 'app/icons';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
+import {defined, objectIsEmpty} from 'app/utils';
+import {singleLineRenderer} from 'app/utils/marked';
 import Input from 'app/views/settings/components/forms/controls/input';
 import InputField from 'app/views/settings/components/forms/inputField';
-import space from 'app/styles/space';
-import {IconAdd, IconDelete} from 'app/icons';
-import Confirm from 'app/components/confirm';
-import Alert from 'app/components/alert';
-import {singleLineRenderer} from 'app/utils/marked';
 import {TableType} from 'app/views/settings/components/forms/type';
 
 const defaultProps = {
@@ -141,7 +141,7 @@ export default class TableField extends React.Component<Props> {
               <Row key={fieldKey}>
                 <RowInput>
                   <Input
-                    onChange={v => setValue(rowIndex, fieldKey, v ? v : null)}
+                    onChange={v => setValue(rowIndex, fieldKey, v)}
                     value={!defined(row[fieldKey]) ? '' : row[fieldKey]}
                   />
                 </RowInput>
@@ -189,7 +189,7 @@ export default class TableField extends React.Component<Props> {
 const HeaderLabel = styled('div')`
   font-size: 0.8em;
   text-transform: uppercase;
-  color: ${p => p.theme.gray600};
+  color: ${p => p.theme.subText};
 `;
 
 const HeaderContainer = styled('div')`

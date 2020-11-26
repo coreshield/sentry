@@ -1,12 +1,12 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import space from 'app/styles/space';
-import {t} from 'app/locale';
 import Button from 'app/components/button';
 import {IconChevron} from 'app/icons';
+import {t} from 'app/locale';
+import space from 'app/styles/space';
 
-import RulesList from './rulesList';
+import Rules from './rules';
 import {Rule} from './types';
 
 type Props = {
@@ -27,16 +27,16 @@ class OrganizationRules extends React.Component<Props, State> {
     this.loadContentHeight();
   }
 
-  rulesListRef = React.createRef<HTMLUListElement>();
+  rulesRef = React.createRef<HTMLUListElement>();
 
-  loadContentHeight = () => {
+  loadContentHeight() {
     if (!this.state.contentHeight) {
-      const contentHeight = this.rulesListRef.current?.offsetHeight;
+      const contentHeight = this.rulesRef.current?.offsetHeight;
       if (contentHeight) {
         this.setState({contentHeight: `${contentHeight}px`});
       }
     }
-  };
+  }
 
   handleToggleCollapsed = () => {
     this.setState(prevState => ({
@@ -70,7 +70,7 @@ class OrganizationRules extends React.Component<Props, State> {
           />
         </Header>
         <Content>
-          <RulesList rules={rules} ref={this.rulesListRef} />
+          <Rules rules={rules} ref={this.rulesRef} disabled />
         </Content>
       </Wrapper>
     );
@@ -90,15 +90,15 @@ const Header = styled('div')`
   display: grid;
   grid-template-columns: 1fr auto;
   align-items: center;
-  border-bottom: 1px solid ${p => p.theme.borderDark};
+  border-bottom: 1px solid ${p => p.theme.border};
   padding: ${space(1)} ${space(2)};
 `;
 
 const Wrapper = styled('div')<{isCollapsed?: boolean; contentHeight?: string}>`
-  color: ${p => p.theme.gray400};
-  background: ${p => p.theme.gray100};
+  color: ${p => p.theme.gray200};
+  background: ${p => p.theme.backgroundSecondary};
   ${p => !p.contentHeight && `padding: ${space(1)} ${space(2)}`};
-  ${p => !p.isCollapsed && ` border-bottom: 1px solid ${p.theme.borderDark}`};
+  ${p => !p.isCollapsed && ` border-bottom: 1px solid ${p.theme.border}`};
   ${p =>
     !p.isCollapsed &&
     p.contentHeight &&

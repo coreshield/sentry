@@ -1,15 +1,16 @@
 import React from 'react';
 import {browserHistory} from 'react-router';
-import styled from '@emotion/styled';
 import {RouteComponentProps} from 'react-router/lib/Router';
+import styled from '@emotion/styled';
 
 import Button from 'app/components/button';
 import {ExportQueryType} from 'app/components/dataExport';
 import DateTime from 'app/components/dateTime';
+import {IconDownload} from 'app/icons';
+import {t, tct} from 'app/locale';
+import space from 'app/styles/space';
 import AsyncView from 'app/views/asyncView';
 import Layout from 'app/views/auth/layout';
-import space from 'app/styles/space';
-import {t, tct} from 'app/locale';
 
 export enum DownloadStatus {
   Early = 'EARLY',
@@ -60,7 +61,7 @@ class DataDownload extends AsyncView<Props, State> {
     return t('Download Center');
   }
 
-  getEndpoints(): [string, string][] {
+  getEndpoints(): ReturnType<AsyncView['getEndpoints']> {
     const {orgId, dataExportId} = this.props.params;
     return [['download', `/organizations/${orgId}/data-export/${dataExportId}/`]];
   }
@@ -171,11 +172,7 @@ class DataDownload extends AsyncView<Props, State> {
     return type === 'Discover' ? (
       <React.Fragment>
         <p>{t('Need to make changes?')}</p>
-        <Button
-          priority="primary"
-          icon="icon-discover"
-          onClick={() => this.openInDiscover()}
-        >
+        <Button priority="primary" onClick={() => this.openInDiscover()}>
           {t('Open in Discover')}
         </Button>
         <br />
@@ -198,7 +195,7 @@ class DataDownload extends AsyncView<Props, State> {
           <p>{t("See, that wasn't so bad. Your data is all ready for download.")}</p>
           <Button
             priority="primary"
-            icon="icon-download"
+            icon={<IconDownload />}
             href={`/api/0/organizations/${orgId}/data-export/${dataExportId}/?download=true`}
           >
             {t('Download CSV')}
@@ -217,7 +214,7 @@ class DataDownload extends AsyncView<Props, State> {
             {tct('Need help verifying? [link].', {
               link: (
                 <a
-                  href="https://docs.sentry.io/performance-monitoring/discover-queries/query-builder/#filter-by-table-columns"
+                  href="https://docs.sentry.io/product/discover-queries/query-builder/#filter-by-table-columns"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -276,7 +273,7 @@ class DataDownload extends AsyncView<Props, State> {
 }
 
 const Header = styled('header')`
-  border-bottom: 1px solid ${p => p.theme.borderLight};
+  border-bottom: 1px solid ${p => p.theme.border};
   padding: ${space(3)} 40px 0;
   h3 {
     font-size: 24px;

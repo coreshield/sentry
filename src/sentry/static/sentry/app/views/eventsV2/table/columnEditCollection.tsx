@@ -5,25 +5,27 @@ import styled from '@emotion/styled';
 import Button from 'app/components/button';
 import {SectionHeading} from 'app/components/charts/styles';
 import {
-  UserSelectValues,
   setBodyUserSelect,
+  UserSelectValues,
 } from 'app/components/events/interfaces/spans/utils';
 import {IconAdd, IconDelete, IconGrabbable} from 'app/icons';
 import {t} from 'app/locale';
-import {SelectValue, OrganizationSummary} from 'app/types';
 import space from 'app/styles/space';
-import theme from 'app/utils/theme';
+import {LightWeightOrganization, SelectValue} from 'app/types';
 import {Column} from 'app/utils/discover/fields';
+import theme from 'app/utils/theme';
 
-import {FieldValue} from './types';
-import {QueryField} from './queryField';
 import {generateFieldOptions} from '../utils';
+
+import {QueryField} from './queryField';
+import {FieldValue} from './types';
 
 type Props = {
   // Input columns
   columns: Column[];
-  organization: OrganizationSummary;
+  organization: LightWeightOrganization;
   tagKeys: null | string[];
+  measurementKeys: null | string[];
   // Fired when columns are added/removed/modified
   onChange: (columns: Column[]) => void;
 };
@@ -73,7 +75,10 @@ class ColumnEditCollection extends React.Component<Props, State> {
   }
 
   componentDidUpdate(prevProps: Props) {
-    if (this.props.tagKeys !== prevProps.tagKeys) {
+    if (
+      this.props.tagKeys !== prevProps.tagKeys ||
+      this.props.measurementKeys !== prevProps.measurementKeys
+    ) {
       this.syncFields();
     }
   }
@@ -93,6 +98,7 @@ class ColumnEditCollection extends React.Component<Props, State> {
     return generateFieldOptions({
       organization: this.props.organization,
       tagKeys: this.props.tagKeys,
+      measurementKeys: this.props.measurementKeys,
     });
   }
 
@@ -143,6 +149,7 @@ class ColumnEditCollection extends React.Component<Props, State> {
       userSelect: 'none',
       MozUserSelect: 'none',
       msUserSelect: 'none',
+      webkitUserSelect: 'none',
     });
 
     // attach event listeners so that the mouse cursor can drag anywhere
@@ -286,7 +293,7 @@ class ColumnEditCollection extends React.Component<Props, State> {
             <Button
               aria-label={t('Drag to reorder')}
               onMouseDown={event => this.startDrag(event, i)}
-              icon={<IconGrabbable size="xs" color="gray700" />}
+              icon={<IconGrabbable size="xs" color="gray500" />}
               size="zero"
               borderless
             />
@@ -304,7 +311,7 @@ class ColumnEditCollection extends React.Component<Props, State> {
             <Button
               aria-label={t('Remove column')}
               onClick={() => this.removeColumn(i)}
-              icon={<IconDelete color="gray500" />}
+              icon={<IconDelete color="gray300" />}
               borderless
             />
           ) : (
@@ -372,12 +379,12 @@ const RowContainer = styled('div')`
 `;
 
 const Ghost = styled('div')`
-  background: ${p => p.theme.white};
+  background: ${p => p.theme.background};
   display: block;
   position: absolute;
   padding: ${space(0.5)};
   border-radius: ${p => p.theme.borderRadius};
-  border: 1px solid ${p => p.theme.borderLight};
+  border: 1px solid ${p => p.theme.border};
   width: 600px;
   opacity: 0.8;
   cursor: grabbing;
@@ -393,7 +400,7 @@ const Ghost = styled('div')`
 
 const DragPlaceholder = styled('div')`
   margin: 0 ${space(4)} ${space(1)} ${space(4)};
-  border: 2px dashed ${p => p.theme.borderLight};
+  border: 2px dashed ${p => p.theme.border};
   border-radius: ${p => p.theme.borderRadius};
   height: 40px;
 `;

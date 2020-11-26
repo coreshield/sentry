@@ -1,29 +1,30 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 
-import {Client} from 'app/api';
-import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
-import {ProjectKey} from 'app/views/settings/project/projectKeys/types';
 import {
   addErrorMessage,
   addLoadingMessage,
   addSuccessMessage,
 } from 'app/actionCreators/indicator';
-import {t, tct} from 'app/locale';
+import {Client} from 'app/api';
 import Access from 'app/components/acl/access';
-import BooleanField from 'app/views/settings/components/forms/booleanField';
 import Button from 'app/components/button';
 import Confirm from 'app/components/confirm';
 import DateTime from 'app/components/dateTime';
 import ExternalLink from 'app/components/links/externalLink';
+import {Panel, PanelAlert, PanelBody, PanelHeader} from 'app/components/panels';
+import {IconFlag} from 'app/icons';
+import {t, tct} from 'app/locale';
+import getDynamicText from 'app/utils/getDynamicText';
+import BooleanField from 'app/views/settings/components/forms/booleanField';
 import Field from 'app/views/settings/components/forms/field';
 import Form from 'app/views/settings/components/forms/form';
-import KeyRateLimitsForm from 'app/views/settings/project/projectKeys/details/keyRateLimitsForm';
-import ProjectKeyCredentials from 'app/views/settings/project/projectKeys/projectKeyCredentials';
 import SelectField from 'app/views/settings/components/forms/selectField';
 import TextCopyInput from 'app/views/settings/components/forms/textCopyInput';
 import TextField from 'app/views/settings/components/forms/textField';
-import getDynamicText from 'app/utils/getDynamicText';
+import KeyRateLimitsForm from 'app/views/settings/project/projectKeys/details/keyRateLimitsForm';
+import ProjectKeyCredentials from 'app/views/settings/project/projectKeys/projectKeyCredentials';
+import {ProjectKey} from 'app/views/settings/project/projectKeys/types';
 
 type Props = {
   api: Client;
@@ -170,7 +171,7 @@ class KeySettings extends React.Component<Props, State> {
             <Panel>
               <PanelHeader>{t('Credentials')}</PanelHeader>
               <PanelBody>
-                <PanelAlert type="info" icon="icon-circle-exclamation">
+                <PanelAlert type="info" icon={<IconFlag size="md" />}>
                   {t(
                     'Your credentials are coupled to a public and secret key. Different clients will require different credentials, so make sure you check the documentation before plugging things in.'
                   )}

@@ -1,9 +1,9 @@
 import React from 'react';
 
-import {DEPLOY_PREVIEW_CONFIG, EXPERIMENTAL_SPA} from 'app/constants';
-import {t, tct} from 'app/locale';
 import AlertActions from 'app/actions/alertActions';
 import ExternalLink from 'app/components/links/externalLink';
+import {DEPLOY_PREVIEW_CONFIG, EXPERIMENTAL_SPA} from 'app/constants';
+import {t, tct} from 'app/locale';
 
 export function displayDeployPreviewAlert() {
   if (!DEPLOY_PREVIEW_CONFIG) {
@@ -31,6 +31,7 @@ export function displayDeployPreviewAlert() {
     ),
     type: 'warning',
     neverExpire: true,
+    noDuplicates: true,
   });
 }
 
@@ -42,9 +43,10 @@ export function displayExperimentalSpaAlert() {
   AlertActions.addAlert({
     id: 'develop-proxy',
     message: t(
-      'You are developing against production Sentry API. The API is read-only due to CSRF issues, but please be careful.'
+      'You are developing against production Sentry API, please BE CAREFUL, as your changes will affect production data.'
     ),
     type: 'warning',
     neverExpire: true,
+    noDuplicates: true,
   });
 }

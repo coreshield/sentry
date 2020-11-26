@@ -1,24 +1,24 @@
-import PropTypes from 'prop-types';
-import debounce from 'lodash/debounce';
 import React from 'react';
 import styled from '@emotion/styled';
+import debounce from 'lodash/debounce';
+import PropTypes from 'prop-types';
 
-import {migrateRepository, addRepository} from 'app/actionCreators/integrations';
+import {addRepository, migrateRepository} from 'app/actionCreators/integrations';
 import RepositoryActions from 'app/actions/repositoryActions';
 import Alert from 'app/components/alert';
 import AsyncComponent from 'app/components/asyncComponent';
 import Button from 'app/components/button';
 import DropdownAutoComplete from 'app/components/dropdownAutoComplete';
 import DropdownButton from 'app/components/dropdownButton';
-import {IconCommit} from 'app/icons';
-import EmptyMessage from 'app/views/settings/components/emptyMessage';
-import overflowEllipsis from 'app/styles/overflowEllipsis';
 import Pagination from 'app/components/pagination';
-import RepositoryRow from 'app/components/repositoryRow';
 import {Panel, PanelBody, PanelHeader} from 'app/components/panels';
-import space from 'app/styles/space';
+import RepositoryRow from 'app/components/repositoryRow';
+import {IconCommit, IconFlag} from 'app/icons';
 import {t} from 'app/locale';
+import overflowEllipsis from 'app/styles/overflowEllipsis';
+import space from 'app/styles/space';
 import {Integration, Repository} from 'app/types';
+import EmptyMessage from 'app/views/settings/components/emptyMessage';
 
 type Props = AsyncComponent['props'] & {
   integration: Integration;
@@ -53,7 +53,7 @@ export default class IntegrationRepos extends AsyncComponent<Props, State> {
     };
   }
 
-  getEndpoints(): ([string, string, any] | [string, string])[] {
+  getEndpoints(): ReturnType<AsyncComponent['getEndpoints']> {
     const orgId = this.context.organization.slug;
     return [
       ['itemList', `/organizations/${orgId}/repos/`, {query: {status: ''}}],
@@ -171,7 +171,7 @@ export default class IntegrationRepos extends AsyncComponent<Props, State> {
     const menuHeader = <StyledReposLabel>{t('Repositories')}</StyledReposLabel>;
     const onChange = this.state.integrationRepos.searchable
       ? this.handleSearchRepositories
-      : null;
+      : undefined;
 
     return (
       <DropdownAutoComplete
@@ -182,6 +182,7 @@ export default class IntegrationRepos extends AsyncComponent<Props, State> {
         emptyMessage={t('No repositories available')}
         noResultsMessage={t('No repositories found')}
         busy={this.state.dropdownBusy}
+        alignMenu="right"
       >
         {({isOpen}) => (
           <DropdownButton isOpen={isOpen} size="xsmall" busy={this.state.adding}>
@@ -198,7 +199,7 @@ export default class IntegrationRepos extends AsyncComponent<Props, State> {
     );
     if (badRequest) {
       return (
-        <Alert type="error" icon="icon-circle-exclamation">
+        <Alert type="error" icon={<IconFlag size="md" />}>
           {t(
             'We were unable to fetch repositories for this integration. Try again later, or reconnect this integration.'
           )}

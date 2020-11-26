@@ -2,16 +2,16 @@ import React from 'react';
 import styled from '@emotion/styled';
 import omit from 'lodash/omit';
 
+import Button from 'app/components/button';
+import DropdownMenu from 'app/components/dropdownMenu';
+import {IconChevron, IconOpen, IconStack} from 'app/icons';
 import {t} from 'app/locale';
 import SentryTypes from 'app/sentryTypes';
 import space from 'app/styles/space';
 import withOrganization from 'app/utils/withOrganization';
-import Button from 'app/components/button';
-import DropdownMenu from 'app/components/dropdownMenu';
-import {IconChevron, IconStack, IconTelescope} from 'app/icons';
 import {
-  getDiscoverUrlPathFromDiscoverQuery,
   getDiscover2UrlPathFromDiscoverQuery,
+  getDiscoverUrlPathFromDiscoverQuery,
 } from 'app/views/dashboards/utils/getDiscoverUrlPathFromDiscoverQuery';
 import {getEventsUrlPathFromDiscoverQuery} from 'app/views/dashboards/utils/getEventsUrlPathFromDiscoverQuery';
 
@@ -106,7 +106,7 @@ class ExploreWidget extends React.Component {
             : t('You do not have access to Discover')
         }
       >
-        <IconTelescope size="xs" />
+        <IconOpen />
       </ExploreAction>
     );
   }
@@ -120,19 +120,15 @@ class ExploreWidget extends React.Component {
     return (
       <ExploreAction
         to={flags.discover2 ? this.getExportToDiscover(query, true) : ''}
-        href={
-          !flags.discover2
-            ? 'https://docs.sentry.io/performance-monitoring/discover-queries/'
-            : ''
-        }
+        href={!flags.discover2 ? 'https://docs.sentry.io/product/discover-queries/' : ''}
         target={!flags.discover2 ? '_blank' : ''}
         title={
           flags.discover2
-            ? t('Explore data in the new Discover')
-            : t('You do not have access to the new Discover. Click to learn more.')
+            ? t('Explore data in Discover')
+            : t('You do not have access to Discover. Click to learn more.')
         }
       >
-        <IconTelescope size="xs" />
+        <IconOpen />
       </ExploreAction>
     );
   }
@@ -200,25 +196,25 @@ class ExploreWidget extends React.Component {
 export default withOrganization(ExploreWidget);
 
 const ExploreRoot = styled('div')`
-  border-left: 1px solid ${p => p.theme.borderLight};
+  border-left: 1px solid ${p => p.theme.border};
   position: relative;
   ${p => p.isOpen && 'filter: drop-shadow(-7px -7px 12px rgba(47, 40, 55, 0.04));'};
 `;
 
-const UnstyledButton = props => <Button borderless size="zero" {...props} />;
+const ExploreAction = props => <Button priority="link" {...props} />;
 
 const ExploreButton = styled(props => {
   const remaining = omit(props, 'isOpen');
-  return <UnstyledButton {...remaining} />;
+  return <ExploreAction {...remaining} />;
 })`
   position: relative;
-  color: ${p => (p.isOpen ? p.theme.purple400 : p.theme.gray500)};
+  color: ${p => (p.isOpen ? p.theme.purple300 : p.theme.gray300)};
   padding: ${space(1)} ${space(2)};
   border-radius: 0 0 ${p => p.theme.borderRadius} 0;
   ${p => p.isOpen && `z-index: ${p.theme.zIndex.dropdownAutocomplete.actor}`};
 
   &:hover {
-    color: ${p => p.theme.purple400};
+    color: ${p => p.theme.purple300};
   }
 
   /* covers up borders to create a continous shape */
@@ -236,22 +232,14 @@ const ExploreMenu = styled('div')`
   bottom: 100%;
   z-index: ${p => p.theme.zIndex.dropdownAutocomplete.menu};
 
-  background-color: white;
-  border: 1px solid ${p => p.theme.borderLight};
+  background-color: ${p => p.theme.background};
+  border: 1px solid ${p => p.theme.border};
 `;
 
 const ExploreRow = styled('li')`
   display: flex;
   align-items: center;
   padding: 0 ${space(0.5)};
-`;
-
-const ExploreAction = styled(UnstyledButton)`
-  padding: ${space(1)};
-  color: ${p => p.theme.purple400};
-  &:hover {
-    color: ${p => p.theme.purple400};
-  }
 `;
 
 const QueryName = styled('span')`

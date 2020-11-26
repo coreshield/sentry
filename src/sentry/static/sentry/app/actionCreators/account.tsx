@@ -1,12 +1,7 @@
-import {Client} from 'app/api';
 import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
+import {Client} from 'app/api';
 import ConfigStore from 'app/stores/configStore';
-import {User} from 'app/types';
-
-type Identity = {
-  id: string;
-  providerLabel: string;
-};
+import {Identity, User} from 'app/types';
 
 export async function disconnectIdentity(identity: Identity) {
   const api = new Client();

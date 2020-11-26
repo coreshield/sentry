@@ -1,7 +1,15 @@
-import capitalize from 'lodash/capitalize';
 import React from 'react';
+import capitalize from 'lodash/capitalize';
 import * as qs from 'query-string';
 
+import {
+  IconBitbucket,
+  IconGeneric,
+  IconGithub,
+  IconGitlab,
+  IconJira,
+  IconVsts,
+} from 'app/icons';
 import HookStore from 'app/stores/hookStore';
 import {
   AppOrProviderOrPlugin,
@@ -55,7 +63,8 @@ export type SingleIntegrationEvent = {
     | 'integrations.upgrade_plan_modal_opened'
     | 'integrations.resolve_now_clicked'
     | 'integrations.reauth_start'
-    | 'integrations.reauth_complete';
+    | 'integrations.reauth_complete'
+    | 'integrations.request_install';
   eventName:
     | 'Integrations: Install Modal Opened' //TODO: remove
     | 'Integrations: Installation Start'
@@ -72,7 +81,8 @@ export type SingleIntegrationEvent = {
     | 'Integrations: Upgrade Plan Modal Opened'
     | 'Integrations: Resolve Now Clicked'
     | 'Integrations: Reauth Start'
-    | 'Integrations: Reauth Complete';
+    | 'Integrations: Reauth Complete'
+    | 'Integrations: Request Install';
   integration: string; //the slug
   integration_type: IntegrationType;
   already_installed?: boolean;
@@ -101,18 +111,31 @@ type IntegrationCategorySelectEvent = {
   category: string;
 };
 
+type IntegrationStacktraceLinkEvent = {
+  eventKey:
+    | 'integrations.stacktrace_link_clicked'
+    | 'integrations.reconfigure_stacktrace_setup';
+  eventName:
+    | 'Integrations: Stacktrace Link Clicked'
+    | 'Integrations: Reconfigure Stacktrace Setup';
+  provider: string;
+  error_reason?: 'file_not_found' | 'stack_root_mismatch';
+};
+
 type IntegrationsEventParams = (
   | MultipleIntegrationsEvent
   | SingleIntegrationEvent
   | IntegrationSearchEvent
   | IntegrationCategorySelectEvent
+  | IntegrationStacktraceLinkEvent
 ) & {
   view?:
     | 'external_install'
     | 'legacy_integrations'
     | 'plugin_details'
     | 'integrations_directory'
-    | 'integrations_directory_integration_detail';
+    | 'integrations_directory_integration_detail'
+    | 'stacktrace_issue_details';
   project_id?: string;
 } & Parameters<Hooks['analytics:track-event']>[0];
 
@@ -250,6 +273,7 @@ export const getCategories = (features: IntegrationFeature[]): string[] => {
       case 'actionable notification':
         return 'notification action';
       case 'issue basic':
+      case 'issue link':
       case 'issue sync':
         return 'project management';
       case 'commits':
@@ -320,5 +344,33 @@ export const convertIntegrationTypeToSnakeCase = (
       return 'document';
     default:
       return type;
+  }
+};
+
+export const safeGetQsParam = (param: string) => {
+  try {
+    const query = qs.parse(window.location.search) || {};
+    return query[param];
+  } catch {
+    return undefined;
+  }
+};
+
+export const getIntegrationIcon = (integrationType?: string) => {
+  switch (integrationType) {
+    case 'bitbucket':
+      return <IconBitbucket size="md" />;
+    case 'gitlab':
+      return <IconGitlab size="md" />;
+    case 'github':
+    case 'github_enterprise':
+      return <IconGithub size="md" />;
+    case 'jira':
+    case 'jira_server':
+      return <IconJira size="md" />;
+    case 'vsts':
+      return <IconVsts size="md" />;
+    default:
+      return <IconGeneric size="md" />;
   }
 };

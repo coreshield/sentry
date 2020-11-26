@@ -1,13 +1,13 @@
 import React from 'react';
-import Reflux from 'reflux';
 import createReactClass from 'create-react-class';
+import Reflux from 'reflux';
 
-import {defined} from 'app/utils';
-import {Organization, Project, Plugin} from 'app/types';
 import {fetchPlugins} from 'app/actionCreators/plugins';
-import getDisplayName from 'app/utils/getDisplayName';
-import PluginsStore from 'app/stores/pluginsStore';
 import SentryTypes from 'app/sentryTypes';
+import PluginsStore from 'app/stores/pluginsStore';
+import {Organization, Plugin, Project} from 'app/types';
+import {defined} from 'app/utils';
+import getDisplayName from 'app/utils/getDisplayName';
 import withOrganization from 'app/utils/withOrganization';
 import withProject from 'app/utils/withProject';
 
@@ -17,14 +17,14 @@ type WithPluginProps = {
 };
 
 type InjectedPluginProps = {
-  plugins: Plugin[];
+  plugins: {plugins: Plugin[]; loading: boolean};
 };
 
 /**
  * Higher order component that fetches list of plugins and
  * passes PluginsStore to component as `plugins`
  */
-const withPlugins = <P extends InjectedPluginProps>(
+const withPlugins = <P extends WithPluginProps>(
   WrappedComponent: React.ComponentType<P>
 ) =>
   withOrganization(
@@ -83,8 +83,8 @@ const withPlugins = <P extends InjectedPluginProps>(
         render() {
           return (
             <WrappedComponent
-              {...(this.props as P)}
-              plugins={this.state.store as Plugin[]}
+              {...(this.props as P & WithPluginProps)}
+              plugins={this.state.store}
             />
           );
         },

@@ -8,7 +8,6 @@ from django.utils.translation import ugettext_lazy as _
 
 from sentry.utils import auth
 from sentry_sdk import Hub
-from sentry_sdk.tracing import Span
 
 ERR_BAD_SIGNATURE = _("The link you followed is invalid or expired.")
 
@@ -41,11 +40,24 @@ def signed_auth_required(func):
     return wrapped
 
 
+def set_referrer_policy(policy):
+    def real_decorator(func):
+        @wraps(func)
+        def wrapped(request, *args, **kwargs):
+            response = func(request, *args, **kwargs)
+            response["Referrer-Policy"] = policy
+            return response
+
+        return wrapped
+
+    return real_decorator
+
+
 def transaction_start(endpoint):
     def decorator(func):
         @wraps(func)
         def wrapped(request, *args, **kwargs):
-            with Hub.current.start_span(Span(op="http.server", transaction=endpoint, sampled=True)):
+            with Hub.current.start_transaction(op="http.server", name=endpoint, sampled=True):
                 return func(request, *args, **kwargs)
 
         return wrapped

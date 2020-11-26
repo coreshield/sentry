@@ -1,14 +1,14 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
+import Button from 'app/components/button';
+import ProjectBadge from 'app/components/idBadge/projectBadge';
 import {Panel, PanelBody, PanelHeader, PanelItem} from 'app/components/panels';
 import {t} from 'app/locale';
-import Button from 'app/components/button';
-import EmptyMessage from 'app/views/settings/components/emptyMessage';
-import ProjectBadge from 'app/components/idBadge/projectBadge';
 import SentryTypes from 'app/sentryTypes';
 import withProjects from 'app/utils/withProjects';
+import EmptyMessage from 'app/views/settings/components/emptyMessage';
 
 class IntegrationAlertRules extends React.Component {
   static propTypes = {
@@ -36,7 +36,7 @@ class IntegrationAlertRules extends React.Component {
             <ProjectItem key={project.slug}>
               <ProjectBadge project={project} avatarSize={16} />
               <Button
-                to={`/settings/${orgId}/projects/${project.slug}/alerts/rules/new/`}
+                to={`/organizations/${orgId}/alerts/${project.slug}/new/`}
                 size="xsmall"
               >
                 {t('Add Alert Rule')}

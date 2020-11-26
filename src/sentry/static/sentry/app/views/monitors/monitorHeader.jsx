@@ -1,5 +1,5 @@
-import PropTypes from 'prop-types';
 import React from 'react';
+import PropTypes from 'prop-types';
 
 import TimeSince from 'app/components/timeSince';
 import {t} from 'app/locale';
@@ -22,8 +22,8 @@ export default class MonitorHeader extends React.Component {
       <div className="release-details">
         <div className="row">
           <div className="col-sm-6 col-xs-10">
-            <h3>{t('Monitor Details')}</h3>
-            <div className="release-meta">{monitor.name}</div>
+            <h3>{monitor.name}</h3>
+            <div className="release-meta">{monitor.id}</div>
           </div>
           <div className="col-sm-2 hidden-xs">
             <h6 className="nav-header">{t('Last Check-in')}</h6>

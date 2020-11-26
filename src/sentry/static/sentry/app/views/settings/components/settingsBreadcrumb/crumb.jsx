@@ -7,15 +7,17 @@ const Crumb = styled('div')`
   align-items: center;
   position: relative;
   font-size: 18px;
-  color: ${p => p.theme.gray600};
+  color: ${p => p.theme.subText};
   padding-right: ${space(1)};
   cursor: pointer;
+  white-space: nowrap;
+
   > span {
     transition: 0.1s all ease;
   }
 
   &:hover {
-    color: ${p => p.theme.gray800};
+    color: ${p => p.theme.textColor};
   }
 `;
 

@@ -1,5 +1,4 @@
 from __future__ import absolute_import
-import json
 import six
 
 from django.utils.translation import ugettext_lazy as _
@@ -7,6 +6,7 @@ from django.utils.translation import ugettext_lazy as _
 from sentry.exceptions import PluginError
 from sentry.plugins.bases.issue import IssuePlugin
 from sentry_plugins.base import CorePluginMixin
+from sentry.utils import json
 from sentry.utils.http import absolute_uri
 from sentry.integrations import FeatureDescription, IntegrationFeatures
 import sentry
@@ -113,7 +113,7 @@ class RedminePlugin(CorePluginMixin, IssuePlugin):
 
     def get_issue_url(self, group, issue_id, **kwargs):
         host = self.get_option("host", group.project)
-        return "{}/issues/{}".format(host.rstrip("/"), issue_id)
+        return u"{}/issues/{}".format(host.rstrip("/"), issue_id)
 
     def build_config(self):
         host = {
@@ -173,11 +173,11 @@ class RedminePlugin(CorePluginMixin, IssuePlugin):
                 self.fields.remove(field)
                 return
 
-    def build_initial(self, inital_args, project):
+    def build_initial(self, initial_args, project):
         initial = {}
         fields = ["host", "key", "project_id", "tracker_id", "default_priority", "extra_fields"]
         for field in fields:
-            value = inital_args.get(field) or self.get_option(field, project)
+            value = initial_args.get(field) or self.get_option(field, project)
             if value is not None:
                 initial[field] = value
         return initial
@@ -200,7 +200,7 @@ class RedminePlugin(CorePluginMixin, IssuePlugin):
                 choices_value = self.get_option("project_id", project)
                 project_choices = [("", "--")] if not choices_value else []
                 project_choices += [
-                    (p["id"], "%s (%s)" % (p["name"], p["identifier"]))
+                    (p["id"], u"%s (%s)" % (p["name"], p["identifier"]))
                     for p in projects["projects"]
                 ]
                 self.add_choices("project_id", project_choices, choices_value)
@@ -239,9 +239,9 @@ class RedminePlugin(CorePluginMixin, IssuePlugin):
         for field in self.fields:
             if field["name"] in ["project_id", "tracker_id", "default_priority"]:
                 if not config[field["name"]]:
-                    self.logger.exception(six.text_type("{} required.".format(field["name"])))
+                    self.logger.exception(six.text_type(u"{} required.".format(field["name"])))
                     self.client_errors.append(field["name"])
 
         if self.client_errors:
-            raise PluginError(", ".join(self.client_errors) + " required.")
+            raise PluginError(u", ".join(self.client_errors) + " required.")
         return config

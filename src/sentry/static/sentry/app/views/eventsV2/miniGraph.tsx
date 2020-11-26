@@ -1,20 +1,21 @@
 import React from 'react';
-import isEqual from 'lodash/isEqual';
-import {Location} from 'history';
 import styled from '@emotion/styled';
+import {Location} from 'history';
+import isEqual from 'lodash/isEqual';
 
-import withApi from 'app/utils/withApi';
 import {Client} from 'app/api';
-import {Organization} from 'app/types';
-import EventsRequest from 'app/components/charts/eventsRequest';
 import AreaChart from 'app/components/charts/areaChart';
+import EventsRequest from 'app/components/charts/eventsRequest';
 import {getInterval} from 'app/components/charts/utils';
-import {getUtcToLocalDateObject} from 'app/utils/dates';
-import LoadingIndicator from 'app/components/loadingIndicator';
 import LoadingContainer from 'app/components/loading/loadingContainer';
+import LoadingIndicator from 'app/components/loadingIndicator';
 import {IconWarning} from 'app/icons';
-import theme from 'app/utils/theme';
+import {Organization} from 'app/types';
+import {getUtcToLocalDateObject} from 'app/utils/dates';
+import {axisLabelFormatter} from 'app/utils/discover/charts';
 import EventView from 'app/utils/discover/eventView';
+import theme from 'app/utils/theme';
+import withApi from 'app/utils/withApi';
 
 type Props = {
   organization: Organization;
@@ -89,7 +90,7 @@ class MiniGraph extends React.Component<Props> {
           if (errored) {
             return (
               <StyledGraphContainer>
-                <IconWarning color="gray500" size="md" />
+                <IconWarning color="gray300" size="md" />
               </StyledGraphContainer>
             );
           }
@@ -124,7 +125,24 @@ class MiniGraph extends React.Component<Props> {
                 },
               }}
               yAxis={{
-                show: false,
+                show: true,
+                axisLine: {
+                  show: false,
+                },
+                axisLabel: {
+                  color: theme.chartLabel,
+                  fontFamily: theme.text.family,
+                  fontSize: 12,
+                  formatter: (value: number) => axisLabelFormatter(value, yAxis, true),
+                  inside: true,
+                  showMinLabel: false,
+                  showMaxLabel: false,
+                },
+                splitNumber: 3,
+                splitLine: {
+                  show: false,
+                },
+                zlevel: theme.zIndex.header,
               }}
               tooltip={{
                 show: false,
@@ -138,9 +156,6 @@ class MiniGraph extends React.Component<Props> {
                 right: 0,
                 bottom: 0,
                 containLabel: false,
-              }}
-              options={{
-                hoverAnimation: false,
               }}
             />
           );

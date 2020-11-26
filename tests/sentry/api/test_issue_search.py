@@ -57,6 +57,21 @@ class ParseSearchQueryTest(TestCase):
             SearchFilter(key=SearchKey(name="unassigned"), operator="!=", value=SearchValue(False))
         ]
 
+    def test_is_query_linked(self):
+        assert parse_search_query("is:linked") == [
+            SearchFilter(key=SearchKey(name="linked"), operator="=", value=SearchValue(True))
+        ]
+        assert parse_search_query("is:unlinked") == [
+            SearchFilter(key=SearchKey(name="linked"), operator="=", value=SearchValue(False))
+        ]
+
+        assert parse_search_query("!is:linked") == [
+            SearchFilter(key=SearchKey(name="linked"), operator="!=", value=SearchValue(True))
+        ]
+        assert parse_search_query("!is:unlinked") == [
+            SearchFilter(key=SearchKey(name="linked"), operator="!=", value=SearchValue(False))
+        ]
+
     def test_is_query_status(self):
         for status_string, status_val in STATUS_CHOICES.items():
             assert parse_search_query("is:%s" % status_string) == [
@@ -77,6 +92,11 @@ class ParseSearchQueryTest(TestCase):
         assert six.text_type(cm.exception).startswith(
             'Invalid value for "is" search, valid values are'
         )
+
+    def test_is_query_inbox(self):
+        assert parse_search_query("is:inbox") == [
+            SearchFilter(key=SearchKey(name="inbox"), operator="=", value=SearchValue(True))
+        ]
 
     def test_numeric_filter(self):
         # test numeric format
@@ -122,6 +142,22 @@ class ParseSearchQueryTest(TestCase):
                 expected_regex='Boolean statements containing "OR" or "AND" are not supported in this search',
             ):
                 parse_search_query(invalid_query)
+
+    def test_parens_in_query(self):
+        assert parse_search_query(
+            "TypeError Anonymous function(app/javascript/utils/transform-object-keys)"
+        ) == [
+            SearchFilter(
+                key=SearchKey(name="message"),
+                operator="=",
+                value=SearchValue(raw_value="TypeError Anonymous function"),
+            ),
+            SearchFilter(
+                key=SearchKey(name="message"),
+                operator="=",
+                value=SearchValue(raw_value="(app/javascript/utils/transform-object-keys)"),
+            ),
+        ]
 
 
 class ConvertQueryValuesTest(TestCase):

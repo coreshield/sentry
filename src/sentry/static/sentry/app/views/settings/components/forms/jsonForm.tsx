@@ -1,16 +1,16 @@
-import {Box} from 'reflexbox';
-import PropTypes from 'prop-types';
 import React from 'react';
-import scrollToElement from 'scroll-to-element';
-import {Location} from 'history';
 import * as Sentry from '@sentry/react';
+import {Location} from 'history';
+import PropTypes from 'prop-types';
+import {Box} from 'reflexbox'; // eslint-disable-line no-restricted-imports
+import scrollToElement from 'scroll-to-element';
 
 import {defined} from 'app/utils';
 import {sanitizeQuerySelector} from 'app/utils/sanitizeQuerySelector';
 
-import {Field, FieldObject, JsonFormObject} from './type';
 import FieldFromConfig from './fieldFromConfig';
 import FormPanel from './formPanel';
+import {Field, FieldObject, JsonFormObject} from './type';
 
 type DefaultProps = {
   additionalFieldProps: {[key: string]: any};
@@ -183,10 +183,10 @@ class JsonForm extends React.Component<Props, State> {
 
   render() {
     const {
+      access,
       fields,
       title,
       forms,
-      access,
       disabled,
       features,
       additionalFieldProps,

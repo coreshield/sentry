@@ -1,17 +1,18 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import Alert from 'app/components/alert';
+import {IconCheckmark, IconClose, IconFlag, IconInfo} from 'app/icons';
 import space from 'app/styles/space';
 
 type Props = React.ComponentProps<typeof Alert>;
 
 const DEFAULT_ICONS = {
-  info: 'icon-circle-info',
-  error: 'icon-circle-close',
-  warning: 'icon-circle-exclamation',
-  success: 'icon-circle-success',
+  info: <IconInfo size="md" />,
+  error: <IconClose isCircled size="md" />,
+  warning: <IconFlag size="md" />,
+  success: <IconCheckmark isCircled size="md" />,
 };
 
 // Margin bottom should probably be a different prop
@@ -22,6 +23,12 @@ const PanelAlert = styled(({icon, ...props}: Props) => (
   padding: ${space(2)};
   border-radius: 0;
   box-shadow: none;
+
+  &:last-child {
+    border-bottom: none;
+    margin: 0;
+    border-radius: 0 0 4px 4px;
+  }
 `;
 
 PanelAlert.propTypes = {

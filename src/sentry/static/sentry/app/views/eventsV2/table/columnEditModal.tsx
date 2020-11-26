@@ -2,24 +2,25 @@ import React from 'react';
 import {css} from '@emotion/core';
 import styled from '@emotion/styled';
 
+import {ModalRenderProps} from 'app/actionCreators/modal';
 import Button from 'app/components/button';
 import ButtonBar from 'app/components/buttonBar';
 import ExternalLink from 'app/components/links/externalLink';
 import {DISCOVER2_DOCS_URL} from 'app/constants';
-import {ModalRenderProps} from 'app/actionCreators/modal';
 import {t, tct} from 'app/locale';
-import {OrganizationSummary} from 'app/types';
 import space from 'app/styles/space';
-import theme from 'app/utils/theme';
-import {Column} from 'app/utils/discover/fields';
+import {LightWeightOrganization} from 'app/types';
 import {trackAnalyticsEvent} from 'app/utils/analytics';
+import {Column} from 'app/utils/discover/fields';
+import theme from 'app/utils/theme';
 
 import ColumnEditCollection from './columnEditCollection';
 
 type Props = {
   columns: Column[];
-  organization: OrganizationSummary;
+  organization: LightWeightOrganization;
   tagKeys: null | string[];
+  measurementKeys: null | string[];
   // Fired when column selections have been applied.
   onApply: (columns: Column[]) => void;
 } & ModalRenderProps;
@@ -53,7 +54,7 @@ class ColumnEditModal extends React.Component<Props, State> {
   };
 
   render() {
-    const {Header, Body, Footer, tagKeys, organization} = this.props;
+    const {Header, Body, Footer, tagKeys, measurementKeys, organization} = this.props;
     return (
       <React.Fragment>
         <Header>
@@ -65,10 +66,10 @@ class ColumnEditModal extends React.Component<Props, State> {
               'To stack events, add [functionLink: functions] f(x) that may take in additional parameters. [tagFieldLink: Tag and field] columns will help you view more details about the events (i.e. title).',
               {
                 functionLink: (
-                  <ExternalLink href="https://docs.sentry.io/performance-monitoring/discover-queries/query-builder/#filter-by-table-columns" />
+                  <ExternalLink href="https://docs.sentry.io/product/discover-queries/query-builder/#filter-by-table-columns" />
                 ),
                 tagFieldLink: (
-                  <ExternalLink href="https://docs.sentry.io/workflow/search/?platform=javascript#event-properties" />
+                  <ExternalLink href="https://docs.sentry.io/product/sentry-basics/search/#event-properties" />
                 ),
               }
             )}
@@ -77,12 +78,13 @@ class ColumnEditModal extends React.Component<Props, State> {
             organization={organization}
             columns={this.state.columns}
             tagKeys={tagKeys}
+            measurementKeys={measurementKeys}
             onChange={this.handleChange}
           />
         </Body>
         <Footer>
           <ButtonBar gap={1}>
-            <Button priority="default" href={DISCOVER2_DOCS_URL}>
+            <Button priority="default" href={DISCOVER2_DOCS_URL} external>
               {t('Read the Docs')}
             </Button>
             <Button label={t('Apply')} priority="primary" onClick={this.handleApply}>

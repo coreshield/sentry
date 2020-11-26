@@ -13,8 +13,8 @@
  * See https://github.com/microsoft/TypeScript/issues/34920
  */
 
-import styled from '@original-emotion/styled';
 import * as React from 'react';
+import styled from '@original-emotion/styled';
 // TODO(BYK): Figure out why ESLint cannot resolve this
 //            probably need to include `.d.ts` extension
 //            in some resolver config.
@@ -121,7 +121,8 @@ export type Interpolation<MergedProps = undefined> =
 export interface StyledComponent<
   ComponentProps extends {},
   SpecificComponentProps extends {} = {}
-> extends React.FC<ComponentProps & SpecificComponentProps>, ComponentSelector {
+> extends React.FC<ComponentProps & SpecificComponentProps>,
+    ComponentSelector {
   withComponent<C extends React.ComponentType<React.ComponentProps<C>>>(
     component: C
   ): StyledComponent<ComponentProps & PropsOf<C>>;

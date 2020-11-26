@@ -1,14 +1,14 @@
 import React from 'react';
 import styled from '@emotion/styled';
 
-import space from 'app/styles/space';
 import Tooltip from 'app/components/tooltip';
 import {tct} from 'app/locale';
+import space from 'app/styles/space';
 import {defined} from 'app/utils';
 
 type Props = {
   type: string;
-  exceptionModule?: string;
+  exceptionModule?: string | null;
 };
 
 const ExceptionTitle = ({type, exceptionModule}: Props) => {

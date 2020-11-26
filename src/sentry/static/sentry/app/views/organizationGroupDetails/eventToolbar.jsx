@@ -1,18 +1,19 @@
-import {Link} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
-import moment from 'moment-timezone';
+import {Link} from 'react-router';
 import styled from '@emotion/styled';
+import moment from 'moment-timezone';
+import PropTypes from 'prop-types';
 
-import {t} from 'app/locale';
-import Button from 'app/components/button';
-import ButtonBar from 'app/components/buttonBar';
-import ConfigStore from 'app/stores/configStore';
 import DateTime from 'app/components/dateTime';
-import ExternalLink from 'app/components/links/externalLink';
 import FileSize from 'app/components/fileSize';
-import SentryTypes from 'app/sentryTypes';
+import ExternalLink from 'app/components/links/externalLink';
+import NavigationButtonGroup from 'app/components/navigationButtonGroup';
 import Tooltip from 'app/components/tooltip';
+import {IconWarning} from 'app/icons';
+import {t} from 'app/locale';
+import SentryTypes from 'app/sentryTypes';
+import ConfigStore from 'app/stores/configStore';
+import space from 'app/styles/space';
 import getDynamicText from 'app/utils/getDynamicText';
 
 const formatDateDelta = (reference, observed) => {
@@ -88,46 +89,6 @@ class GroupEventToolbar extends React.Component {
 
     const baseEventsPath = `/organizations/${orgId}/issues/${groupId}/events/`;
 
-    const eventNavNodes = [
-      <Button
-        size="small"
-        key="oldest"
-        to={{pathname: `${baseEventsPath}oldest/`, query: location.query}}
-        disabled={!evt.previousEventID}
-        aria-label={t('Oldest')}
-      >
-        <span className="icon-skip-back" />
-      </Button>,
-      <Button
-        size="small"
-        key="prev"
-        to={{
-          pathname: `${baseEventsPath}${evt.previousEventID}/`,
-          query: location.query,
-        }}
-        disabled={!evt.previousEventID}
-      >
-        {t('Older')}
-      </Button>,
-      <Button
-        size="small"
-        key="next"
-        to={{pathname: `${baseEventsPath}${evt.nextEventID}/`, query: location.query}}
-        disabled={!evt.nextEventID}
-      >
-        {t('Newer')}
-      </Button>,
-      <Button
-        size="small"
-        key="latest"
-        to={{pathname: `${baseEventsPath}latest/`, query: location.query}}
-        disabled={!evt.nextEventID}
-        aria-label={t('Newest')}
-      >
-        <span className="icon-skip-forward" />
-      </Button>,
-    ];
-
     // TODO: possible to define this as a route in react-router, but without a corresponding
     //       React component?
     const jsonUrl = `/organizations/${orgId}/issues/${groupId}/events/${evt.id}/json/`;
@@ -142,9 +103,17 @@ class GroupEventToolbar extends React.Component {
 
     return (
       <div className="event-toolbar">
-        <NavigationButtons gap={1}>
-          <ButtonBar merged>{eventNavNodes}</ButtonBar>
-        </NavigationButtons>
+        <StyledNavigationButtonGroup
+          location={location}
+          hasPrevious={evt.previousEventID}
+          hasNext={evt.nextEventID}
+          urls={[
+            `${baseEventsPath}oldest/`,
+            `${baseEventsPath}${evt.previousEventID}/`,
+            `${baseEventsPath}${evt.nextEventID}/`,
+            `${baseEventsPath}latest/`,
+          ]}
+        />
         <h4>
           {t('Event')}{' '}
           <Link to={`${baseEventsPath}${evt.id}/`} className="event-id">
@@ -152,12 +121,12 @@ class GroupEventToolbar extends React.Component {
           </Link>
         </h4>
         <span>
-          <Tooltip title={this.getDateTooltip()}>
+          <Tooltip title={this.getDateTooltip()} disableForVisualTest>
             <DateTime
               date={getDynamicText({value: evt.dateCreated, fixed: 'Dummy timestamp'})}
               style={style}
             />
-            {isOverLatencyThreshold && <span className="icon-alert" />}
+            {isOverLatencyThreshold && <StyledIconWarning color="yellow300" />}
           </Tooltip>
           <ExternalLink href={jsonUrl} className="json-link">
             {'JSON'} (<FileSize bytes={evt.size} />)
@@ -168,8 +137,14 @@ class GroupEventToolbar extends React.Component {
   }
 }
 
-const NavigationButtons = styled(ButtonBar)`
+const StyledNavigationButtonGroup = styled(NavigationButtonGroup)`
   float: right;
+`;
+
+const StyledIconWarning = styled(IconWarning)`
+  margin-left: ${space(0.5)};
+  position: relative;
+  top: ${space(0.25)};
 `;
 
 export default GroupEventToolbar;

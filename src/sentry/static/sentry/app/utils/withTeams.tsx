@@ -1,10 +1,10 @@
 import React from 'react';
-import Reflux from 'reflux';
 import createReactClass from 'create-react-class';
+import Reflux from 'reflux';
 
+import TeamStore from 'app/stores/teamStore';
 import {Team} from 'app/types';
 import getDisplayName from 'app/utils/getDisplayName';
-import TeamStore from 'app/stores/teamStore';
 
 type InjectedTeamsProps = {
   teams: Team[];
@@ -41,4 +41,5 @@ const withTeams = <P extends InjectedTeamsProps>(
       );
     },
   });
+
 export default withTeams;

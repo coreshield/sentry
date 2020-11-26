@@ -1,16 +1,15 @@
 import React from 'react';
-import PropTypes from 'prop-types';
-import classNames from 'classnames';
 import styled from '@emotion/styled';
+import classNames from 'classnames';
+import PropTypes from 'prop-types';
 
-import {t} from 'app/locale';
-import {IconCheckmark} from 'app/icons';
-import CustomResolutionModal from 'app/components/customResolutionModal';
-import MenuItem from 'app/components/menuItem';
-import DropdownLink from 'app/components/dropdownLink';
 import ActionLink from 'app/components/actions/actionLink';
+import CustomResolutionModal from 'app/components/customResolutionModal';
+import DropdownLink from 'app/components/dropdownLink';
+import MenuItem from 'app/components/menuItem';
 import Tooltip from 'app/components/tooltip';
-import {formatVersion} from 'app/utils/formatters';
+import {IconCheckmark} from 'app/icons';
+import {t} from 'app/locale';
 import space from 'app/styles/space';
 import {
   Release,
@@ -18,6 +17,7 @@ import {
   ResolutionStatusDetails,
   UpdateResolutionStatus,
 } from 'app/types';
+import {formatVersion} from 'app/utils/formatters';
 
 const defaultProps = {
   isResolved: false,
@@ -158,7 +158,7 @@ class ResolveActions extends React.Component<Props, State> {
         />
         <Tooltip disabled={!projectFetchError} title={t('Error fetching project')}>
           <div className="btn-group">
-            <ActionLink
+            <StyledActionLink
               {...actionLinkProps}
               title={t('Resolve')}
               className={buttonClass}
@@ -166,9 +166,9 @@ class ResolveActions extends React.Component<Props, State> {
             >
               <StyledIconCheckmark size="xs" />
               {t('Resolve')}
-            </ActionLink>
+            </StyledActionLink>
 
-            <DropdownLink
+            <StyledDropdownLink
               key="resolve-dropdown"
               caret
               className={buttonClass}
@@ -228,7 +228,7 @@ class ResolveActions extends React.Component<Props, State> {
                   </ActionLink>
                 </Tooltip>
               </MenuItem>
-            </DropdownLink>
+            </StyledDropdownLink>
           </div>
         </Tooltip>
       </div>
@@ -237,12 +237,20 @@ class ResolveActions extends React.Component<Props, State> {
 }
 
 const StyledIconCheckmark = styled(IconCheckmark)`
-  position: relative;
-  top: 1px;
   margin-right: ${space(0.5)};
   @media (max-width: ${p => p.theme.breakpoints[0]}) {
     display: none;
   }
+`;
+
+const StyledActionLink = styled(ActionLink)`
+  display: flex;
+  align-items: center;
+  transition: none;
+`;
+
+const StyledDropdownLink = styled(DropdownLink)`
+  transition: none;
 `;
 
 export default ResolveActions;

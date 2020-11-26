@@ -1,13 +1,13 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import {IconChevron} from 'app/icons';
 
 const StyledDivider = styled('span')`
   display: inline-block;
   margin-left: 6px;
-  color: ${p => p.theme.gray400};
+  color: ${p => p.theme.gray200};
   position: relative;
   top: -1px;
 

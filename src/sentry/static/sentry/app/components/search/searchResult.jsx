@@ -1,13 +1,14 @@
-import {withRouter} from 'react-router';
-import PropTypes from 'prop-types';
 import React from 'react';
+import {withRouter} from 'react-router';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
 import IdBadge from 'app/components/idBadge';
 import {IconInput, IconLink, IconSettings} from 'app/icons';
 import PluginIcon from 'app/plugins/components/pluginIcon';
-import SettingsSearch from 'app/views/settings/components/settingsSearch';
+import space from 'app/styles/space';
 import highlightFuseMatches from 'app/utils/highlightFuseMatches';
+import SettingsSearch from 'app/views/settings/components/settingsSearch';
 
 class SearchResult extends React.Component {
   static propTypes = {
@@ -45,13 +46,16 @@ class SearchResult extends React.Component {
         'issue',
         'event',
         'integration',
-        'doc',
-        'faq',
+        'help-docs',
+        'help-develop',
+        'help-help-center',
+        'help-blog',
       ]),
 
       resultIcon: PropTypes.node,
       title: PropTypes.node,
       description: PropTypes.node,
+      extra: PropTypes.node,
       model: PropTypes.object,
     }),
     matches: PropTypes.array,
@@ -59,7 +63,7 @@ class SearchResult extends React.Component {
 
   renderContent() {
     const {highlighted, item, matches, params} = this.props;
-    const {sourceType, model} = item;
+    const {sourceType, model, extra} = item;
     let {title, description} = item;
 
     if (matches) {
@@ -101,6 +105,7 @@ class SearchResult extends React.Component {
           <SearchTitle>{title}</SearchTitle>
         </div>
         {description && <SearchDetail>{description}</SearchDetail>}
+        {extra && <ExtraDetail>{extra}</ExtraDetail>}
       </React.Fragment>
     );
   }
@@ -159,9 +164,15 @@ const SearchDetail = styled('div')`
   opacity: 0.8;
 `;
 
+const ExtraDetail = styled('div')`
+  font-size: ${p => p.theme.fontSizeSmall};
+  color: ${p => p.theme.gray300};
+  margin-top: ${space(0.5)};
+`;
+
 const BadgeDetail = styled('div')`
   line-height: 1.3;
-  color: ${p => (p.highlighted ? p.theme.purple500 : null)};
+  color: ${p => (p.highlighted ? p.theme.purple300 : null)};
 `;
 
 const Wrapper = styled('div')`
@@ -189,5 +200,5 @@ const HighlightMarker = styled('mark')`
   padding: 0;
   background: transparent;
   font-weight: bold;
-  color: inherit;
+  color: ${p => p.theme.active};
 `;

@@ -1,10 +1,10 @@
 import React from 'react';
-import Reflux from 'reflux';
 import createReactClass from 'create-react-class';
+import Reflux from 'reflux';
 
-import getDisplayName from 'app/utils/getDisplayName';
 import OrganizationsStore from 'app/stores/organizationsStore';
 import {OrganizationSummary} from 'app/types';
+import getDisplayName from 'app/utils/getDisplayName';
 
 type InjectedOrganizationsProps = {
   organizationsLoading?: boolean;
@@ -26,11 +26,14 @@ const withOrganizations = <P extends InjectedOrganizationsProps>(
     mixins: [Reflux.connect(OrganizationsStore, 'organizations') as any],
 
     render() {
+      const {organizationsLoading, organizations, ...props} = this.props as P;
       return (
         <WrappedComponent
-          organizationsLoading={!OrganizationsStore.loaded as boolean}
-          organizations={this.state.organizations as OrganizationSummary[]}
-          {...(this.props as P)}
+          {...({
+            organizationsLoading: organizationsLoading ?? !OrganizationsStore.loaded,
+            organizations: organizations ?? this.state.organizations,
+            ...props,
+          } as P)}
         />
       );
     },

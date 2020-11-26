@@ -1,10 +1,10 @@
 /* global __dirname */
-import jQuery from 'jquery';
-import Adapter from 'enzyme-adapter-react-16';
 import Enzyme from 'enzyme'; // eslint-disable-line no-restricted-imports
+import Adapter from 'enzyme-adapter-react-16';
+import jQuery from 'jquery';
 import MockDate from 'mockdate';
-import PropTypes from 'prop-types';
 import fromEntries from 'object.fromentries';
+import PropTypes from 'prop-types';
 
 import ConfigStore from 'app/stores/configStore';
 
@@ -22,9 +22,10 @@ fromEntries.shim();
 Enzyme.configure({adapter: new Adapter()});
 
 /**
- * Mock (current) date to always be below
+ * Mock (current) date to always be National Pasta Day
+ * 2017-10-17T02:41:20.000Z
  */
-const constantDate = new Date(1508208080000); //National Pasta Day
+const constantDate = new Date(1508208080000);
 MockDate.set(constantDate);
 
 /**
@@ -117,6 +118,7 @@ jest.mock('@sentry/react', () => {
     withScope: jest.spyOn(SentryReact, 'withScope'),
     Severity: SentryReact.Severity,
     withProfiler: SentryReact.withProfiler,
+    startTransaction: () => ({finish: jest.fn(), setTag: jest.fn()}),
   };
 });
 

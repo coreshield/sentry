@@ -1,30 +1,31 @@
-import {Params} from 'react-router/lib/Router';
 import React from 'react';
-import moment from 'moment';
-import styled from '@emotion/styled';
+import {Params} from 'react-router/lib/Router';
 import isPropValid from '@emotion/is-prop-valid';
+import styled from '@emotion/styled';
+import moment from 'moment';
 
-import {PageHeader} from 'app/styles/organization';
-import {t} from 'app/locale';
+import Breadcrumbs from 'app/components/breadcrumbs';
 import Count from 'app/components/count';
+import DropdownControl from 'app/components/dropdownControl';
 import Duration from 'app/components/duration';
+import ProjectBadge from 'app/components/idBadge/projectBadge';
 import LoadingError from 'app/components/loadingError';
 import MenuItem from 'app/components/menuItem';
 import PageHeading from 'app/components/pageHeading';
-import ProjectBadge from 'app/components/idBadge/projectBadge';
-import Projects from 'app/utils/projects';
+import Placeholder from 'app/components/placeholder';
 import SubscribeButton from 'app/components/subscribeButton';
-import getDynamicText from 'app/utils/getDynamicText';
-import space from 'app/styles/space';
 import {IconCheckmark} from 'app/icons';
-import Breadcrumbs from 'app/components/breadcrumbs';
-import {Dataset} from 'app/views/settings/incidentRules/types';
-import DropdownControl from 'app/components/dropdownControl';
+import {t} from 'app/locale';
+import {PageHeader} from 'app/styles/organization';
+import space from 'app/styles/space';
 import {use24Hours} from 'app/utils/dates';
+import getDynamicText from 'app/utils/getDynamicText';
+import Projects from 'app/utils/projects';
+import {Dataset} from 'app/views/settings/incidentRules/types';
 
+import Status from '../status';
 import {Incident, IncidentStats} from '../types';
 import {isOpen} from '../utils';
-import Status from '../status';
 
 type Props = {
   className?: string;
@@ -59,7 +60,7 @@ export default class DetailsHeader extends React.Component<Props> {
           {incident && <Status disableIconColor incident={incident} />}
         </StatusMenuItem>
         <StatusMenuItem onSelect={onStatusChange}>
-          <IconCheckmark color="green400" />
+          <IconCheckmark color="green300" />
           {t('Resolved')}
         </StatusMenuItem>
       </DropdownControl>
@@ -126,12 +127,12 @@ export default class DetailsHeader extends React.Component<Props> {
             <GroupedHeaderItems columns={isErrorDataset ? 5 : 3}>
               <ItemTitle>{t('Environment')}</ItemTitle>
               <ItemTitle>{t('Project')}</ItemTitle>
-              {isErrorDataset && stats && <ItemTitle>{t('Users affected')}</ItemTitle>}
-              {isErrorDataset && stats && <ItemTitle>{t('Total events')}</ItemTitle>}
+              {isErrorDataset && <ItemTitle>{t('Users affected')}</ItemTitle>}
+              {isErrorDataset && <ItemTitle>{t('Total events')}</ItemTitle>}
               <ItemTitle>{t('Active For')}</ItemTitle>
               <ItemValue>{environmentLabel}</ItemValue>
               <ItemValue>
-                {project && (
+                {project ? (
                   <Projects slugs={[project]} orgId={params.orgId}>
                     {({projects}) =>
                       projects?.length && (
@@ -139,25 +140,37 @@ export default class DetailsHeader extends React.Component<Props> {
                       )
                     }
                   </Projects>
+                ) : (
+                  <Placeholder height="25px" />
                 )}
               </ItemValue>
-              {isErrorDataset && stats && (
+              {isErrorDataset && (
                 <ItemValue>
-                  <Count value={stats.uniqueUsers} />
+                  {stats ? (
+                    <Count value={stats.uniqueUsers} />
+                  ) : (
+                    <Placeholder height="25px" />
+                  )}
                 </ItemValue>
               )}
-              {isErrorDataset && stats && (
+              {isErrorDataset && (
                 <ItemValue>
-                  <Count value={stats.totalEvents} />
+                  {stats ? (
+                    <Count value={stats.totalEvents} />
+                  ) : (
+                    <Placeholder height="25px" />
+                  )}
                 </ItemValue>
               )}
-              {incident && (
-                <ItemValue>
+              <ItemValue>
+                {incident ? (
                   <Duration
                     seconds={getDynamicText({value: duration || 0, fixed: 1200})}
                   />
-                </ItemValue>
-              )}
+                ) : (
+                  <Placeholder height="25px" />
+                )}
+              </ItemValue>
             </GroupedHeaderItems>
           )}
         </Details>
@@ -167,8 +180,8 @@ export default class DetailsHeader extends React.Component<Props> {
 }
 
 const Header = styled('div')`
-  background-color: ${p => p.theme.gray100};
-  border-bottom: 1px solid ${p => p.theme.borderDark};
+  background-color: ${p => p.theme.backgroundSecondary};
+  border-bottom: 1px solid ${p => p.theme.border};
 `;
 
 const BreadCrumbBar = styled('div')`
@@ -232,7 +245,7 @@ const ItemTitle = styled('h6')`
   font-size: ${p => p.theme.fontSizeSmall};
   margin-bottom: 0;
   text-transform: uppercase;
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
   letter-spacing: 0.1px;
 `;
 
@@ -255,7 +268,7 @@ const IncidentSubTitle = styled('div', {
 })<{loading: boolean}>`
   ${p => p.loading && 'opacity: 0'};
   font-size: ${p => p.theme.fontSizeLarge};
-  color: ${p => p.theme.gray500};
+  color: ${p => p.theme.gray300};
 `;
 
 const StyledStatus = styled(Status)`

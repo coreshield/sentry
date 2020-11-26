@@ -1,14 +1,12 @@
-import {RouteComponentProps} from 'react-router/lib/Router';
 import React from 'react';
+import {RouteComponentProps} from 'react-router/lib/Router';
 
 import {Organization, Project} from 'app/types';
+import EventView from 'app/utils/discover/eventView';
 import {
   createDefaultRule,
   createRuleFromEventView,
 } from 'app/views/settings/incidentRules/constants';
-import recreateRoute from 'app/utils/recreateRoute';
-import EventView from 'app/utils/discover/eventView';
-import {trackAnalyticsEvent} from 'app/utils/analytics';
 
 import RuleForm from './ruleForm';
 
@@ -22,6 +20,7 @@ type Props = {
   organization: Organization;
   project: Project;
   eventView: EventView | undefined;
+  sessionId?: string;
 } & RouteComponentProps<RouteParams, {}>;
 
 /**
@@ -29,22 +28,14 @@ type Props = {
  */
 class IncidentRulesCreate extends React.Component<Props> {
   handleSubmitSuccess = () => {
-    const {params, routes, router, location, organization, project} = this.props;
+    const {router} = this.props;
+    const {orgId} = this.props.params;
 
-    if (location?.query?.createFromDiscover) {
-      trackAnalyticsEvent({
-        eventKey: 'new_alert_rule.created_from_discover',
-        eventName: 'New Alert Rule: Created from discover',
-        organization_id: organization.id,
-        project_id: project.id,
-      });
-    }
-
-    router.push(recreateRoute('', {params, routes, location, stepBack: -1}));
+    router.push(`/organizations/${orgId}/alerts/rules/`);
   };
 
   render() {
-    const {project, eventView, ...props} = this.props;
+    const {project, eventView, sessionId, ...props} = this.props;
     const defaultRule = eventView
       ? createRuleFromEventView(eventView)
       : createDefaultRule();
@@ -53,6 +44,8 @@ class IncidentRulesCreate extends React.Component<Props> {
       <RuleForm
         onSubmitSuccess={this.handleSubmitSuccess}
         rule={{...defaultRule, projects: [project.slug]}}
+        sessionId={sessionId}
+        project={project}
         {...props}
       />
     );

@@ -2,13 +2,14 @@ import React from 'react';
 
 import DropdownLink from 'app/components/dropdownLink';
 import MenuItem from 'app/components/menuItem';
+import {IconDownload} from 'app/icons';
 import {t} from 'app/locale';
 
 import {
+  DownloadCsvButton,
   ResultViewActions,
   ResultViewButtons,
   ResultViewDropdownButtons,
-  DownloadCsvButton,
 } from '../styles';
 
 type Option = {
@@ -47,7 +48,11 @@ class VisualizationsToggle extends React.Component<Props> {
   getDownloadCsvButton = () => {
     const {handleCsvDownload} = this.props;
     return (
-      <DownloadCsvButton onClick={handleCsvDownload} icon="icon-download" size="xsmall">
+      <DownloadCsvButton
+        onClick={handleCsvDownload}
+        icon={<IconDownload size="xs" />}
+        size="xsmall"
+      >
         {t('Export CSV')}
       </DownloadCsvButton>
     );

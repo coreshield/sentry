@@ -1,13 +1,16 @@
-import {css} from '@emotion/core';
-import {browserHistory} from 'react-router';
-import {Location} from 'history';
 import React from 'react';
-import Reflux from 'reflux';
+import {browserHistory} from 'react-router';
+import {css} from '@emotion/core';
+import styled from '@emotion/styled';
 import createReactClass from 'create-react-class';
+import {Location} from 'history';
 import isEqual from 'lodash/isEqual';
 import * as queryString from 'query-string';
-import styled from '@emotion/styled';
+import Reflux from 'reflux';
 
+import {hideSidebar, showSidebar} from 'app/actionCreators/preferences';
+import Feature from 'app/components/acl/feature';
+import {extractSelectionParameters} from 'app/components/organizations/globalSelectionHeader/utils';
 import {
   IconActivity,
   IconChevron,
@@ -24,28 +27,24 @@ import {
   IconSupport,
   IconTelescope,
 } from 'app/icons';
-import {extractSelectionParameters} from 'app/components/organizations/globalSelectionHeader/utils';
-import {hideSidebar, showSidebar} from 'app/actionCreators/preferences';
 import {t} from 'app/locale';
 import ConfigStore from 'app/stores/configStore';
-import Feature from 'app/components/acl/feature';
 import HookStore from 'app/stores/hookStore';
 import PreferencesStore from 'app/stores/preferencesStore';
-import localStorage from 'app/utils/localStorage';
-import {getDiscoverLandingUrl} from 'app/utils/discover/urls';
 import space from 'app/styles/space';
+import {Organization} from 'app/types';
+import {getDiscoverLandingUrl} from 'app/utils/discover/urls';
 import theme from 'app/utils/theme';
 import withOrganization from 'app/utils/withOrganization';
-import {Organization} from 'app/types';
 
-import {getSidebarPanelContainer} from './sidebarPanel';
 import Broadcasts from './broadcasts';
+import SidebarHelp from './help';
 import OnboardingStatus from './onboardingStatus';
 import ServiceIncidents from './serviceIncidents';
 import SidebarDropdown from './sidebarDropdown';
-import SidebarHelp from './help';
 import SidebarItem from './sidebarItem';
-import {SidebarPanelKey, SidebarOrientation} from './types';
+import {getSidebarPanelContainer} from './sidebarPanel';
+import {SidebarOrientation, SidebarPanelKey} from './types';
 
 type Props = {
   location: Location;
@@ -195,7 +194,6 @@ class Sidebar extends React.Component<Props, State> {
       'discover',
       'discover/results', // Team plans do not have query landing page
       'performance',
-      'releasesv2',
     ].map(route => `/organizations/${this.props.organization.slug}/${route}/`);
 
     // Only keep the querystring if the current route matches one of the above
@@ -267,19 +265,10 @@ class Sidebar extends React.Component<Props, State> {
     if (!organization || !organization.features) {
       return sidebarState;
     }
-    const optState = localStorage.getItem('discover:version');
     const features = organization.features;
 
     if (features.includes('discover-basic')) {
-      // If there is no opt-out state show discover2
-      if (!optState || optState === '2') {
-        sidebarState.discover2 = true;
-      }
-      // User wants discover1
-      if (optState === '1') {
-        sidebarState.discover1 = true;
-        sidebarState.events = true;
-      }
+      sidebarState.discover2 = true;
       return sidebarState;
     }
 
@@ -417,21 +406,25 @@ class Sidebar extends React.Component<Props, State> {
                       id="performance"
                     />
                   </Feature>
-                  <Feature features={['incidents']} organization={organization}>
-                    <SidebarItem
-                      {...sidebarItemProps}
-                      onClick={(_id, evt) =>
-                        this.navigateWithGlobalSelection(
-                          `/organizations/${organization.slug}/alerts/`,
-                          evt
-                        )
-                      }
-                      icon={<IconSiren size="md" />}
-                      label={t('Alerts')}
-                      to={`/organizations/${organization.slug}/alerts/`}
-                      id="alerts"
-                      isNew
-                    />
+                  <Feature features={['incidents']}>
+                    {({hasFeature}) => {
+                      const alertsPath = hasFeature
+                        ? `/organizations/${organization.slug}/alerts/`
+                        : `/organizations/${organization.slug}/alerts/rules/`;
+                      return (
+                        <SidebarItem
+                          {...sidebarItemProps}
+                          onClick={(_id, evt) =>
+                            this.navigateWithGlobalSelection(alertsPath, evt)
+                          }
+                          icon={<IconSiren size="md" />}
+                          label={t('Alerts')}
+                          to={alertsPath}
+                          id="alerts"
+                          isNew
+                        />
+                      );
+                    }}
                   </Feature>
                   <SidebarItem
                     {...sidebarItemProps}
@@ -445,7 +438,6 @@ class Sidebar extends React.Component<Props, State> {
                     label={t('Releases')}
                     to={`/organizations/${organization.slug}/releases/`}
                     id="releases"
-                    isNew
                   />
                   <SidebarItem
                     {...sidebarItemProps}
@@ -463,7 +455,11 @@ class Sidebar extends React.Component<Props, State> {
                 </SidebarSection>
 
                 <SidebarSection>
-                  <Feature features={['discover']} organization={organization}>
+                  <Feature
+                    features={['discover', 'discover-query']}
+                    organization={organization}
+                    requireAll={false}
+                  >
                     <SidebarItem
                       {...sidebarItemProps}
                       index
@@ -643,7 +639,7 @@ const responsiveFlex = css`
 
 const StyledSidebar = styled('div')<{collapsed: boolean}>`
   background: ${p => p.theme.sidebar.background};
-  background: linear-gradient(294.17deg, #2f1937 35.57%, #452650 92.42%, #452650 92.42%);
+  background: ${p => p.theme.sidebarGradient};
   color: ${p => p.theme.sidebar.color};
   line-height: 1;
   padding: 12px 0 2px; /* Allows for 32px avatars  */
@@ -671,6 +667,7 @@ const StyledSidebar = styled('div')<{collapsed: boolean}>`
 
 const SidebarSectionGroup = styled('div')`
   ${responsiveFlex};
+  flex-shrink: 0; /* prevents shrinking on Safari */
 `;
 
 const SidebarSectionGroupPrimary = styled('div')`
@@ -692,8 +689,8 @@ const PrimaryItems = styled('div')`
   display: flex;
   flex-direction: column;
   -ms-overflow-style: -ms-autohiding-scrollbar;
-  @media (max-height: 600px) and (min-width: ${p => p.theme.breakpoints[1]}) {
-    border-bottom: 1px solid ${p => p.theme.gray600};
+  @media (max-height: 675px) and (min-width: ${p => p.theme.breakpoints[1]}) {
+    border-bottom: 1px solid ${p => p.theme.gray400};
     padding-bottom: ${space(1)};
     box-shadow: rgba(0, 0, 0, 0.15) 0px -10px 10px inset;
     &::-webkit-scrollbar {
@@ -701,7 +698,7 @@ const PrimaryItems = styled('div')`
       width: 8px;
     }
     &::-webkit-scrollbar-thumb {
-      background: ${p => p.theme.gray600};
+      background: ${p => p.theme.gray400};
       border-radius: 8px;
     }
   }
@@ -710,7 +707,7 @@ const PrimaryItems = styled('div')`
     flex-direction: row;
     height: 100%;
     align-items: center;
-    border-right: 1px solid ${p => p.theme.gray600};
+    border-right: 1px solid ${p => p.theme.gray400};
     padding-right: ${space(1)};
     margin-right: ${space(0.5)};
     box-shadow: rgba(0, 0, 0, 0.15) -10px 0px 10px inset;

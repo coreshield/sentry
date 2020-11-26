@@ -1,11 +1,11 @@
-import PropTypes from 'prop-types';
 import React from 'react';
 import styled from '@emotion/styled';
+import PropTypes from 'prop-types';
 
+import Tag from 'app/components/tagDeprecated';
 import Tooltip from 'app/components/tooltip';
 import {IconCheckmark, IconClose} from 'app/icons';
 import {t} from 'app/locale';
-import Tag from 'app/views/settings/components/tag';
 
 const FEATURE_TOOLTIPS = {
   symtab: t(
@@ -24,7 +24,7 @@ const FEATURE_TOOLTIPS = {
 
 type Props = {
   feature: 'symtab' | 'debug' | 'unwind' | 'sources';
-  available?: true;
+  available?: boolean;
 };
 
 const DebugFileFeature = ({available, feature}: Props) => {
@@ -33,13 +33,13 @@ const DebugFileFeature = ({available, feature}: Props) => {
   if (available === true) {
     icon = (
       <IconWrapper>
-        <IconCheckmark size="sm" color="green500" />
+        <IconCheckmark size="sm" color="green300" />
       </IconWrapper>
     );
   } else if (available === false) {
     icon = (
       <IconWrapper>
-        <IconClose size="sm" color="red400" />
+        <IconClose size="sm" color="red300" />
       </IconWrapper>
     );
   }
@@ -54,9 +54,17 @@ const DebugFileFeature = ({available, feature}: Props) => {
   );
 };
 
+DebugFileFeature.defaultProps = {
+  available: true,
+};
+
 DebugFileFeature.propTypes = {
   available: PropTypes.bool,
   feature: PropTypes.oneOf(Object.keys(FEATURE_TOOLTIPS)).isRequired,
+};
+
+DebugFileFeature.defaultProps = {
+  available: true,
 };
 
 const IconWrapper = styled('span')`
