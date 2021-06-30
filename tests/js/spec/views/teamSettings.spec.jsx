@@ -1,6 +1,7 @@
-import React from 'react';
+import {browserHistory} from 'react-router';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
+import {mountGlobalModal} from 'sentry-test/modal';
 
 import TeamStore from 'app/stores/teamStore';
 import TeamSettings from 'app/views/settings/organizationTeams/teamSettings';
@@ -22,15 +23,12 @@ describe('TeamSettings', function () {
       method: 'PUT',
     });
     const mountOptions = TestStubs.routerContext();
-    const {router} = mountOptions.context;
 
     const wrapper = mountWithTheme(
       <TeamSettings
-        routes={[]}
-        router={router}
-        params={{orgId: 'org', teamId: team.slug}}
         team={team}
         onTeamChange={() => {}}
+        params={{orgId: 'org', teamId: team.slug}}
       />,
       mountOptions
     );
@@ -40,7 +38,7 @@ describe('TeamSettings', function () {
       .simulate('change', {target: {value: 'NEW SLUG'}})
       .simulate('blur');
 
-    wrapper.find('SaveButton').simulate('click');
+    wrapper.find('button[aria-label="Save"]').simulate('click');
 
     expect(putMock).toHaveBeenCalledWith(
       `/teams/org/${team.slug}/`,
@@ -52,7 +50,9 @@ describe('TeamSettings', function () {
     );
 
     await tick();
-    expect(router.replace).toHaveBeenCalledWith('/settings/org/teams/new-slug/settings/');
+    expect(browserHistory.replace).toHaveBeenCalledWith(
+      '/settings/org/teams/new-slug/settings/'
+    );
   });
 
   it('needs team:admin in order to see an enabled Remove Team button', function () {
@@ -60,12 +60,15 @@ describe('TeamSettings', function () {
 
     const wrapper = mountWithTheme(
       <TeamSettings
-        routes={[]}
-        params={{orgId: 'org', teamId: team.slug}}
         team={team}
         onTeamChange={() => {}}
+        params={{orgId: 'org', teamId: team.slug}}
       />,
-      TestStubs.routerContext([{organization: TestStubs.Organization({access: []})}])
+      TestStubs.routerContext([
+        {
+          organization: TestStubs.Organization({access: []}),
+        },
+      ])
     );
     expect(wrapper.find('Panel').last().find('Button').prop('disabled')).toBe(true);
   });
@@ -76,7 +79,6 @@ describe('TeamSettings', function () {
       url: `/teams/org/${team.slug}/`,
       method: 'DELETE',
     });
-    const routerPushMock = jest.fn();
     jest.spyOn(TeamStore, 'trigger');
     TeamStore.loadInitialData([
       {
@@ -87,8 +89,6 @@ describe('TeamSettings', function () {
 
     const wrapper = mountWithTheme(
       <TeamSettings
-        router={{replace: routerPushMock}}
-        routes={[]}
         params={{orgId: 'org', teamId: team.slug}}
         team={team}
         onTeamChange={() => {}}
@@ -102,7 +102,9 @@ describe('TeamSettings', function () {
     TeamStore.trigger.mockReset();
 
     // Wait for modal
-    wrapper.find('ModalDialog Button[priority="danger"] button').simulate('click');
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="danger"] button').simulate('click');
+
     expect(deleteMock).toHaveBeenCalledWith(
       `/teams/org/${team.slug}/`,
       expect.objectContaining({
@@ -112,7 +114,7 @@ describe('TeamSettings', function () {
 
     await tick();
     await tick();
-    expect(routerPushMock).toHaveBeenCalledWith('/settings/org/teams/');
+    expect(browserHistory.replace).toHaveBeenCalledWith('/settings/org/teams/');
 
     expect(TeamStore.getAll()).toEqual([]);
 

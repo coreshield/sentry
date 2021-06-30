@@ -1,10 +1,21 @@
-import React from 'react';
+import {Fragment} from 'react';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
 import {initializeOrg} from 'sentry-test/initializeOrg';
 
 import GlobalModal from 'app/components/globalModal';
+import {metric} from 'app/utils/analytics';
 import IncidentRulesDetails from 'app/views/settings/incidentRules/details';
+
+jest.mock('app/utils/analytics', () => ({
+  metric: {
+    startTransaction: jest.fn(() => ({
+      setTag: jest.fn(),
+      setData: jest.fn(),
+    })),
+    endTransaction: jest.fn(),
+  },
+}));
 
 describe('Incident Rules Details', function () {
   beforeAll(function () {
@@ -44,6 +55,7 @@ describe('Incident Rules Details', function () {
   it('renders and edits trigger', async function () {
     const {organization, project, routerContext} = initializeOrg();
     const rule = TestStubs.IncidentRule();
+    const onChangeTitleMock = jest.fn();
     const req = MockApiClient.addMockResponse({
       url: `/organizations/${organization.slug}/alert-rules/${rule.id}/`,
       body: rule,
@@ -61,7 +73,7 @@ describe('Incident Rules Details', function () {
     });
 
     const wrapper = mountWithTheme(
-      <React.Fragment>
+      <Fragment>
         <GlobalModal />
         <IncidentRulesDetails
           params={{
@@ -70,8 +82,10 @@ describe('Incident Rules Details', function () {
             ruleId: rule.id,
           }}
           organization={organization}
+          onChangeTitle={onChangeTitleMock}
+          project={project}
         />
-      </React.Fragment>,
+      </Fragment>,
       routerContext
     );
 
@@ -88,6 +102,9 @@ describe('Incident Rules Details', function () {
 
     expect(req).toHaveBeenCalled();
 
+    // Check correct rule name is called
+    expect(onChangeTitleMock).toHaveBeenCalledWith(rule.name);
+
     wrapper
       .find('input[name="warningThreshold"]')
       .first(1)
@@ -98,11 +115,12 @@ describe('Incident Rules Details', function () {
       .simulate('change', {target: {value: 12}});
 
     // Create a new action
-    wrapper.find('button[aria-label="Add New Action"]').simulate('click');
+    wrapper.find('button[aria-label="Add Action"]').simulate('click');
 
     // Save Trigger
     wrapper.find('button[aria-label="Save Rule"]').simulate('submit');
 
+    expect(metric.startTransaction).toHaveBeenCalledWith({name: 'saveAlertRule'});
     expect(editRule).toHaveBeenCalledWith(
       expect.anything(),
       expect.objectContaining({
@@ -120,13 +138,13 @@ describe('Incident Rules Details', function () {
           triggers: [
             expect.objectContaining({
               actions: [
-                {
+                expect.objectContaining({
                   integrationId: null,
                   targetIdentifier: '',
                   targetType: 'user',
                   type: 'email',
                   options: null,
-                },
+                }),
               ],
               alertRuleId: '4',
               alertThreshold: 70,
@@ -181,13 +199,13 @@ describe('Incident Rules Details', function () {
           triggers: [
             expect.objectContaining({
               actions: [
-                {
+                expect.objectContaining({
                   integrationId: null,
                   targetIdentifier: '',
                   targetType: 'user',
                   type: 'email',
                   options: null,
-                },
+                }),
               ],
               alertRuleId: '4',
               alertThreshold: 70,

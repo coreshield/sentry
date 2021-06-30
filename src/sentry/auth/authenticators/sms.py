@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+import logging
 
 from django.utils.translation import ugettext_lazy as _
 
@@ -6,7 +6,9 @@ from sentry.utils.decorators import classproperty
 from sentry.utils.otp import TOTP
 from sentry.utils.sms import send_sms, sms_available
 
-from .base import AuthenticatorInterface, ActivationMessageResult, OtpMixin
+from .base import ActivationMessageResult, AuthenticatorInterface, OtpMixin
+
+logger = logging.getLogger("sentry.auth")
 
 
 class SmsInterface(OtpMixin, AuthenticatorInterface):
@@ -28,7 +30,7 @@ class SmsInterface(OtpMixin, AuthenticatorInterface):
         return sms_available()
 
     def generate_new_config(self):
-        config = super(SmsInterface, self).generate_new_config()
+        config = super().generate_new_config()
         config["phone_number"] = None
         return config
 
@@ -49,7 +51,7 @@ class SmsInterface(OtpMixin, AuthenticatorInterface):
         if len(phone_number) == 10:
             mask = "(***) ***-**%s" % (phone_number[-2:])
         else:
-            mask = "%s%s" % ((len(phone_number) - 2) * "*", phone_number[-2:])
+            mask = "{}{}".format((len(phone_number) - 2) * "*", phone_number[-2:])
 
         if self.send_text(request=request):
             return ActivationMessageResult(
@@ -80,7 +82,24 @@ class SmsInterface(OtpMixin, AuthenticatorInterface):
             text = _("%(code)s is your Sentry authentication code.")
 
         if request is not None:
-            text = u"%s\n\n%s" % (text, _("Requested from %(ip)s"))
+            text = "{}\n\n{}".format(text, _("Requested from %(ip)s"))
             ctx["ip"] = request.META["REMOTE_ADDR"]
+
+        if request and request.user.is_authenticated:
+            user_id = request.user.id
+        elif self.authenticator:
+            user_id = self.authenticator.user_id
+        else:
+            user_id = None
+
+        logger.info(
+            "mfa.twilio-request",
+            extra={
+                "ip": request.META["REMOTE_ADDR"] if request else None,
+                "user_id": user_id,
+                "authenticator_id": self.authenticator.id if self.authenticator else None,
+                "phone_number": self.phone_number,
+            },
+        )
 
         return send_sms(text % ctx, to=self.phone_number)

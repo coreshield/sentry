@@ -1,14 +1,15 @@
-from __future__ import absolute_import
-
 from sentry.api.base import EnvironmentMixin
 from sentry.api.bases import OrganizationMemberEndpoint
 from sentry.api.paginator import DateTimePaginator
-from sentry.api.serializers import serialize, OrganizationActivitySerializer
+from sentry.api.serializers import OrganizationActivitySerializer, serialize
 from sentry.models import Activity, OrganizationMemberTeam, Project
 
 
 class OrganizationActivityEndpoint(OrganizationMemberEndpoint, EnvironmentMixin):
     def get(self, request, organization, member):
+        # There is an activity record created for both sides of the unmerge
+        # operation, so we only need to include one of them here to avoid
+        # showing the same entry twice.
         queryset = (
             Activity.objects.filter(
                 project__in=Project.objects.filter(
@@ -18,12 +19,7 @@ class OrganizationActivityEndpoint(OrganizationMemberEndpoint, EnvironmentMixin)
                     ).values("team"),
                 )
             )
-            .exclude(
-                # There is an activity record created for both sides of the unmerge
-                # operation, so we only need to include one of them here to avoid
-                # showing the same entry twice.
-                type=Activity.UNMERGE_SOURCE
-            )
+            .exclude(type=Activity.UNMERGE_SOURCE)
             .select_related("project", "group", "user")
         )
 

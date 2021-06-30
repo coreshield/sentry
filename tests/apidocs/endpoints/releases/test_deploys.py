@@ -1,11 +1,7 @@
-# -*- coding: utf-8 -*-
-
-from __future__ import absolute_import
-
 import datetime
 
-from django.core.urlresolvers import reverse
 from django.test.client import RequestFactory
+from django.urls import reverse
 
 from sentry.models import Deploy, Environment
 from tests.apidocs.util import APIDocsTestCase

@@ -1,17 +1,13 @@
-from __future__ import absolute_import
-
 import responses
-import six
-
-from sentry.utils.compat.mock import patch
-from exam import fixture
 from django.test import RequestFactory
+from exam import fixture
 
 from sentry.integrations.github.integration import GitHubIntegration
-from sentry.models import Integration, ExternalIssue
+from sentry.models import ExternalIssue, Integration
 from sentry.testutils import TestCase
-from sentry.testutils.helpers.datetime import iso_format, before_now
+from sentry.testutils.helpers.datetime import before_now, iso_format
 from sentry.utils import json
+from sentry.utils.compat.mock import patch
 
 
 class GitHubIssueBasicTest(TestCase):
@@ -30,7 +26,7 @@ class GitHubIssueBasicTest(TestCase):
         self.min_ago = iso_format(before_now(minutes=1))
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_get_allowed_assignees(self, mock_get_jwt):
         responses.add(
             responses.POST,
@@ -51,13 +47,13 @@ class GitHubIssueBasicTest(TestCase):
         )
 
         request = responses.calls[0].request
-        assert request.headers["Authorization"] == b"Bearer jwt_token_1"
+        assert request.headers["Authorization"] == "Bearer jwt_token_1"
 
         request = responses.calls[1].request
         assert request.headers["Authorization"] == "token token_1"
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_create_issue(self, mock_get_jwt):
         responses.add(
             responses.POST,
@@ -90,7 +86,7 @@ class GitHubIssueBasicTest(TestCase):
             "repo": "getsentry/sentry",
         }
         request = responses.calls[0].request
-        assert request.headers["Authorization"] == b"Bearer jwt_token_1"
+        assert request.headers["Authorization"] == "Bearer jwt_token_1"
 
         request = responses.calls[1].request
         assert request.headers["Authorization"] == "token token_1"
@@ -98,7 +94,7 @@ class GitHubIssueBasicTest(TestCase):
         assert payload == {"body": "This is the description", "assignee": None, "title": "hello"}
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_get_repo_issues(self, mock_get_jwt):
         responses.add(
             responses.POST,
@@ -115,13 +111,13 @@ class GitHubIssueBasicTest(TestCase):
         assert self.integration.get_repo_issues(repo) == ((321, "#321 hello"),)
 
         request = responses.calls[0].request
-        assert request.headers["Authorization"] == b"Bearer jwt_token_1"
+        assert request.headers["Authorization"] == "Bearer jwt_token_1"
 
         request = responses.calls[1].request
         assert request.headers["Authorization"] == "token token_1"
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_link_issue(self, mock_get_jwt):
         issue_id = 321
         responses.add(
@@ -151,13 +147,13 @@ class GitHubIssueBasicTest(TestCase):
             "repo": "getsentry/sentry",
         }
         request = responses.calls[0].request
-        assert request.headers["Authorization"] == b"Bearer jwt_token_1"
+        assert request.headers["Authorization"] == "Bearer jwt_token_1"
 
         request = responses.calls[1].request
         assert request.headers["Authorization"] == "token token_1"
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_repo_dropdown_choices(self, mock_get_jwt):
         event = self.store_event(
             data={"event_id": "a" * 32, "timestamp": self.min_ago}, project_id=self.project.id
@@ -187,7 +183,7 @@ class GitHubIssueBasicTest(TestCase):
         )
 
         resp = self.integration.get_create_issue_config(group=event.group, user=self.user)
-        assert resp[0]["choices"] == [(u"getsentry/sentry", u"sentry")]
+        assert resp[0]["choices"] == [("getsentry/sentry", "sentry")]
 
         responses.add(
             responses.GET,
@@ -199,19 +195,19 @@ class GitHubIssueBasicTest(TestCase):
         data = {"params": {"repo": "getsentry/hello"}}
         resp = self.integration.get_create_issue_config(group=event.group, user=self.user, **data)
         assert resp[0]["choices"] == [
-            (u"getsentry/hello", u"hello"),
-            (u"getsentry/sentry", u"sentry"),
+            ("getsentry/hello", "hello"),
+            ("getsentry/sentry", "sentry"),
         ]
         # link an issue
         data = {"params": {"repo": "getsentry/hello"}}
         resp = self.integration.get_link_issue_config(group=event.group, **data)
         assert resp[0]["choices"] == [
-            (u"getsentry/hello", u"hello"),
-            (u"getsentry/sentry", u"sentry"),
+            ("getsentry/hello", "hello"),
+            ("getsentry/sentry", "sentry"),
         ]
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def after_link_issue(self, mock_get_jwt):
         responses.add(
             responses.POST,
@@ -242,7 +238,7 @@ class GitHubIssueBasicTest(TestCase):
 
     @responses.activate
     @patch(
-        "sentry.integrations.github.client.GitHubClientMixin.get_token", return_value=b"jwt_token_1"
+        "sentry.integrations.github.client.GitHubClientMixin.get_token", return_value="jwt_token_1"
     )
     def test_default_repo_link_fields(self, mock_get_jwt):
         responses.add(
@@ -257,9 +253,7 @@ class GitHubIssueBasicTest(TestCase):
 
         org_integration = self.integration.org_integration
         org_integration.config = {
-            "project_issue_defaults": {
-                six.text_type(group.project_id): {"repo": "getsentry/sentry"}
-            }
+            "project_issue_defaults": {str(group.project_id): {"repo": "getsentry/sentry"}}
         }
         org_integration.save()
         fields = self.integration.get_link_issue_config(group)
@@ -270,7 +264,7 @@ class GitHubIssueBasicTest(TestCase):
         assert repo_field["default"] == "getsentry/sentry"
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_default_repo_create_fields(self, mock_get_jwt):
         responses.add(
             responses.GET,
@@ -293,9 +287,7 @@ class GitHubIssueBasicTest(TestCase):
         group = event.group
         org_integration = self.integration.org_integration
         org_integration.config = {
-            "project_issue_defaults": {
-                six.text_type(group.project_id): {"repo": "getsentry/sentry"}
-            }
+            "project_issue_defaults": {str(group.project_id): {"repo": "getsentry/sentry"}}
         }
         org_integration.save()
         fields = self.integration.get_create_issue_config(group, self.user)
@@ -307,7 +299,7 @@ class GitHubIssueBasicTest(TestCase):
 
     @responses.activate
     @patch(
-        "sentry.integrations.github.client.GitHubClientMixin.get_token", return_value=b"jwt_token_1"
+        "sentry.integrations.github.client.GitHubClientMixin.get_token", return_value="jwt_token_1"
     )
     def test_default_repo_link_fields_no_repos(self, mock_get_jwt):
         responses.add(
@@ -324,7 +316,7 @@ class GitHubIssueBasicTest(TestCase):
         assert repo_field["choices"] == []
 
     @responses.activate
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def test_default_repo_create_fields_no_repos(self, mock_get_jwt):
         responses.add(
             responses.GET,

@@ -1,21 +1,11 @@
-from __future__ import absolute_import
-
 from collections import defaultdict
 
 from rest_framework.response import Response
 
 from sentry.api.bases.organization import OrganizationReleasesBaseEndpoint
 from sentry.api.exceptions import ResourceDoesNotExist
-from sentry.models import (
-    Release,
-    CommitFileChange,
-    ReleaseFile,
-    ReleaseCommit,
-    ReleaseProject,
-    ProjectPlatform,
-)
-
 from sentry.api.serializers.models.release import expose_version_info
+from sentry.models import CommitFileChange, ProjectPlatform, Release, ReleaseCommit, ReleaseProject
 
 
 class OrganizationReleaseMetaEndpoint(OrganizationReleasesBaseEndpoint):
@@ -61,7 +51,7 @@ class OrganizationReleaseMetaEndpoint(OrganizationReleasesBaseEndpoint):
         )
 
         platforms = ProjectPlatform.objects.filter(
-            project_id__in=set(x["project__id"] for x in project_releases)
+            project_id__in={x["project__id"] for x in project_releases}
         ).values_list("project_id", "platform")
         platforms_by_project = defaultdict(list)
         for project_id, platform in platforms:
@@ -80,8 +70,6 @@ class OrganizationReleaseMetaEndpoint(OrganizationReleasesBaseEndpoint):
             for pr in project_releases
         ]
 
-        release_file_count = ReleaseFile.objects.filter(release=release).count()
-
         return Response(
             {
                 "version": release.version,
@@ -92,6 +80,6 @@ class OrganizationReleaseMetaEndpoint(OrganizationReleasesBaseEndpoint):
                 "commitCount": release.commit_count,
                 "released": release.date_released or release.date_added,
                 "commitFilesChanged": commit_files_changed,
-                "releaseFileCount": release_file_count,
+                "releaseFileCount": release.count_artifacts(),
             }
         )

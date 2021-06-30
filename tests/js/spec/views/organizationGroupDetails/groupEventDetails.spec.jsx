@@ -1,4 +1,3 @@
-import React from 'react';
 import {browserHistory} from 'react-router';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
@@ -18,16 +17,6 @@ describe('groupEventDetails', () => {
     MockApiClient.addMockResponse({
       url: `/issues/${group.id}/`,
       body: group,
-    });
-
-    MockApiClient.addMockResponse({
-      url: `/issues/${group.id}/events/latest/`,
-      body: event,
-    });
-
-    MockApiClient.addMockResponse({
-      url: `/projects/${org.slug}/${project.slug}/events/1/`,
-      body: event,
     });
 
     MockApiClient.addMockResponse({
@@ -65,13 +54,23 @@ describe('groupEventDetails', () => {
     });
 
     MockApiClient.addMockResponse({
+      url: `/issues/${group.id}/current-release/`,
+      body: {currentRelease: null},
+    });
+
+    MockApiClient.addMockResponse({
       url: `/projects/${org.slug}/${project.slug}/releases/completion/`,
       body: [],
     });
 
     MockApiClient.addMockResponse({
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
       body: promptsActivity,
+    });
+
+    MockApiClient.addMockResponse({
+      url: `/organizations/${org.slug}/has-mobile-app-events/`,
+      body: null,
     });
 
     MockApiClient.addMockResponse({
@@ -129,6 +128,7 @@ describe('groupEventDetails', () => {
       <GroupEventDetails
         api={new MockApiClient()}
         group={group}
+        event={event}
         project={project}
         organization={org}
         environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -150,6 +150,7 @@ describe('groupEventDetails', () => {
       <GroupEventDetails
         api={new MockApiClient()}
         group={group}
+        event={event}
         project={project}
         organization={org}
         environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -186,6 +187,7 @@ describe('groupEventDetails', () => {
       <GroupEventDetails
         api={new MockApiClient()}
         group={group}
+        event={event}
         project={project}
         organization={org}
         environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -198,7 +200,7 @@ describe('groupEventDetails', () => {
 
     wrapper.update();
 
-    const buttons = wrapper.find('.event-toolbar').find('ButtonBar').find('Button');
+    const buttons = wrapper.find('GroupEventToolbar').find('ButtonBar').find('Button');
 
     expect(buttons.at(0).prop('to')).toEqual({
       pathname: '/organizations/org-slug/issues/1/events/oldest/',
@@ -219,6 +221,26 @@ describe('groupEventDetails', () => {
     });
   });
 
+  it('displays error on event error', async function () {
+    const wrapper = mountWithTheme(
+      <GroupEventDetails
+        api={new MockApiClient()}
+        group={group}
+        event={undefined}
+        eventError
+        project={project}
+        organization={org}
+        environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
+        params={{orgId: org.slug, group: group.id, eventId: '1'}}
+        location={{}}
+      />,
+      routerContext
+    );
+    await tick();
+
+    expect(wrapper.text()).toContain('events for this issue could not be found');
+  });
+
   describe('EventCauseEmpty', () => {
     const proj = TestStubs.Project({firstEvent: '2020-01-01T01:00:00Z'});
 
@@ -237,6 +259,7 @@ describe('groupEventDetails', () => {
         <GroupEventDetails
           api={new MockApiClient()}
           group={group}
+          event={event}
           project={proj}
           organization={org}
           environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -267,6 +290,7 @@ describe('groupEventDetails', () => {
         <GroupEventDetails
           api={new MockApiClient()}
           group={group}
+          event={event}
           project={proj}
           organization={org}
           environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -292,6 +316,7 @@ describe('groupEventDetails', () => {
         <GroupEventDetails
           api={new MockApiClient()}
           group={group}
+          event={event}
           project={proj}
           organization={org}
           environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -318,6 +343,7 @@ describe('groupEventDetails', () => {
         <GroupEventDetails
           api={new MockApiClient()}
           group={group}
+          event={event}
           project={proj}
           organization={org}
           environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}
@@ -343,6 +369,7 @@ describe('groupEventDetails', () => {
         <GroupEventDetails
           api={new MockApiClient()}
           group={group}
+          event={event}
           project={project}
           organization={org}
           environments={[{id: '1', name: 'dev', displayName: 'Dev'}]}

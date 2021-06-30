@@ -1,9 +1,7 @@
-from __future__ import absolute_import
-
 from datetime import datetime
 
-from django.core.urlresolvers import reverse
 from django.test.client import RequestFactory
+from django.urls import reverse
 
 from sentry.models import Release
 from tests.apidocs.util import APIDocsTestCase

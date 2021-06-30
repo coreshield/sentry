@@ -1,12 +1,10 @@
-from __future__ import absolute_import
-
 import os
 import posixpath
+from urllib.parse import unquote
 
 from django.conf import settings
-from django.http import HttpResponseNotFound, Http404
 from django.contrib.staticfiles import finders
-from django.utils.six.moves.urllib.parse import unquote
+from django.http import Http404, HttpResponseNotFound
 from django.views import static
 
 FOREVER_CACHE = "max-age=315360000"
@@ -35,6 +33,23 @@ def resolve(path):
     return os.path.split(absolute_path)
 
 
+def static_media_with_manifest(request, **kwargs):
+    """
+    Serve static files that are generated with webpack.
+
+    Only these assets should have a long TTL as its filename has a hash based on file contents
+    """
+    path = kwargs.get("path", "")
+
+    kwargs["path"] = f"dist/{path}"
+    response = static_media(request, **kwargs)
+
+    if not settings.DEBUG:
+        response["Cache-Control"] = FOREVER_CACHE
+
+    return response
+
+
 def static_media(request, **kwargs):
     """
     Serve static files below a given point in the directory structure.
@@ -44,7 +59,7 @@ def static_media(request, **kwargs):
     version = kwargs.get("version")
 
     if module:
-        path = "%s/%s" % (module, path)
+        path = f"{module}/{path}"
 
     try:
         document_root, path = resolve(path)

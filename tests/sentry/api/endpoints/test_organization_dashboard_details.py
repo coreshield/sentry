@@ -1,13 +1,11 @@
-from __future__ import absolute_import
+from django.urls import reverse
 
-import six
-
-from django.core.urlresolvers import reverse
 from sentry.models import (
     Dashboard,
+    DashboardTombstone,
     DashboardWidget,
-    DashboardWidgetQuery,
     DashboardWidgetDisplayTypes,
+    DashboardWidgetQuery,
 )
 from sentry.testutils import OrganizationDashboardWidgetTestCase
 from sentry.utils.compat import zip
@@ -15,25 +13,26 @@ from sentry.utils.compat import zip
 
 class OrganizationDashboardDetailsTestCase(OrganizationDashboardWidgetTestCase):
     def setUp(self):
-        super(OrganizationDashboardDetailsTestCase, self).setUp()
+        super().setUp()
         self.widget_1 = DashboardWidget.objects.create(
             dashboard=self.dashboard,
             order=0,
             title="Widget 1",
             display_type=DashboardWidgetDisplayTypes.LINE_CHART,
+            interval="1d",
         )
         self.widget_2 = DashboardWidget.objects.create(
             dashboard=self.dashboard,
             order=1,
             title="Widget 2",
             display_type=DashboardWidgetDisplayTypes.TABLE,
+            interval="1d",
         )
         self.widget_1_data_1 = DashboardWidgetQuery.objects.create(
             widget=self.widget_1,
             name=self.anon_users_query["name"],
             fields=self.anon_users_query["fields"],
             conditions=self.anon_users_query["conditions"],
-            interval=self.anon_users_query["interval"],
             order=0,
         )
         self.widget_1_data_2 = DashboardWidgetQuery.objects.create(
@@ -41,7 +40,6 @@ class OrganizationDashboardDetailsTestCase(OrganizationDashboardWidgetTestCase):
             name=self.known_users_query["name"],
             fields=self.known_users_query["fields"],
             conditions=self.known_users_query["conditions"],
-            interval=self.known_users_query["interval"],
             order=1,
         )
         self.widget_2_data_1 = DashboardWidgetQuery.objects.create(
@@ -49,7 +47,6 @@ class OrganizationDashboardDetailsTestCase(OrganizationDashboardWidgetTestCase):
             name=self.geo_errors_query["name"],
             fields=self.geo_errors_query["fields"],
             conditions=self.geo_errors_query["conditions"],
-            interval=self.geo_errors_query["interval"],
             order=0,
         )
 
@@ -59,38 +56,15 @@ class OrganizationDashboardDetailsTestCase(OrganizationDashboardWidgetTestCase):
             kwargs={"organization_slug": self.organization.slug, "dashboard_id": dashboard_id},
         )
 
-    def assert_serialized_widget(self, data, expected_widget):
-        if "id" in data:
-            assert data["id"] == six.text_type(expected_widget.id)
-        if "title" in data:
-            assert data["title"] == expected_widget.title
-        if "displayType" in data:
-            assert data["displayType"] == DashboardWidgetDisplayTypes.get_type_name(
-                expected_widget.display_type
-            )
-
     def assert_serialized_dashboard(self, data, dashboard):
-        assert data["id"] == six.text_type(dashboard.id)
-        assert data["organization"] == six.text_type(dashboard.organization.id)
+        assert data["id"] == str(dashboard.id)
         assert data["title"] == dashboard.title
-        assert data["createdBy"] == six.text_type(dashboard.created_by.id)
-
-    def assert_serialized_widget_query(self, data, widget_data_source):
-        if "id" in data:
-            assert data["id"] == six.text_type(widget_data_source.id)
-        if "name" in data:
-            assert data["name"] == widget_data_source.name
-        if "fields" in data:
-            assert data["fields"] == widget_data_source.fields
-        if "conditions" in data:
-            assert data["conditions"] == widget_data_source.conditions
-        if "interval" in data:
-            assert data["interval"] == widget_data_source.interval
+        assert data["createdBy"]["id"] == str(dashboard.created_by.id)
 
 
 class OrganizationDashboardDetailsGetTest(OrganizationDashboardDetailsTestCase):
     def test_get(self):
-        response = self.client.get(self.url(self.dashboard.id))
+        response = self.do_request("get", self.url(self.dashboard.id))
         assert response.status_code == 200, response.content
 
         self.assert_serialized_dashboard(response.data, self.dashboard)
@@ -108,14 +82,33 @@ class OrganizationDashboardDetailsGetTest(OrganizationDashboardDetailsTestCase):
         self.assert_serialized_widget_query(widgets[1]["queries"][0], self.widget_2_data_1)
 
     def test_dashboard_does_not_exist(self):
-        response = self.client.get(self.url(1234567890))
+        response = self.do_request("get", self.url(1234567890))
         assert response.status_code == 404
-        assert response.data == {u"detail": "The requested resource does not exist"}
+        assert response.data == {"detail": "The requested resource does not exist"}
+
+    def test_get_prebuilt_dashboard(self):
+        # Pre-built dashboards should be accessible
+        response = self.do_request("get", self.url("default-overview"))
+        assert response.status_code == 200
+        assert response.data["id"] == "default-overview"
+
+    def test_get_prebuilt_dashboard_tombstoned(self):
+        DashboardTombstone.objects.create(organization=self.organization, slug="default-overview")
+        # Pre-built dashboards should be accessible even when tombstoned
+        # This is to preserve behavior around bookmarks
+        response = self.do_request("get", self.url("default-overview"))
+        assert response.status_code == 200
+        assert response.data["id"] == "default-overview"
+
+    def test_features_required(self):
+        with self.feature({"organizations:dashboards-basic": False}):
+            response = self.do_request("get", self.url("default-overview"))
+            assert response.status_code == 404
 
 
 class OrganizationDashboardDetailsDeleteTest(OrganizationDashboardDetailsTestCase):
     def test_delete(self):
-        response = self.client.delete(self.url(self.dashboard.id))
+        response = self.do_request("delete", self.url(self.dashboard.id))
         assert response.status_code == 204
 
         assert self.client.get(self.url(self.dashboard.id)).status_code == 404
@@ -126,15 +119,49 @@ class OrganizationDashboardDetailsDeleteTest(OrganizationDashboardDetailsTestCas
         assert not DashboardWidgetQuery.objects.filter(widget_id=self.widget_1.id).exists()
         assert not DashboardWidgetQuery.objects.filter(widget_id=self.widget_2.id).exists()
 
+    def test_delete_permission(self):
+        self.create_user_member_role()
+        self.test_delete()
+
     def test_dashboard_does_not_exist(self):
-        response = self.client.delete(self.url(1234567890))
+        response = self.do_request("delete", self.url(1234567890))
         assert response.status_code == 404
-        assert response.data == {u"detail": "The requested resource does not exist"}
+        assert response.data == {"detail": "The requested resource does not exist"}
+
+    def test_delete_prebuilt_dashboard(self):
+        slug = "default-overview"
+        response = self.do_request("delete", self.url(slug))
+        assert response.status_code == 204
+        assert DashboardTombstone.objects.filter(organization=self.organization, slug=slug).exists()
+
+    def test_delete_last_dashboard(self):
+        slug = "default-overview"
+        response = self.do_request("delete", self.url(slug))
+        assert response.status_code == 204
+        assert DashboardTombstone.objects.filter(organization=self.organization, slug=slug).exists()
+
+        response = self.do_request("delete", self.url(self.dashboard.id))
+        assert response.status_code == 409
+
+    def test_delete_last_default_dashboard(self):
+        response = self.do_request("delete", self.url(self.dashboard.id))
+        assert response.status_code == 204
+        assert self.client.get(self.url(self.dashboard.id)).status_code == 404
+
+        slug = "default-overview"
+        response = self.do_request("delete", self.url(slug))
+        assert response.status_code == 409
+
+    def test_features_required(self):
+        with self.feature({"organizations:dashboards-edit": False}):
+            response = self.do_request("delete", self.url("default-overview"))
+            assert response.status_code == 404
 
 
 class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
     def setUp(self):
-        super(OrganizationDashboardDetailsPutTest, self).setUp()
+        super().setUp()
+        self.create_user_member_role()
         self.widget_3 = DashboardWidget.objects.create(
             dashboard=self.dashboard,
             order=2,
@@ -148,9 +175,6 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             display_type=DashboardWidgetDisplayTypes.LINE_CHART,
         )
         self.widget_ids = [self.widget_1.id, self.widget_2.id, self.widget_3.id, self.widget_4.id]
-
-    def get_widgets(self, dashboard_id):
-        return DashboardWidget.objects.filter(dashboard_id=dashboard_id).order_by("order")
 
     def get_widget_queries(self, widget):
         return DashboardWidgetQuery.objects.filter(widget=widget).order_by("order")
@@ -170,12 +194,21 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             assert widget.id == id
 
     def test_dashboard_does_not_exist(self):
-        response = self.client.put(self.url(1234567890))
+        response = self.do_request("put", self.url(1234567890))
         assert response.status_code == 404
-        assert response.data == {u"detail": u"The requested resource does not exist"}
+        assert response.data == {"detail": "The requested resource does not exist"}
+
+    def test_feature_required(self):
+        with self.feature({"organizations:dashboards-edit": False}):
+            response = self.do_request(
+                "put", self.url(self.dashboard.id), data={"title": "Dashboard Hello"}
+            )
+            assert response.status_code == 404, response.data
 
     def test_change_dashboard_title(self):
-        response = self.client.put(self.url(self.dashboard.id), data={"title": "Dashboard Hello"})
+        response = self.do_request(
+            "put", self.url(self.dashboard.id), data={"title": "Dashboard Hello"}
+        )
         assert response.status_code == 200, response.data
         assert Dashboard.objects.filter(
             title="Dashboard Hello", organization=self.organization, id=self.dashboard.id
@@ -185,65 +218,107 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         Dashboard.objects.create(
             title="Dashboard 2", created_by=self.user, organization=self.organization
         )
-        response = self.client.put(self.url(self.dashboard.id), data={"title": "Dashboard 2"})
+        response = self.do_request(
+            "put", self.url(self.dashboard.id), data={"title": "Dashboard 2"}
+        )
         assert response.status_code == 409, response.data
-        assert list(response.data) == [u"Dashboard with that title already exists."]
+        assert list(response.data) == ["Dashboard with that title already exists."]
 
     def test_add_widget(self):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
-                {"id": six.text_type(self.widget_2.id)},
-                {"id": six.text_type(self.widget_3.id)},
-                {"id": six.text_type(self.widget_4.id)},
+                {"id": str(self.widget_1.id)},
+                {"id": str(self.widget_2.id)},
+                {"id": str(self.widget_3.id)},
+                {"id": str(self.widget_4.id)},
                 {
-                    "title": "Errors over time",
-                    "displayType": "line",
+                    "title": "Error Counts by Country",
+                    "displayType": "world_map",
+                    "interval": "5m",
+                    "queries": [
+                        {"name": "Errors", "fields": ["count()"], "conditions": "event.type:error"}
+                    ],
+                },
+                {
+                    "title": "Errors per project",
+                    "displayType": "table",
+                    "interval": "5m",
                     "queries": [
                         {
                             "name": "Errors",
-                            "fields": ["count()"],
+                            "fields": ["count()", "project"],
                             "conditions": "event.type:error",
-                            "interval": "5m",
                         }
                     ],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200, response.data
 
         widgets = self.get_widgets(self.dashboard.id)
-        assert len(widgets) == 5
+        assert len(widgets) == 6
 
         last = list(widgets).pop()
-        self.assert_serialized_widget(data["widgets"][4], last)
+        self.assert_serialized_widget(data["widgets"][5], last)
 
         queries = last.dashboardwidgetquery_set.all()
         assert len(queries) == 1
-        self.assert_serialized_widget_query(data["widgets"][4]["queries"][0], queries[0])
+        self.assert_serialized_widget_query(data["widgets"][5]["queries"][0], queries[0])
+
+    def test_add_widget_missing_title(self):
+        data = {
+            "title": "First dashboard",
+            "widgets": [
+                {"id": str(self.widget_1.id)},
+                {
+                    "displayType": "line",
+                    "interval": "5m",
+                    "queries": [{"name": "", "fields": ["count()"], "conditions": ""}],
+                },
+            ],
+        }
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
+        assert response.status_code == 400, response.data
+        assert b"Title is required during creation" in response.content
+
+    def test_add_widget_display_type(self):
+        data = {
+            "title": "First dashboard",
+            "widgets": [
+                {"id": str(self.widget_1.id)},
+                {
+                    "title": "Errors",
+                    "interval": "5m",
+                    "queries": [{"name": "", "fields": ["count()"], "conditions": ""}],
+                },
+            ],
+        }
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
+        assert response.status_code == 400, response.data
+        assert b"displayType is required during creation" in response.content
 
     def test_add_widget_invalid_query(self):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
+                {"id": str(self.widget_1.id)},
                 {
                     "title": "Invalid fields",
                     "displayType": "line",
+                    "interval": "5m",
                     "queries": [
                         {
                             "name": "Errors",
                             "fields": ["p95(transaction.duration)"],
                             "conditions": "foo: bar:",
-                            "interval": "5m",
                         }
                     ],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid conditions" in response.content
 
@@ -251,22 +326,16 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
+                {"id": str(self.widget_1.id)},
                 {
                     "title": "Invalid fields",
                     "displayType": "line",
-                    "queries": [
-                        {
-                            "name": "Errors",
-                            "fields": ["wrong()"],
-                            "conditions": "",
-                            "interval": "5m",
-                        }
-                    ],
+                    "interval": "5m",
+                    "queries": [{"name": "Errors", "fields": ["wrong()"], "conditions": ""}],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid fields" in response.content
 
@@ -274,22 +343,15 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
+                {"id": str(self.widget_1.id)},
                 {
                     "title": "Invalid fields",
                     "displayType": "line",
-                    "queries": [
-                        {
-                            "name": "Errors",
-                            "fields": ["p95(user)"],
-                            "conditions": "",
-                            "interval": "5m",
-                        }
-                    ],
+                    "queries": [{"name": "Errors", "fields": ["p95(user)"], "conditions": ""}],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid fields" in response.content
 
@@ -297,22 +359,22 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
+                {"id": str(self.widget_1.id)},
                 {
                     "title": "Invalid interval",
                     "displayType": "line",
+                    "interval": "1q",
                     "queries": [
                         {
                             "name": "Durations",
                             "fields": ["p95(transaction.duration)"],
                             "conditions": "",
-                            "interval": "1q",
                         }
                     ],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid interval" in response.content
 
@@ -320,13 +382,13 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id), "title": "New title"},
-                {"id": six.text_type(self.widget_2.id)},
-                {"id": six.text_type(self.widget_3.id)},
-                {"id": six.text_type(self.widget_4.id)},
+                {"id": str(self.widget_1.id), "title": "New title"},
+                {"id": str(self.widget_2.id)},
+                {"id": str(self.widget_3.id)},
+                {"id": str(self.widget_4.id)},
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200
 
         widgets = self.get_widgets(self.dashboard.id)
@@ -337,10 +399,10 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             "title": "First dashboard",
             "widgets": [
                 {
-                    "id": six.text_type(self.widget_1.id),
+                    "id": str(self.widget_1.id),
                     "title": "New title",
                     "queries": [
-                        {"id": six.text_type(self.widget_1_data_1.id)},
+                        {"id": str(self.widget_1_data_1.id)},
                         {
                             "name": "transactions",
                             "fields": ["count()"],
@@ -348,10 +410,10 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
                         },
                     ],
                 },
-                {"id": six.text_type(self.widget_2.id)},
+                {"id": str(self.widget_2.id)},
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200, response.data
 
         # two widgets should be removed
@@ -361,7 +423,7 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
 
         queries = self.get_widget_queries(widgets[0])
         assert len(queries) == 2
-        assert data["widgets"][0]["queries"][0]["id"] == six.text_type(queries[0].id)
+        assert data["widgets"][0]["queries"][0]["id"] == str(queries[0].id)
         self.assert_serialized_widget_query(data["widgets"][0]["queries"][1], queries[1])
 
     def test_update_widget_remove_and_update_query(self):
@@ -369,11 +431,11 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             "title": "First dashboard",
             "widgets": [
                 {
-                    "id": six.text_type(self.widget_1.id),
+                    "id": str(self.widget_1.id),
                     "title": "New title",
                     "queries": [
                         {
-                            "id": six.text_type(self.widget_1_data_1.id),
+                            "id": str(self.widget_1_data_1.id),
                             "name": "transactions",
                             "fields": ["count()"],
                             "conditions": "event.type:transaction",
@@ -382,7 +444,7 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200, response.data
 
         # only one widget should remain
@@ -399,17 +461,17 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             "title": "First dashboard",
             "widgets": [
                 {
-                    "id": six.text_type(self.widget_1.id),
+                    "id": str(self.widget_1.id),
                     "title": "New title",
                     "queries": [
-                        {"id": six.text_type(self.widget_1_data_2.id)},
-                        {"id": six.text_type(self.widget_1_data_1.id)},
+                        {"id": str(self.widget_1_data_2.id)},
+                        {"id": str(self.widget_1_data_1.id)},
                     ],
                 },
-                {"id": six.text_type(self.widget_2.id)},
+                {"id": str(self.widget_2.id)},
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200, response.data
 
         # two widgets should be removed
@@ -421,29 +483,59 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         assert queries[0].id == self.widget_1_data_2.id
         assert queries[1].id == self.widget_1_data_1.id
 
+    def test_update_widget_use_other_query(self):
+        data = {
+            "title": "First dashboard",
+            "widgets": [
+                {
+                    "id": str(self.widget_1.id),
+                    "title": "New title",
+                    "queries": [{"id": str(self.widget_2_data_1.id)}],
+                },
+            ],
+        }
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
+        assert response.status_code == 400, response.data
+        assert "You cannot use a query not owned by this widget" in response.data
+
+    def test_update_widget_invalid_orderby(self):
+        data = {
+            "title": "First dashboard",
+            "widgets": [
+                {
+                    "id": str(self.widget_1.id),
+                    "queries": [
+                        {
+                            "fields": ["title", "count()"],
+                            "conditions": "",
+                            "orderby": "message",
+                        }
+                    ],
+                },
+            ],
+        }
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
+        assert response.status_code == 400, response.data
+        assert b"Cannot order by a field" in response.content
+
     def test_remove_widget_and_add_new(self):
         # Remove a widget from the middle of the set and put a new widget there
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id)},
-                {"id": six.text_type(self.widget_2.id)},
+                {"id": str(self.widget_1.id)},
+                {"id": str(self.widget_2.id)},
                 {
                     "title": "Errors over time",
                     "displayType": "line",
                     "queries": [
-                        {
-                            "name": "Errors",
-                            "fields": ["count()"],
-                            "conditions": "event.type:error",
-                            "interval": "5m",
-                        }
+                        {"name": "Errors", "fields": ["count()"], "conditions": "event.type:error"}
                     ],
                 },
-                {"id": six.text_type(self.widget_4.id)},
+                {"id": str(self.widget_4.id)},
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200, response.data
 
         widgets = self.get_widgets(self.dashboard.id)
@@ -459,21 +551,14 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             "title": "First dashboard",
             "widgets": [
                 {
-                    "id": six.text_type(self.widget_1.id),
+                    "id": str(self.widget_1.id),
                     "title": "Invalid fields",
                     "displayType": "line",
-                    "queries": [
-                        {
-                            "name": "Errors",
-                            "fields": ["p95(user)"],
-                            "conditions": "",
-                            "interval": "5m",
-                        }
-                    ],
+                    "queries": [{"name": "Errors", "fields": ["p95(user)"], "conditions": ""}],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid fields" in response.content
 
@@ -482,21 +567,14 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             "title": "First dashboard",
             "widgets": [
                 {
-                    "id": six.text_type(self.widget_1.id),
+                    "id": str(self.widget_1.id),
                     "title": "Invalid fields",
                     "displayType": "line",
-                    "queries": [
-                        {
-                            "name": "Errors",
-                            "fields": ["p95()"],
-                            "conditions": "foo: bar:",
-                            "interval": "5m",
-                        }
-                    ],
+                    "queries": [{"name": "Errors", "fields": ["p95()"], "conditions": "foo: bar:"}],
                 },
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 400, response.data
         assert b"Invalid conditions" in response.content
 
@@ -504,11 +582,11 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         data = {
             "title": "First dashboard",
             "widgets": [
-                {"id": six.text_type(self.widget_1.id), "title": "New title"},
-                {"id": six.text_type(self.widget_2.id), "title": "Other title"},
+                {"id": str(self.widget_1.id), "title": "New title"},
+                {"id": str(self.widget_2.id), "title": "Other title"},
             ],
         }
-        response = self.client.put(self.url(self.dashboard.id), data=data)
+        response = self.do_request("put", self.url(self.dashboard.id), data=data)
         assert response.status_code == 200
 
         widgets = self.get_widgets(self.dashboard.id)
@@ -517,7 +595,8 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
         self.assert_serialized_widget(data["widgets"][1], widgets[1])
 
     def test_reorder_widgets(self):
-        response = self.client.put(
+        response = self.do_request(
+            "put",
             self.url(self.dashboard.id),
             data={
                 "widgets": [
@@ -533,8 +612,49 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             [self.widget_3.id, self.widget_2.id, self.widget_1.id, self.widget_4.id]
         )
 
+    def test_update_prebuilt_dashboard(self):
+        data = {
+            "title": "First dashboard",
+            "widgets": [
+                {
+                    "title": "New title",
+                    "displayType": "line",
+                    "queries": [
+                        {
+                            "name": "transactions",
+                            "fields": ["count()"],
+                            "conditions": "event.type:transaction",
+                        },
+                    ],
+                },
+            ],
+        }
+        slug = "default-overview"
+        response = self.do_request("put", self.url(slug), data=data)
+        assert response.status_code == 200, response.data
+        dashboard_id = response.data["id"]
+        assert dashboard_id != slug
+
+        # Ensure widget and query were saved
+        widgets = self.get_widgets(dashboard_id)
+        assert len(widgets) == 1
+        self.assert_serialized_widget(data["widgets"][0], widgets[0])
+
+        queries = self.get_widget_queries(widgets[0])
+        assert len(queries) == 1
+        assert DashboardTombstone.objects.filter(slug=slug).exists()
+
+    def test_update_unknown_prebuilt(self):
+        data = {
+            "title": "First dashboard",
+        }
+        slug = "nope-not-real"
+        response = self.client.put(self.url(slug), data=data)
+        assert response.status_code == 404
+
     def test_partial_reordering_deletes_widgets(self):
-        response = self.client.put(
+        response = self.do_request(
+            "put",
             self.url(self.dashboard.id),
             data={
                 "title": "Changed the title",
@@ -556,19 +676,21 @@ class OrganizationDashboardDetailsPutTest(OrganizationDashboardDetailsTestCase):
             title="Widget 200",
             display_type=DashboardWidgetDisplayTypes.LINE_CHART,
         )
-        response = self.client.put(
+        response = self.do_request(
+            "put",
             self.url(self.dashboard.id),
             data={"widgets": [{"id": self.widget_4.id}, {"id": widget.id}]},
         )
         assert response.status_code == 400
-        assert response.data == [u"You cannot update widgets that are not part of this dashboard."]
+        assert response.data == ["You cannot update widgets that are not part of this dashboard."]
         self.assert_no_changes()
 
     def test_widget_does_not_exist(self):
-        response = self.client.put(
+        response = self.do_request(
+            "put",
             self.url(self.dashboard.id),
             data={"widgets": [{"id": self.widget_4.id}, {"id": 1234567890}]},
         )
         assert response.status_code == 400
-        assert response.data == [u"You cannot update widgets that are not part of this dashboard."]
+        assert response.data == ["You cannot update widgets that are not part of this dashboard."]
         self.assert_no_changes()

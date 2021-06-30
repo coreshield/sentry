@@ -1,11 +1,8 @@
-import React from 'react';
 import * as Sentry from '@sentry/react';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import {RouteError} from 'app/views/routeError';
-
-jest.mock('jquery');
 
 describe('RouteError', function () {
   afterEach(function () {

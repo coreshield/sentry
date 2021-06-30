@@ -14,6 +14,7 @@
   <meta http-equiv="content-type" content="text/html; charset=utf-8">
   <meta name="robots" content="NONE,NOARCHIVE">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#000000">
 
   <link rel="icon" type="image/png" href="{% absolute_asset_url "sentry" "images/favicon.png" %}">
 
@@ -24,26 +25,49 @@
 
   <link rel="mask-icon" sizes="any" href="{% absolute_asset_url "sentry" "images/logos/logo-sentry.svg" %}" color="#FB4226">
 
-  <link href="{% asset_url "sentry" "dist/sentry.css" %}" rel="stylesheet"/>
+  <link href="{% manifest_asset_url "sentry" "sentry.css" %}" rel="stylesheet"/>
 
   {% block css %}{% endblock %}
 
   <title>{% block title %}Sentry{% endblock %}</title>
 
-  <script>
-    window.__initialData = {% get_react_config %};
-  </script>
+  {% block initial_data %}
+    {% script %}
+    <script>
+      window.__initialData = {% get_react_config %};
+    </script>
+    {% endscript %}
+  {% endblock %}
 
-  {% block scripts %}
-  {% locale_js_include %}
-  <script src="{% asset_url "sentry" "dist/vendor.js" %}"{% crossorigin %}></script>
-  <script src="{% asset_url "sentry" "dist/app.js" %}"{% crossorigin %} data-entry="true"></script>
-
+  {% script %}
   <script>
     // if the ads.js file loads below it will mark this variable as false
     window.adblockSuspected = true;
+    // Initialize this so that we can queue up tasks when Sentry SPA is initialized
+    window.__onSentryInit = window.__onSentryInit || [];
   </script>
-  <script src="{% asset_url 'sentry' 'js/ads.js' %}"></script>
+  {% endscript %}
+
+  {% script %}
+    {% include "sentry/partial/preload-data.html" %}
+  {% endscript %}
+
+  {% block scripts %}
+  {% manifest_asset_url "sentry" "runtime.js" as asset_url %}
+  {% script src=asset_url %}{% endscript %}
+
+  {% block scripts_main_entrypoint %}
+    {% manifest_asset_url "sentry" "app.js" as asset_url %}
+    {% script src=asset_url data-entry="true" %}{% endscript %}
+  {% endblock %}
+
+  {% injected_script_assets as injected_assets %}
+  {% for asset_url in injected_assets %}
+    {% script src=asset_url %}{% endscript %}
+  {% endfor %}
+
+  {% asset_url 'sentry' 'js/ads.js' as asset_url %}
+  {% script src=asset_url %}{% endscript %}
   {% endblock %}
 </head>
 

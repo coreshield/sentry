@@ -1,9 +1,6 @@
-from __future__ import absolute_import
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import responses
-import six
-from sentry.utils.compat.mock import patch
-from six.moves.urllib.parse import parse_qs, urlencode, urlparse
 
 from sentry.integrations.github_enterprise import GitHubEnterpriseIntegrationProvider
 from sentry.models import (
@@ -14,6 +11,7 @@ from sentry.models import (
     OrganizationIntegration,
 )
 from sentry.testutils import IntegrationTestCase
+from sentry.utils.compat.mock import patch
 
 
 class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
@@ -30,8 +28,8 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
     }
     base_url = "https://github.example.org/api/v3"
 
-    @patch("sentry.integrations.github_enterprise.integration.get_jwt", return_value=b"jwt_token_1")
-    @patch("sentry.integrations.github.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github_enterprise.integration.get_jwt", return_value="jwt_token_1")
+    @patch("sentry.integrations.github.client.get_jwt", return_value="jwt_token_1")
     def assert_setup_flow(
         self, get_jwt, _, installation_id="install_id_1", app_id="app_1", user_id="user_id_1"
     ):
@@ -47,7 +45,7 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
 
         # App installation ID is provided, mveo thr
         resp = self.client.get(
-            u"{}?{}".format(self.setup_path, urlencode({"installation_id": installation_id}))
+            "{}?{}".format(self.setup_path, urlencode({"installation_id": installation_id}))
         )
 
         assert resp.status_code == 302
@@ -63,7 +61,7 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
         assert params["client_id"] == ["client_id"]
         # once we've asserted on it, switch to a singular values to make life
         # easier
-        authorize_params = {k: v[0] for k, v in six.iteritems(params)}
+        authorize_params = {k: v[0] for k, v in params.items()}
 
         access_token = "xxxxx-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"
 
@@ -75,7 +73,7 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
 
         responses.add(
             responses.POST,
-            self.base_url + "/app/installations/{}/access_tokens".format(installation_id),
+            self.base_url + f"/app/installations/{installation_id}/access_tokens",
             json={"token": access_token, "expires_at": "3000-01-01T00:00:00Z"},
         )
 
@@ -83,7 +81,7 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
 
         responses.add(
             responses.GET,
-            self.base_url + "/app/installations/{}".format(installation_id),
+            self.base_url + f"/app/installations/{installation_id}",
             json={
                 "id": installation_id,
                 "app_id": app_id,
@@ -100,10 +98,11 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
             responses.GET,
             self.base_url + "/user/installations",
             json={"installations": [{"id": installation_id}]},
+            match_querystring=True,
         )
 
         resp = self.client.get(
-            u"{}?{}".format(
+            "{}?{}".format(
                 self.setup_path,
                 urlencode({"code": "oauth-code", "state": authorize_params["state"]}),
             )
@@ -122,7 +121,7 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
         assert resp.status_code == 200
 
         auth_header = responses.calls[2].request.headers["Authorization"]
-        assert auth_header == b"Bearer jwt_token_1"
+        assert auth_header == "Bearer jwt_token_1"
 
         self.assertDialogSuccess(resp)
 
@@ -135,21 +134,21 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
         assert integration.external_id == "github.example.org:install_id_1"
         assert integration.name == "Test Organization"
         assert integration.metadata == {
-            u"access_token": None,
-            u"expires_at": None,
-            u"icon": u"https://github.example.org/avatar.png",
-            u"domain_name": u"github.example.org/Test-Organization",
-            u"account_type": u"Organization",
-            u"installation_id": u"install_id_1",
-            u"installation": {
-                u"client_id": u"client_id",
-                u"client_secret": u"client_secret",
-                u"id": u"2",
-                u"name": u"test-app",
-                u"private_key": u"private_key",
-                u"url": u"github.example.org",
-                u"webhook_secret": u"webhook_secret",
-                u"verify_ssl": True,
+            "access_token": None,
+            "expires_at": None,
+            "icon": "https://github.example.org/avatar.png",
+            "domain_name": "github.example.org/Test-Organization",
+            "account_type": "Organization",
+            "installation_id": "install_id_1",
+            "installation": {
+                "client_id": "client_id",
+                "client_secret": "client_secret",
+                "id": "2",
+                "name": "test-app",
+                "private_key": "private_key",
+                "url": "github.example.org",
+                "webhook_secret": "webhook_secret",
+                "verify_ssl": True,
             },
         }
         oi = OrganizationIntegration.objects.get(
@@ -162,16 +161,17 @@ class GitHubEnterpriseIntegrationTest(IntegrationTestCase):
         assert identity.status == IdentityStatus.VALID
         assert identity.data == {"access_token": "xxxxx-xxxxxxxxx-xxxxxxxxxx-xxxxxxxxxxxx"}
 
-    @patch("sentry.integrations.github_enterprise.integration.get_jwt", return_value=b"jwt_token_1")
-    @patch("sentry.integrations.github_enterprise.client.get_jwt", return_value=b"jwt_token_1")
+    @patch("sentry.integrations.github_enterprise.integration.get_jwt", return_value="jwt_token_1")
+    @patch("sentry.integrations.github_enterprise.client.get_jwt", return_value="jwt_token_1")
     @responses.activate
     def test_get_repositories_search_param(self, mock_jwtm, _):
         with self.tasks():
             self.assert_setup_flow()
 
+        querystring = urlencode({"q": "org:Test Organization ex"})
         responses.add(
             responses.GET,
-            self.base_url + "/search/repositories?q=org:test%20ex",
+            f"{self.base_url}/search/repositories?{querystring}",
             json={
                 "items": [
                     {"name": "example", "full_name": "test/example"},

@@ -1,6 +1,4 @@
-import React from 'react';
-
-import {mount} from 'sentry-test/enzyme';
+import {mountWithTheme} from 'sentry-test/enzyme';
 
 import MemberListStore from 'app/stores/memberListStore';
 import TagStore from 'app/stores/tagStore';
@@ -16,7 +14,7 @@ describe('withIssueTags HoC', function () {
   it('forwards loaded tags to the wrapped component', async function () {
     const MyComponent = () => null;
     const Container = withIssueTags(MyComponent);
-    const wrapper = mount(<Container other="value" />);
+    const wrapper = mountWithTheme(<Container other="value" />);
 
     // Should forward props.
     expect(wrapper.find('MyComponent').prop('other')).toEqual('value');
@@ -41,7 +39,7 @@ describe('withIssueTags HoC', function () {
   it('updates the assigned tags with users and teams, and bookmark tags with users', async function () {
     const MyComponent = () => null;
     const Container = withIssueTags(MyComponent);
-    const wrapper = mount(<Container other="value" />);
+    const wrapper = mountWithTheme(<Container other="value" />);
 
     // Should forward props.
     expect(wrapper.find('MyComponent').prop('other')).toEqual('value');
@@ -51,11 +49,14 @@ describe('withIssueTags HoC', function () {
 
     let tagsProp = wrapper.find('MyComponent').prop('tags');
     expect(tagsProp.assigned).toBeTruthy();
-    expect(tagsProp.assigned.values).toEqual(['me']);
+    expect(tagsProp.assigned.values).toEqual(['me', '[me, none]']);
+
+    expect(tagsProp.assigned_or_suggested).toBeTruthy();
+    expect(tagsProp.assigned_or_suggested.values).toEqual(['me', '[me, none]']);
 
     const users = [TestStubs.User(), TestStubs.User({username: 'joe@example.com'})];
     TeamStore.loadInitialData([
-      {slug: 'best-team-na', name: 'best-team-na', isMember: true},
+      {slug: 'best-team-na', name: 'Best Team NA', isMember: true},
     ]);
     MemberListStore.loadInitialData(users);
     await wrapper.update();
@@ -63,6 +64,14 @@ describe('withIssueTags HoC', function () {
     tagsProp = wrapper.find('MyComponent').prop('tags');
     expect(tagsProp.assigned.values).toEqual([
       'me',
+      '[me, none]',
+      'foo@example.com',
+      'joe@example.com',
+      '#best-team-na',
+    ]);
+    expect(tagsProp.assigned_or_suggested.values).toEqual([
+      'me',
+      '[me, none]',
       'foo@example.com',
       'joe@example.com',
       '#best-team-na',

@@ -7,16 +7,16 @@
 {% block scripts %}
 {{ block.super }}
 
+{% script %}
 <script>
-  SentryApp.passwordStrength.load(function(passwordStrength) {
-    $(function() {
-      passwordStrength.attachTo({
-        input: document.querySelector('#id_registration_password'),
-        element: document.querySelector('.password-strength'),
-      });
-    })
-  })
+  window.__onSentryInit = window.__onSentryInit || [];
+  window.__onSentryInit.push({
+    name: 'passwordStrength',
+    input: '#id_registration_password',
+    element: '.password-strength',
+  });
 </script>
+{% endscript %}
 {% endblock %}
 
 {% block title %}{% trans "Login" %} | {{ block.super }}{% endblock %}

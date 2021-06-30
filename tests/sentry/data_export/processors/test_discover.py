@@ -1,13 +1,11 @@
-from __future__ import absolute_import
-
 from sentry.data_export.base import ExportError
 from sentry.data_export.processors.discover import DiscoverProcessor
-from sentry.testutils import TestCase, SnubaTestCase
+from sentry.testutils import SnubaTestCase, TestCase
 
 
 class DiscoverProcessorTest(TestCase, SnubaTestCase):
     def setUp(self):
-        super(DiscoverProcessorTest, self).setUp()
+        super().setUp()
         self.user = self.create_user()
         self.org = self.create_organization(owner=self.user)
         self.project1 = self.create_project(organization=self.org)
@@ -29,7 +27,7 @@ class DiscoverProcessorTest(TestCase, SnubaTestCase):
         projects = DiscoverProcessor.get_projects(
             organization_id=self.org.id, query={"project": [self.project1.id, self.project2.id]}
         )
-        assert sorted([p.id for p in projects]) == sorted([self.project1.id, self.project2.id])
+        assert sorted(p.id for p in projects) == sorted([self.project1.id, self.project2.id])
         with self.assertRaises(ExportError):
             DiscoverProcessor.get_projects(organization_id=self.org.id, query={"project": [-1]})
 

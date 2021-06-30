@@ -1,15 +1,17 @@
-from __future__ import absolute_import, print_function
-
 import logging
 import math
 import re
 import warnings
-from collections import namedtuple
-from enum import Enum
+from collections import defaultdict, namedtuple
 from datetime import timedelta
+from enum import Enum
+from functools import reduce
+from operator import or_
+from typing import List, Mapping, Optional, Set
 
-import six
+from django.core.cache import cache
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 from django.utils.http import urlencode, urlquote
 from django.utils.translation import ugettext_lazy as _
@@ -26,6 +28,7 @@ from sentry.db.models import (
     Model,
     sane_repr,
 )
+from sentry.eventstore.models import Event
 from sentry.utils.http import absolute_uri
 from sentry.utils.numbers import base32_decode, base32_encode
 from sentry.utils.strings import strip, truncatechars
@@ -78,8 +81,7 @@ def get_group_with_redirect(id_or_qualified_short_id, queryset=None, organizatio
         getter = queryset.get
 
     if not (
-        isinstance(id_or_qualified_short_id, six.integer_types)  # noqa
-        or id_or_qualified_short_id.isdigit()
+        isinstance(id_or_qualified_short_id, int) or id_or_qualified_short_id.isdigit()  # noqa
     ):  # NOQA
         short_id = parse_short_id(id_or_qualified_short_id)
         if not short_id or not organization:
@@ -117,7 +119,7 @@ def get_group_with_redirect(id_or_qualified_short_id, queryset=None, organizatio
 
 
 # TODO(dcramer): pull in enum library
-class GroupStatus(object):
+class GroupStatus:
     UNRESOLVED = 0
     RESOLVED = 1
     IGNORED = 2
@@ -133,6 +135,36 @@ class GroupStatus(object):
     MUTED = IGNORED
 
 
+# Statuses that can be queried/searched for
+STATUS_QUERY_CHOICES = {
+    "resolved": GroupStatus.RESOLVED,
+    "unresolved": GroupStatus.UNRESOLVED,
+    "ignored": GroupStatus.IGNORED,
+    # TODO(dcramer): remove in 9.0
+    "muted": GroupStatus.IGNORED,
+    "reprocessing": GroupStatus.REPROCESSING,
+}
+QUERY_STATUS_LOOKUP = {
+    status: query for query, status in STATUS_QUERY_CHOICES.items() if query != "muted"
+}
+
+# Statuses that can be updated from the regular "update group" API
+#
+# Differences over STATUS_QUERY_CHOICES:
+#
+# reprocessing is missing as it is its own endpoint and requires extra input
+# resolvedInNextRelease is added as that is an action that can be taken, but at
+# the same time it can't be queried for
+STATUS_UPDATE_CHOICES = {
+    "resolved": GroupStatus.RESOLVED,
+    "unresolved": GroupStatus.UNRESOLVED,
+    "ignored": GroupStatus.IGNORED,
+    "resolvedInNextRelease": GroupStatus.UNRESOLVED,
+    # TODO(dcramer): remove in 9.0
+    "muted": GroupStatus.IGNORED,
+}
+
+
 class EventOrdering(Enum):
     LATEST = ["-timestamp", "-event_id"]
     OLDEST = ["timestamp", "event_id"]
@@ -140,7 +172,7 @@ class EventOrdering(Enum):
 
 def get_oldest_or_latest_event_for_environments(
     ordering, environments=(), issue_id=None, project_id=None
-):
+) -> Optional[Event]:
     conditions = []
 
     if len(environments) > 0:
@@ -164,24 +196,43 @@ def get_oldest_or_latest_event_for_environments(
 class GroupManager(BaseManager):
     use_for_related_fields = True
 
-    def by_qualified_short_id(self, organization_id, short_id):
-        short_id = parse_short_id(short_id)
-        if not short_id:
+    def by_qualified_short_id(self, organization_id: int, short_id: str):
+        return self.by_qualified_short_id_bulk(organization_id, [short_id])[0]
+
+    def by_qualified_short_id_bulk(self, organization_id: int, short_ids: List[str]):
+        short_ids = [parse_short_id(short_id) for short_id in short_ids]
+        if not short_ids or any(short_id is None for short_id in short_ids):
             raise Group.DoesNotExist()
-        return Group.objects.exclude(
-            status__in=[
-                GroupStatus.PENDING_DELETION,
-                GroupStatus.DELETION_IN_PROGRESS,
-                GroupStatus.PENDING_MERGE,
-            ]
-        ).get(
-            project__organization=organization_id,
-            project__slug=short_id.project_slug,
-            short_id=short_id.short_id,
+
+        project_short_id_lookup = defaultdict(list)
+        for short_id in short_ids:
+            project_short_id_lookup[short_id.project_slug].append(short_id.short_id)
+
+        short_id_lookup = reduce(
+            or_,
+            [
+                Q(project__slug=slug, short_id__in=short_ids)
+                for slug, short_ids in project_short_id_lookup.items()
+            ],
         )
 
+        groups: List[Group] = list(
+            Group.objects.exclude(
+                status__in=[
+                    GroupStatus.PENDING_DELETION,
+                    GroupStatus.DELETION_IN_PROGRESS,
+                    GroupStatus.PENDING_MERGE,
+                ]
+            ).filter(short_id_lookup, project__organization=organization_id)
+        )
+        group_lookup: Set[int] = {group.short_id for group in groups}
+        for short_id in short_ids:
+            if short_id.short_id not in group_lookup:
+                raise Group.DoesNotExist()
+        return groups
+
     def from_kwargs(self, project, **kwargs):
-        from sentry.event_manager import HashDiscarded, EventManager
+        from sentry.event_manager import EventManager, HashDiscarded
 
         manager = EventManager(kwargs)
         manager.normalize()
@@ -190,9 +241,7 @@ class GroupManager(BaseManager):
 
         # TODO(jess): this method maybe isn't even used?
         except HashDiscarded as e:
-            logger.info(
-                "discarded.hash", extra={"project_id": project, "description": six.text_type(e)}
-            )
+            logger.info("discarded.hash", extra={"project_id": project, "description": str(e)})
 
     def from_event_id(self, project, event_id):
         """
@@ -225,7 +274,7 @@ class GroupManager(BaseManager):
             referrer="Group.filter_by_event_id",
         )
 
-        group_ids = set([evt.group_id for evt in data])
+        group_ids = {evt.group_id for evt in data}
 
         return Group.objects.filter(id__in=group_ids)
 
@@ -249,21 +298,21 @@ class Group(Model):
     Aggregated message which summarizes a set of Events.
     """
 
-    __core__ = False
+    __include_in_export__ = False
 
     project = FlexibleForeignKey("sentry.Project")
     logger = models.CharField(
-        max_length=64, blank=True, default=six.text_type(DEFAULT_LOGGER_NAME), db_index=True
+        max_length=64, blank=True, default=str(DEFAULT_LOGGER_NAME), db_index=True
     )
     level = BoundedPositiveIntegerField(
-        choices=[(key, six.text_type(val)) for key, val in sorted(LOG_LEVELS.items())],
+        choices=[(key, str(val)) for key, val in sorted(LOG_LEVELS.items())],
         default=logging.ERROR,
         blank=True,
         db_index=True,
     )
     message = models.TextField()
     culprit = models.CharField(
-        max_length=MAX_CULPRIT_LENGTH, blank=True, null=True, db_column=u"view"
+        max_length=MAX_CULPRIT_LENGTH, blank=True, null=True, db_column="view"
     )
     num_comments = BoundedPositiveIntegerField(default=0, null=True)
     platform = models.CharField(max_length=64, null=True)
@@ -299,13 +348,17 @@ class Group(Model):
         verbose_name_plural = _("grouped messages")
         verbose_name = _("grouped message")
         permissions = (("can_view", "Can view"),)
-        index_together = [("project", "first_release"), ("project", "id")]
+        index_together = [
+            ("project", "first_release"),
+            ("project", "id"),
+            ("project", "status", "last_seen", "id"),
+        ]
         unique_together = (("project", "short_id"),)
 
     __repr__ = sane_repr("project_id")
 
-    def __unicode__(self):
-        return "(%s) %s" % (self.times_seen, self.error())
+    def __str__(self):
+        return f"({self.times_seen}) {self.error()}"
 
     def save(self, *args, **kwargs):
         if not self.last_seen:
@@ -323,14 +376,22 @@ class Group(Model):
         self.score = type(self).calculate_score(
             times_seen=self.times_seen, last_seen=self.last_seen
         )
-        super(Group, self).save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
-    def get_absolute_url(self, params=None, event_id=None):
+    def get_absolute_url(
+        self,
+        params: Optional[Mapping[str, str]] = None,
+        event_id: Optional[int] = None,
+        organization_slug: Optional[str] = None,
+    ) -> str:
         # Built manually in preference to django.core.urlresolvers.reverse,
         # because reverse has a measured performance impact.
-        event_path = u"events/{}/".format(event_id) if event_id else ""
-        url = u"organizations/{org}/issues/{id}/{event_path}{params}".format(
-            org=urlquote(self.organization.slug),
+        event_path = f"events/{event_id}/" if event_id else ""
+        url = "organizations/{org}/issues/{id}/{event_path}{params}".format(
+            # Pass organization_slug if this needs to be called multiple times to avoid n+1 queries
+            org=urlquote(
+                self.organization.slug if organization_slug is None else organization_slug
+            ),
             id=self.id,
             event_path=event_path,
             params="?" + urlencode(params) if params else "",
@@ -340,7 +401,7 @@ class Group(Model):
     @property
     def qualified_short_id(self):
         if self.short_id is not None:
-            return "%s-%s" % (self.project.slug.upper(), base32_encode(self.short_id))
+            return f"{self.project.slug.upper()}-{base32_encode(self.short_id)}"
 
     def is_over_resolve_age(self):
         resolve_age = self.project.get_option("sentry:resolve_age", None)
@@ -400,7 +461,7 @@ class Group(Model):
     def get_score(self):
         return type(self).calculate_score(self.times_seen, self.last_seen)
 
-    def get_latest_event(self):
+    def get_latest_event(self) -> Optional[Event]:
         if not hasattr(self, "_latest_event"):
             self._latest_event = self.get_latest_event_for_environments()
 
@@ -422,14 +483,39 @@ class Group(Model):
             project_id=self.project_id,
         )
 
+    def _get_cache_key(self, project_id, group_id, first):
+        return f"g-r:{group_id}-{project_id}-{first}"
+
+    def __get_release(self, project_id, group_id, first=True):
+        from sentry.models import GroupRelease, Release
+
+        orderby = "first_seen" if first else "-last_seen"
+        cache_key = self._get_cache_key(project_id, group_id, first)
+        try:
+            release_version = cache.get(cache_key)
+            if release_version is None:
+                release_version = Release.objects.get(
+                    id=GroupRelease.objects.filter(group_id=group_id, project_id=project_id)
+                    .order_by(orderby)
+                    .values("release_id")[:1]
+                ).version
+                cache.set(cache_key, release_version, 3600)
+            elif release_version is False:
+                release_version = None
+            return release_version
+        except Release.DoesNotExist:
+            cache.set(cache_key, False, 3600)
+            return None
+
     def get_first_release(self):
         if self.first_release_id is None:
-            return tagstore.get_first_release(self.project_id, self.id)
+            first_release = self.__get_release(self.project_id, self.id, True)
+            return first_release
 
         return self.first_release.version
 
     def get_last_release(self):
-        return tagstore.get_last_release(self.project_id, self.id)
+        return self.__get_release(self.project_id, self.id, False)
 
     def get_event_type(self):
         """
@@ -439,7 +525,7 @@ class Group(Model):
         """
         return self.data.get("type", "default")
 
-    def get_event_metadata(self):
+    def get_event_metadata(self) -> Mapping[str, str]:
         """
         Return the metadata of this issue.
 
@@ -448,7 +534,7 @@ class Group(Model):
         return self.data["metadata"]
 
     @property
-    def title(self):
+    def title(self) -> str:
         et = eventtypes.get(self.get_event_type())()
         return et.get_title(self.get_event_metadata())
 
@@ -477,7 +563,7 @@ class Group(Model):
         return ""
 
     def get_email_subject(self):
-        return u"{} - {}".format(self.qualified_short_id, self.title)
+        return f"{self.qualified_short_id} - {self.title}"
 
     def count_users_seen(self):
         return tagstore.get_groups_user_counts(
@@ -490,7 +576,7 @@ class Group(Model):
 
     @staticmethod
     def issues_mapping(group_ids, project_ids, organization):
-        """ Create a dictionary of group_ids to their qualified_short_ids """
+        """Create a dictionary of group_ids to their qualified_short_ids"""
         return {
             i.id: i.qualified_short_id
             for i in Group.objects.filter(

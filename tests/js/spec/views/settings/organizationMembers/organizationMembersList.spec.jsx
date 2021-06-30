@@ -1,7 +1,7 @@
-import React from 'react';
 import {browserHistory} from 'react-router';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
+import {mountGlobalModal} from 'sentry-test/modal';
 
 import {addErrorMessage, addSuccessMessage} from 'app/actionCreators/indicator';
 import {Client} from 'app/api';
@@ -121,10 +121,9 @@ describe('OrganizationMembersList', function () {
 
     wrapper.find('Button[data-test-id="remove"]').at(0).simulate('click');
 
-    await tick();
-
     // Confirm modal
-    wrapper.find('ModalDialog Button[priority="primary"]').simulate('click');
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="primary"]').simulate('click');
     await tick();
 
     expect(deleteMock).toHaveBeenCalled();
@@ -148,11 +147,11 @@ describe('OrganizationMembersList', function () {
 
     wrapper.find('Button[data-test-id="remove"]').at(0).simulate('click');
 
+    // Confirm modal
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="primary"]').simulate('click');
     await tick();
 
-    // Confirm modal
-    wrapper.find('ModalDialog Button[priority="primary"]').simulate('click');
-    await tick();
     expect(deleteMock).toHaveBeenCalled();
     await tick();
     expect(addErrorMessage).toHaveBeenCalled();
@@ -174,10 +173,9 @@ describe('OrganizationMembersList', function () {
 
     wrapper.find('Button[priority="danger"]').at(0).simulate('click');
 
-    await tick();
-
     // Confirm modal
-    wrapper.find('ModalDialog Button[priority="primary"]').simulate('click');
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="primary"]').simulate('click');
     await tick();
 
     expect(deleteMock).toHaveBeenCalled();
@@ -207,10 +205,9 @@ describe('OrganizationMembersList', function () {
 
     wrapper.find('Button[priority="danger"]').at(0).simulate('click');
 
-    await tick();
-
     // Confirm modal
-    wrapper.find('ModalDialog Button[priority="primary"]').simulate('click');
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="primary"]').simulate('click');
     await tick();
 
     expect(deleteMock).toHaveBeenCalled();
@@ -235,11 +232,11 @@ describe('OrganizationMembersList', function () {
 
     wrapper.find('Button[priority="danger"]').at(0).simulate('click');
 
+    // Confirm modal
+    const modal = await mountGlobalModal();
+    modal.find('Button[priority="primary"]').simulate('click');
     await tick();
 
-    // Confirm modal
-    wrapper.find('ModalDialog Button[priority="primary"]').simulate('click');
-    await tick();
     expect(deleteMock).toHaveBeenCalled();
     await tick();
     expect(addErrorMessage).toHaveBeenCalled();
@@ -317,7 +314,7 @@ describe('OrganizationMembersList', function () {
       })
     );
 
-    wrapper.find('SearchWrapper form').simulate('submit');
+    wrapper.find('SearchWrapperWithFilter form').simulate('submit');
 
     expect(routerContext.context.router.push).toHaveBeenCalledTimes(1);
   });

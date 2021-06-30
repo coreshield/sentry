@@ -2,12 +2,85 @@ import {
   aggregateMultiPlotType,
   aggregateOutputType,
   explodeField,
+  fieldAlignment,
   generateAggregateFields,
   getAggregateAlias,
   isAggregateField,
   isMeasurement,
   measurementType,
+  parseFunction,
 } from 'app/utils/discover/fields';
+
+describe('parseFunction', function () {
+  it('returns null on non aggregate fields', function () {
+    expect(parseFunction('field')).toEqual(null);
+    expect(parseFunction('under_field')).toEqual(null);
+    expect(parseFunction('foo.bar.is-Enterprise_42')).toEqual(null);
+  });
+
+  it('handles 0 arg functions', function () {
+    expect(parseFunction('count()')).toEqual({
+      name: 'count',
+      arguments: [],
+    });
+    expect(parseFunction('count_unique()')).toEqual({
+      name: 'count_unique',
+      arguments: [],
+    });
+  });
+
+  it('handles 1 arg functions', function () {
+    expect(parseFunction('count(id)')).toEqual({
+      name: 'count',
+      arguments: ['id'],
+    });
+    expect(parseFunction('count_unique(user)')).toEqual({
+      name: 'count_unique',
+      arguments: ['user'],
+    });
+    expect(parseFunction('count_unique(issue.id)')).toEqual({
+      name: 'count_unique',
+      arguments: ['issue.id'],
+    });
+    expect(parseFunction('count(foo.bar.is-Enterprise_42)')).toEqual({
+      name: 'count',
+      arguments: ['foo.bar.is-Enterprise_42'],
+    });
+  });
+
+  it('handles 2 arg functions', function () {
+    expect(parseFunction('percentile(transaction.duration,0.81)')).toEqual({
+      name: 'percentile',
+      arguments: ['transaction.duration', '0.81'],
+    });
+    expect(parseFunction('percentile(transaction.duration,  0.11)')).toEqual({
+      name: 'percentile',
+      arguments: ['transaction.duration', '0.11'],
+    });
+  });
+
+  it('handles 3 arg functions', function () {
+    expect(parseFunction('count_if(transaction.duration,greater,0.81)')).toEqual({
+      name: 'count_if',
+      arguments: ['transaction.duration', 'greater', '0.81'],
+    });
+    expect(parseFunction('count_if(some_tag,greater,"0.81,123,152,()")')).toEqual({
+      name: 'count_if',
+      arguments: ['some_tag', 'greater', '"0.81,123,152,()"'],
+    });
+    expect(parseFunction('function(foo, bar, baz)')).toEqual({
+      name: 'function',
+      arguments: ['foo', 'bar', 'baz'],
+    });
+  });
+
+  it('handles 4 arg functions', function () {
+    expect(parseFunction('to_other(release,"0.81,123,152,()",others,current)')).toEqual({
+      name: 'to_other',
+      arguments: ['release', '"0.81,123,152,()"', 'others', 'current'],
+    });
+  });
+});
 
 describe('getAggregateAlias', function () {
   it('no-ops simple fields', function () {
@@ -28,7 +101,7 @@ describe('getAggregateAlias', function () {
     expect(getAggregateAlias('count_unique(user)')).toEqual('count_unique_user');
     expect(getAggregateAlias('count_unique(issue.id)')).toEqual('count_unique_issue_id');
     expect(getAggregateAlias('count(foo.bar.is-Enterprise_42)')).toEqual(
-      'count_foo_bar_is-Enterprise_42'
+      'count_foo_bar_is_Enterprise_42'
     );
   });
 
@@ -39,6 +112,12 @@ describe('getAggregateAlias', function () {
     expect(getAggregateAlias('percentile(transaction.duration,  0.11)')).toEqual(
       'percentile_transaction_duration_0_11'
     );
+  });
+
+  it('handles to_other with symbols', function () {
+    expect(
+      getAggregateAlias('to_other(release,"release:beta@1.1.1 (2)",others,current)')
+    ).toEqual('to_other_release__release_beta_1_1_1__2___others_current');
   });
 });
 
@@ -150,6 +229,7 @@ describe('aggregateOutputType', function () {
   it('handles number functions', function () {
     expect(aggregateOutputType('apdex()')).toEqual('number');
     expect(aggregateOutputType('apdex(500)')).toEqual('number');
+    expect(aggregateOutputType('count_miserable(user, 500)')).toEqual('number');
     expect(aggregateOutputType('user_misery(500)')).toEqual('number');
     expect(aggregateOutputType('eps()')).toEqual('number');
     expect(aggregateOutputType('epm()')).toEqual('number');
@@ -212,5 +292,48 @@ describe('generateAggregateFields', function () {
     expect(generateAggregateFields(organization, [], ['count()'])).not.toContainEqual({
       field: 'count()',
     });
+  });
+});
+
+describe('parameterOverrides', function () {
+  const organization = TestStubs.Organization();
+  it('handles parameter overrides', function () {
+    expect(generateAggregateFields(organization, [])).toContainEqual({
+      field: 'apdex(300)',
+    });
+    expect(generateAggregateFields(organization, [])).not.toContainEqual({
+      field: 'apdex()',
+    });
+    organization.features = ['project-transaction-threshold'];
+    expect(generateAggregateFields(organization, [])).not.toContainEqual({
+      field: 'apdex(300)',
+    });
+    expect(generateAggregateFields(organization, [])).toContainEqual({field: 'apdex()'});
+  });
+});
+
+describe('fieldAlignment()', function () {
+  it('works with only field name', function () {
+    expect(fieldAlignment('event.type')).toEqual('left');
+
+    // Should be right, but we don't have any type data.
+    expect(fieldAlignment('transaction.duration')).toEqual('left');
+  });
+
+  it('works with type parameter', function () {
+    expect(fieldAlignment('transaction.duration', 'duration')).toEqual('right');
+    expect(fieldAlignment('device.battery_level', 'number')).toEqual('right');
+    expect(fieldAlignment('min(timestamp)', 'datetime')).toEqual('left');
+  });
+
+  it('can use table metadata', function () {
+    const meta = {
+      'transaction.duration': 'duration',
+      title: 'string',
+    };
+    expect(fieldAlignment('transaction.duration', 'never', meta)).toEqual('right');
+    expect(fieldAlignment('transaction.duration', undefined, meta)).toEqual('right');
+
+    expect(fieldAlignment('title', undefined, meta)).toEqual('left');
   });
 });

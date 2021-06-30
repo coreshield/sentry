@@ -1,7 +1,4 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
-import {MOCK_RESP_VERBOSE} from 'sentry-test/fixtures/ruleConditions';
 
 import {openCreateTeamModal} from 'app/actionCreators/modal';
 import {CreateProject} from 'app/views/projectInstall/createProject';
@@ -34,7 +31,6 @@ describe('CreateProject', function () {
             slug: 'testOrg',
             teams: [{slug: 'test', id: '1', name: 'test', hasAccess: false}],
           },
-          location: {query: {}},
         },
       ])
     );
@@ -85,13 +81,13 @@ describe('CreateProject', function () {
 
     let node = wrapper.find('PlatformCard').first();
     node.simulate('click');
-    expect(wrapper.find('ProjectNameInput input').props().value).toBe('.NET');
+    expect(wrapper.find('ProjectNameInput input').props().value).toBe('iOS');
 
     node = wrapper.find('PlatformCard').last();
     node.simulate('click');
     expect(wrapper.find('ProjectNameInput input').props().value).toBe('Rails');
 
-    //but not replace it when project name is something else:
+    // but not replace it when project name is something else:
     wrapper.setState({projectName: 'another'});
 
     node = wrapper.find('PlatformCard').first();
@@ -104,6 +100,7 @@ describe('CreateProject', function () {
   it('should fill in platform name if its provided by url', function () {
     const props = {
       ...baseProps,
+      location: {query: {platform: 'ruby-rails'}},
     };
 
     const wrapper = mountWithTheme(
@@ -115,7 +112,6 @@ describe('CreateProject', function () {
             slug: 'testOrg',
             teams: [{slug: 'test', id: '1', name: 'test', hasAccess: true}],
           },
-          location: {query: {platform: 'ruby-rails'}},
         },
       ])
     );
@@ -123,6 +119,28 @@ describe('CreateProject', function () {
     expect(wrapper.find('ProjectNameInput input').props().value).toBe('Rails');
 
     expect(wrapper).toSnapshot();
+  });
+
+  it('should fill in category name if its provided by url', function () {
+    const props = {
+      ...baseProps,
+      location: {query: {category: 'mobile'}},
+    };
+
+    const wrapper = mountWithTheme(
+      <CreateProject {...props} />,
+      TestStubs.routerContext([
+        {
+          organization: {
+            id: '1',
+            slug: 'testOrg',
+            teams: [{slug: 'test', id: '1', name: 'test', hasAccess: true}],
+          },
+        },
+      ])
+    );
+
+    expect(wrapper.find('PlatformPicker').state('category')).toBe('mobile');
   });
 
   it('should deal with incorrect platform name if its provided by url', function () {
@@ -158,7 +176,7 @@ describe('CreateProject', function () {
       props.organization.teams = [{slug: 'test', id: '1', name: 'test', hasAccess: true}];
       MockApiClient.addMockResponse({
         url: `/projects/${props.organization.slug}/rule-conditions/`,
-        body: MOCK_RESP_VERBOSE,
+        body: TestStubs.MOCK_RESP_VERBOSE,
       });
     });
 

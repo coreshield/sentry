@@ -1,20 +1,16 @@
-from __future__ import absolute_import
-
 import copy
-import six
+from datetime import timedelta
+from urllib.parse import urlencode
+
 import pytest
 import pytz
-from sentry.utils.compat.mock import patch
-from datetime import timedelta
-
-from six.moves.urllib.parse import urlencode
 from selenium.webdriver.common.keys import Keys
 
 from sentry.discover.models import DiscoverSavedQuery
 from sentry.testutils import AcceptanceTestCase, SnubaTestCase
+from sentry.testutils.helpers.datetime import before_now, iso_format, timestamp_format
+from sentry.utils.compat.mock import patch
 from sentry.utils.samples import load_data
-from sentry.testutils.helpers.datetime import iso_format, before_now, timestamp_format
-
 
 FEATURE_NAMES = [
     "organizations:discover-basic",
@@ -67,7 +63,7 @@ def generate_transaction(trace=None, span=None):
         timestamp=end_datetime,
         start_timestamp=start_datetime,
         trace=trace,
-        span=span,
+        span_id=span,
     )
     event_data.update({"event_id": "a" * 32})
 
@@ -111,7 +107,7 @@ def generate_transaction(trace=None, span=None):
 
             if isinstance(child, dict):
                 spans = build_span_tree(child, spans, span_id)
-            elif isinstance(child, six.string_types):
+            elif isinstance(child, str):
                 parent_span_id = span_id
                 span_id = child
 
@@ -136,7 +132,7 @@ def generate_transaction(trace=None, span=None):
 
 class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
     def setUp(self):
-        super(OrganizationEventsV2Test, self).setUp()
+        super().setUp()
         self.user = self.create_user("foo@example.com", is_superuser=True)
         self.org = self.create_organization(name="Rowdy Tiger")
         self.team = self.create_team(organization=self.org, name="Mariachi Band")
@@ -144,8 +140,8 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
         self.create_member(user=self.user, organization=self.org, role="owner", teams=[self.team])
 
         self.login_as(self.user)
-        self.landing_path = u"/organizations/{}/discover/queries/".format(self.org.slug)
-        self.result_path = u"/organizations/{}/discover/results/".format(self.org.slug)
+        self.landing_path = f"/organizations/{self.org.slug}/discover/queries/"
+        self.result_path = f"/organizations/{self.org.slug}/discover/results/"
 
     def wait_until_loaded(self):
         self.browser.wait_until_not(".loading-indicator")
@@ -184,7 +180,6 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             project_id=self.project.id,
             assert_no_errors=False,
         )
-
         self.store_event(
             data={
                 "event_id": "b" * 32,
@@ -202,6 +197,7 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             project_id=self.project.id,
             assert_no_errors=False,
         )
+        self.wait_for_event_count(self.project.id, 2)
 
         with self.feature(FEATURE_NAMES):
             self.browser.get(self.result_path + "?" + all_events_query())
@@ -315,6 +311,13 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
                 "fingerprint": ["group-1"],
             }
         )
+        if "contexts" not in event_data:
+            event_data["contexts"] = {}
+        event_data["contexts"]["trace"] = {
+            "type": "trace",
+            "trace_id": "a" * 32,
+            "span_id": "b" * 16,
+        }
         self.store_event(data=event_data, project_id=self.project.id, assert_no_errors=False)
 
         with self.feature(FEATURE_NAMES):
@@ -326,8 +329,8 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.browser.elements('[data-test-id="view-event"]')[0].click()
             self.wait_until_loaded()
 
-            header = self.browser.element('[data-test-id="event-header"] span')
-            assert event_data["message"] in header.text
+            # header = self.browser.element('[data-test-id="event-header"] div div span')
+            # assert event_data["message"] in header.text
 
             self.browser.snapshot("events-v2 - single error details view")
 
@@ -343,7 +346,13 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
                 "fingerprint": ["group-1"],
             }
         )
+        event_data["contexts"]["trace"] = {
+            "type": "trace",
+            "trace_id": "a" * 32,
+            "span_id": "b" * 16,
+        }
         self.store_event(data=event_data, project_id=self.project.id)
+        self.wait_for_event_count(self.project.id, 1)
 
         with self.feature(FEATURE_NAMES):
             # Get the list page
@@ -351,7 +360,7 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Open the stack
-            self.browser.element('[data-test-id="open-stack"]').click()
+            self.browser.element('[data-test-id="open-group"]').click()
             self.wait_until_loaded()
 
             # View Event
@@ -384,7 +393,7 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Open the stack
-            self.browser.elements('[data-test-id="open-stack"]')[0].click()
+            self.browser.elements('[data-test-id="open-group"]')[0].click()
             self.wait_until_loaded()
 
             # View Event
@@ -417,7 +426,7 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Open the stack
-            self.browser.elements('[data-test-id="open-stack"]')[0].click()
+            self.browser.elements('[data-test-id="open-group"]')[0].click()
             self.wait_until_loaded()
 
             # View Event
@@ -449,19 +458,18 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Open the save as drawer
-            self.browser.element('[data-test-id="button-save-as"]').click()
+            self.browser.element('[aria-label="Save as"]').click()
 
             # Fill out name and submit form.
             self.browser.element('input[name="query_name"]').send_keys(query_name)
-            self.browser.element('[data-test-id="button-save-query"]').click()
+            self.browser.element('[aria-label="Save"]').click()
 
-            self.browser.wait_until(
-                'div[name="discover2-query-name"][value="{}"]'.format(query_name)
-            )
+            self.browser.wait_until(f'[data-test-id="discover2-query-name-{query_name}"]')
 
             # Page title should update.
-            title_input = self.browser.element('div[name="discover2-query-name"]')
-            assert title_input.get_attribute("value") == query_name
+            editable_text_label = self.browser.element('[data-test-id="editable-text-label"]').text
+
+        assert editable_text_label == query_name
         # Saved query should exist.
         assert DiscoverSavedQuery.objects.filter(name=query_name).exists()
 
@@ -479,19 +487,25 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Look at the results for our query.
-            self.browser.element('[data-test-id="card-{}"]'.format(query.name)).click()
+            self.browser.element(f'[data-test-id="card-{query.name}"]').click()
             self.wait_until_loaded()
 
-            input = self.browser.element('div[name="discover2-query-name"]')
-            input.click()
-            input.send_keys(Keys.END + "updated!")
+            self.browser.element('[data-test-id="editable-text-label"]').click()
+            self.browser.wait_until('[data-test-id="editable-text-input"]')
+
+            editable_text_input = self.browser.element('[data-test-id="editable-text-input"] input')
+            editable_text_input.click()
+            editable_text_input.send_keys(Keys.END + "updated!")
 
             # Move focus somewhere else to trigger a blur and update the query
             self.browser.element("table").click()
 
+            self.browser.wait_until('[data-test-id="editable-text-label"]')
+
             new_name = "Custom queryupdated!"
-            new_card_selector = 'div[name="discover2-query-name"][value="{}"]'.format(new_name)
-            self.browser.wait_until(new_card_selector)
+            # new_card_selector = f'div[name="discover2-query-name"][value="{new_name}"]'
+            # self.browser.wait_until(new_card_selector)
+            self.browser.wait_until(f'[data-test-id="discover2-query-name-{new_name}"]')
 
         # Assert the name was updated.
         assert DiscoverSavedQuery.objects.filter(name=new_name).exists()
@@ -510,7 +524,7 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Get the card with the new query
-            card_selector = '[data-test-id="card-{}"]'.format(query.name)
+            card_selector = f'[data-test-id="card-{query.name}"]'
             card = self.browser.element(card_selector)
 
             # Open the context menu
@@ -537,16 +551,16 @@ class OrganizationEventsV2Test(AcceptanceTestCase, SnubaTestCase):
             self.wait_until_loaded()
 
             # Get the card with the new query
-            card_selector = '[data-test-id="card-{}"]'.format(query.name)
+            card_selector = f'[data-test-id="card-{query.name}"]'
             card = self.browser.element(card_selector)
 
             # Open the context menu, and duplicate
             card.find_element_by_css_selector('[data-test-id="context-menu"]').click()
             card.find_element_by_css_selector('[data-test-id="duplicate-query"]').click()
 
-            duplicate_name = "{} copy".format(query.name)
+            duplicate_name = f"{query.name} copy"
             # Wait for new element to show up.
-            self.browser.element('[data-test-id="card-{}"]'.format(duplicate_name))
+            self.browser.element(f'[data-test-id="card-{duplicate_name}"]')
         # Assert the new query exists and has 'copy' added to the name.
         assert DiscoverSavedQuery.objects.filter(name=duplicate_name).exists()
 

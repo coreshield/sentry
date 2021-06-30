@@ -90,6 +90,14 @@ describe('decodeScalar()', function () {
     expect(utils.decodeScalar(false)).toBeUndefined();
     expect(utils.decodeScalar('')).toBeUndefined();
   });
+
+  it('uses fallback values', function () {
+    expect(utils.decodeScalar('value', 'default')).toEqual('value');
+    expect(utils.decodeScalar('', 'default')).toEqual('default');
+    expect(utils.decodeScalar(null, 'default')).toEqual('default');
+    expect(utils.decodeScalar(undefined, 'default')).toEqual('default');
+    expect(utils.decodeScalar([], 'default')).toEqual('default');
+  });
 });
 
 describe('decodeList()', function () {
@@ -102,8 +110,32 @@ describe('decodeList()', function () {
   });
 
   it('handles falsey values', function () {
-    expect(utils.decodeList(undefined)).toBeUndefined();
-    expect(utils.decodeList(false)).toBeUndefined();
-    expect(utils.decodeList('')).toBeUndefined();
+    expect(utils.decodeList(undefined)).toEqual([]);
+    expect(utils.decodeList(false)).toEqual([]);
+    expect(utils.decodeList('')).toEqual([]);
+  });
+});
+
+describe('decodeInteger()', function () {
+  it('handles integer strings', function () {
+    expect(utils.decodeInteger('1')).toEqual(1);
+    expect(utils.decodeInteger('1.2')).toEqual(1);
+    expect(utils.decodeInteger('1.9')).toEqual(1);
+    expect(utils.decodeInteger('foo')).toEqual(undefined);
+    expect(utils.decodeInteger('foo', 2020)).toEqual(2020);
+  });
+
+  it('handles arrays', function () {
+    expect(utils.decodeInteger(['1', 'foo'])).toEqual(1);
+    expect(utils.decodeInteger(['1.2', 'foo'])).toEqual(1);
+    expect(utils.decodeInteger(['1.9', 'foo'])).toEqual(1);
+    expect(utils.decodeInteger(['foo', '1'])).toEqual(undefined);
+    expect(utils.decodeInteger(['foo'], 2020)).toEqual(2020);
+  });
+
+  it('handles falsey values', function () {
+    expect(utils.decodeInteger(undefined, 2020)).toEqual(2020);
+    expect(utils.decodeInteger(false, 2020)).toEqual(2020);
+    expect(utils.decodeInteger('', 2020)).toEqual(2020);
   });
 });

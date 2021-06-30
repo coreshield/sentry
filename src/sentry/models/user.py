@@ -1,27 +1,50 @@
-from __future__ import absolute_import
-
 import logging
 import warnings
+from typing import Any, Sequence
 
-from bitfield import BitField
+from django.contrib.auth.models import AbstractBaseUser
+from django.contrib.auth.models import UserManager as DjangoUserManager
 from django.contrib.auth.signals import user_logged_out
-from django.contrib.auth.models import AbstractBaseUser, UserManager
-from django.core.urlresolvers import reverse
-from django.dispatch import receiver
 from django.db import IntegrityError, models, transaction
+from django.db.models.query import QuerySet
+from django.dispatch import receiver
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.translation import ugettext_lazy as _
 
-from sentry.db.models import BaseManager, BaseModel, BoundedAutoField, sane_repr
+from bitfield import BitField
+from sentry.db.models import BaseManager, BaseModel, BoundedAutoField, FlexibleForeignKey, sane_repr
 from sentry.models import LostPasswordHash
 from sentry.utils.http import absolute_uri
 
 audit_logger = logging.getLogger("sentry.audit.user")
 
 
-class UserManager(BaseManager, UserManager):
+class UserManager(BaseManager, DjangoUserManager):
+    def get_team_members_with_verified_email_for_projects(
+        self, projects: Sequence[Any]
+    ) -> QuerySet:
+        from sentry.models import ProjectTeam, Team
+
+        return self.filter(
+            emails__is_verified=True,
+            sentry_orgmember_set__teams__in=Team.objects.filter(
+                id__in=ProjectTeam.objects.filter(project__in=projects).values_list(
+                    "team_id", flat=True
+                )
+            ),
+            is_active=True,
+        ).distinct()
+
+    def get_from_group(self, group):
+        """Get a queryset of all users in all teams in a given Group's project."""
+        return self.filter(
+            sentry_orgmember_set__teams__in=group.project.teams.all(),
+            is_active=True,
+        )
+
     def get_from_teams(self, organization_id, teams):
-        return User.objects.filter(
+        return self.filter(
             sentry_orgmember_set__organization_id=organization_id,
             sentry_orgmember_set__organizationmemberteam__team__in=teams,
             sentry_orgmember_set__organizationmemberteam__is_active=True,
@@ -32,7 +55,7 @@ class UserManager(BaseManager, UserManager):
         """
         Returns users associated with a project based on their teams.
         """
-        return User.objects.filter(
+        return self.filter(
             sentry_orgmember_set__organization_id=organization_id,
             sentry_orgmember_set__organizationmemberteam__team__projectteam__project__in=projects,
             sentry_orgmember_set__organizationmemberteam__is_active=True,
@@ -41,18 +64,18 @@ class UserManager(BaseManager, UserManager):
 
 
 class User(BaseModel, AbstractBaseUser):
-    __core__ = True
+    __include_in_export__ = True
 
     id = BoundedAutoField(primary_key=True)
     username = models.CharField(_("username"), max_length=128, unique=True)
     # this column is called first_name for legacy reasons, but it is the entire
     # display name
-    name = models.CharField(_("name"), max_length=200, blank=True, db_column=u"first_name")
+    name = models.CharField(_("name"), max_length=200, blank=True, db_column="first_name")
     email = models.EmailField(_("email address"), blank=True, max_length=75)
     is_staff = models.BooleanField(
         _("staff status"),
         default=False,
-        help_text=_("Designates whether the user can log into this admin " "site."),
+        help_text=_("Designates whether the user can log into this admin site."),
     )
     is_active = models.BooleanField(
         _("active"),
@@ -66,7 +89,7 @@ class User(BaseModel, AbstractBaseUser):
         _("superuser status"),
         default=False,
         help_text=_(
-            "Designates that this user has all permissions without " "explicitly assigning them."
+            "Designates that this user has all permissions without explicitly assigning them."
         ),
     )
     is_managed = models.BooleanField(
@@ -103,18 +126,20 @@ class User(BaseModel, AbstractBaseUser):
 
     flags = BitField(
         flags=(
-            (u"newsletter_consent_prompt", u"Do we need to ask this user for newsletter consent?"),
+            ("newsletter_consent_prompt", "Do we need to ask this user for newsletter consent?"),
         ),
         default=0,
         null=True,
     )
 
     session_nonce = models.CharField(max_length=12, null=True)
-
+    actor = FlexibleForeignKey(
+        "sentry.Actor", db_index=True, unique=True, null=True, on_delete=models.PROTECT
+    )
     date_joined = models.DateTimeField(_("date joined"), default=timezone.now)
     last_active = models.DateTimeField(_("last active"), default=timezone.now, null=True)
 
-    objects = UserManager(cache_fields=[u"pk"])
+    objects = UserManager(cache_fields=["pk"])
 
     USERNAME_FIELD = "username"
     REQUIRED_FIELDS = ["email"]
@@ -133,12 +158,12 @@ class User(BaseModel, AbstractBaseUser):
         avatar = self.avatar.first()
         if avatar:
             avatar.delete()
-        return super(User, self).delete()
+        return super().delete()
 
     def save(self, *args, **kwargs):
         if not self.username:
             self.username = self.email
-        return super(User, self).save(*args, **kwargs)
+        return super().save(*args, **kwargs)
 
     def has_perm(self, perm_name):
         warnings.warn("User.has_perm is deprecated", DeprecationWarning)
@@ -197,7 +222,7 @@ class User(BaseModel, AbstractBaseUser):
             "is_new_user": is_new_user,
         }
         msg = MessageBuilder(
-            subject="%sConfirm Email" % (options.get("mail.subject-prefix"),),
+            subject="{}Confirm Email".format(options.get("mail.subject-prefix")),
             template="sentry/emails/confirm_email.txt",
             html_template="sentry/emails/confirm_email.html",
             type="user.confirm_email",
@@ -216,8 +241,8 @@ class User(BaseModel, AbstractBaseUser):
         from sentry.models import (
             Activity,
             AuditLogEntry,
-            AuthIdentity,
             Authenticator,
+            AuthIdentity,
             GroupAssignee,
             GroupBookmark,
             GroupSeen,
@@ -301,7 +326,7 @@ class User(BaseModel, AbstractBaseUser):
         AuthIdentity.objects.filter(user=from_user).update(user=to_user)
 
     def set_password(self, raw_password):
-        super(User, self).set_password(raw_password)
+        super().set_password(raw_password)
         self.last_password_change = timezone.now()
         self.is_password_expired = False
 
@@ -313,12 +338,14 @@ class User(BaseModel, AbstractBaseUser):
             request.session["_nonce"] = self.session_nonce
 
     def get_orgs(self):
-        from sentry.models import Organization, OrganizationMember, OrganizationStatus
+        from sentry.models import Organization
 
-        return Organization.objects.filter(
-            status=OrganizationStatus.VISIBLE,
-            id__in=OrganizationMember.objects.filter(user=self).values("organization"),
-        )
+        return Organization.objects.get_for_user_ids({self.id})
+
+    def get_projects(self):
+        from sentry.models import Project
+
+        return Project.objects.get_for_user_ids({self.id})
 
     def get_orgs_require_2fa(self):
         from sentry.models import Organization, OrganizationStatus
@@ -335,6 +362,7 @@ class User(BaseModel, AbstractBaseUser):
 
 # HACK(dcramer): last_login needs nullable for Django 1.8
 User._meta.get_field("last_login").null = True
+
 
 # When a user logs out, we want to always log them out of all
 # sessions and refresh their nonce.

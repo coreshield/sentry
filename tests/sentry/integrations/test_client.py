@@ -1,15 +1,13 @@
-from __future__ import absolute_import
+from time import time
 
 import responses
 
-from sentry.utils.compat import mock
-from time import time
-from sentry.testutils import TestCase
-
 from sentry.identity import register
-from sentry.integrations.client import ApiClient, OAuth2RefreshMixin
 from sentry.identity.oauth2 import OAuth2Provider
+from sentry.integrations.client import ApiClient, OAuth2RefreshMixin
 from sentry.models import Identity, IdentityProvider
+from sentry.testutils import TestCase
+from sentry.utils.compat import mock
 
 
 class ApiClientTest(TestCase):
@@ -48,18 +46,17 @@ class ApiClientTest(TestCase):
         resp = ApiClient().patch("http://example.com")
         assert resp.status_code == 200
 
-    @mock.patch("django.core.cache.cache.set")
-    @mock.patch("django.core.cache.cache.get")
+    @mock.patch("sentry.shared_integrations.client.cache")
     @responses.activate
-    def test_cache_mocked(self, cache_get, cache_set):
-        cache_get.return_value = None
+    def test_cache_mocked(self, cache):
+        cache.get.return_value = None
         responses.add(responses.GET, "http://example.com", json={"key": "value1"})
         resp = ApiClient().get_cached("http://example.com")
         assert resp == {"key": "value1"}
 
         key = "integration.undefined.client:a9b9f04336ce0181a08e774e01113b31"
-        cache_get.assert_called_with(key)
-        cache_set.assert_called_with(key, {"key": "value1"}, 900)
+        cache.get.assert_called_with(key)
+        cache.set.assert_called_with(key, {"key": "value1"}, 900)
 
     @responses.activate
     def test_get_cached_basic(self):
@@ -125,7 +122,7 @@ class OAuthProvider(OAuth2Provider):
 
 class OAuth2ApiClient(ApiClient, OAuth2RefreshMixin):
     def __init__(self, identity, *args, **kwargs):
-        super(OAuth2ApiClient, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         self.identity = identity
 
 

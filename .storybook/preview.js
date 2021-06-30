@@ -1,23 +1,29 @@
 import 'focus-visible';
-import React from 'react';
-import {ThemeProvider} from 'emotion-theming';
-
-import {create} from '@storybook/theming/create';
-
-import {
-  addParameters,
-  configure,
-  setAddon,
-  getStorybook,
-  addDecorator,
-} from '@storybook/react';
-import {withInfo} from '@storybook/addon-info';
-import {setOptions} from '@storybook/addon-options';
-
-import theme from '../src/sentry/static/sentry/app/utils/theme';
 import '../docs-ui/index.js';
 
-const withTheme = storyFn => <ThemeProvider theme={theme}>{storyFn()}</ThemeProvider>;
+import React from 'react';
+import {addDecorator, addParameters} from '@storybook/react';
+import {ThemeProvider} from 'emotion-theming';
+
+import GlobalStyles from '../static/app/styles/global';
+import {darkTheme, lightTheme} from '../static/app/utils/theme';
+
+const withTheme = (Story, context) => {
+  const isDark = context.globals.theme === 'dark';
+  const currentTheme = isDark ? darkTheme : lightTheme;
+
+  // Set @storybook/addon-backgrounds current color based on theme
+  if (context.globals.theme) {
+    context.globals.backgrounds = {value: currentTheme.bodyBackground};
+  }
+
+  return (
+    <ThemeProvider theme={currentTheme}>
+      <GlobalStyles isDark={isDark} theme={currentTheme} />
+      <Story {...context} />
+    </ThemeProvider>
+  );
+};
 
 addDecorator(withTheme);
 
@@ -85,6 +91,56 @@ addParameters({
      * be the order they display
      * @type {Function}
      */
-    storySort: undefined,
+    storySort: {
+      order: [
+        'Core',
+        'Forms',
+        'UI',
+        'Layouts',
+        'Charts',
+        'DataVisualization',
+        'Features',
+        'Utilities',
+        'Deprecated',
+      ],
+    },
   },
 });
+
+export const globalTypes = {
+  theme: {
+    name: 'Theme',
+    description: 'Global theme for components',
+    defaultValue: 'light',
+    toolbar: {
+      icon: 'circlehollow',
+      // array of plain string values or MenuItem shape (see below)
+      items: [
+        {value: 'light', icon: 'circlehollow', title: 'light'},
+        {value: 'dark', icon: 'circle', title: 'dark'},
+      ],
+    },
+  },
+};
+
+export const parameters = {
+  /**
+   * @storybook/addon-backgrounds background is controlled via theme
+   */
+  backgrounds: {
+    grid: {
+      disable: true,
+    },
+    default: 'light',
+    values: [
+      {
+        name: 'light',
+        value: lightTheme.background,
+      },
+      {
+        name: 'dark',
+        value: darkTheme.background,
+      },
+    ],
+  },
+};

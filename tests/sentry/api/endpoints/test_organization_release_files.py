@@ -1,9 +1,5 @@
-from __future__ import absolute_import
-
-import six
-
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 
 from sentry.models import File, Release, ReleaseFile
 from sentry.testutils import APITestCase
@@ -34,7 +30,7 @@ class ReleaseFilesListTest(APITestCase):
 
         assert response.status_code == 200, response.content
         assert len(response.data) == 1
-        assert response.data[0]["id"] == six.text_type(releasefile.id)
+        assert response.data[0]["id"] == str(releasefile.id)
 
 
 class ReleaseFileCreateTest(APITestCase):
@@ -43,6 +39,8 @@ class ReleaseFileCreateTest(APITestCase):
 
         release = Release.objects.create(organization_id=project.organization_id, version="1")
         release.add_project(project)
+
+        assert release.count_artifacts() == 0
 
         url = reverse(
             "sentry-api-0-organization-release-files",
@@ -62,6 +60,8 @@ class ReleaseFileCreateTest(APITestCase):
             },
             format="multipart",
         )
+
+        assert release.count_artifacts() == 1
 
         assert response.status_code == 201, response.content
 

@@ -1,12 +1,8 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import {Client} from 'app/api';
 import ConfigStore from 'app/stores/configStore';
 import App from 'app/views/app';
-
-jest.mock('jquery');
 
 describe('Sudo Modal', function () {
   beforeEach(function () {
@@ -57,7 +53,7 @@ describe('Sudo Modal', function () {
     const errorCb = jest.fn();
 
     // No Modal
-    expect(wrapper.find('ModalDialog')).toHaveLength(0);
+    expect(wrapper.find('GlobalModal[visible=true]').exists()).toBe(false);
 
     // Should return w/ `sudoRequired`
     api.request('/organizations/org-slug/', {
@@ -71,7 +67,7 @@ describe('Sudo Modal', function () {
     wrapper.update();
 
     // Should have Modal + input
-    expect(wrapper.find('ModalDialog input')).toHaveLength(1);
+    expect(wrapper.find('Modal input')).toHaveLength(1);
 
     // Original callbacks should not have been called
     expect(successCb).not.toHaveBeenCalled();
@@ -94,11 +90,11 @@ describe('Sudo Modal', function () {
 
     // "Sudo" auth
     wrapper
-      .find('ModalDialog input[name="password"]')
+      .find('Modal input[name="password"]')
       .simulate('change', {target: {value: 'password'}});
 
-    wrapper.find('ModalDialog form').simulate('submit');
-    wrapper.find('ModalDialog Button[type="submit"]').simulate('click');
+    wrapper.find('Modal form').simulate('submit');
+    wrapper.find('Modal Button[type="submit"]').simulate('click');
 
     await tick();
     wrapper.update();
@@ -126,7 +122,7 @@ describe('Sudo Modal', function () {
     wrapper.update();
 
     // Sudo Modal should be closed
-    expect(wrapper.find('ModalDialog')).toHaveLength(0);
+    expect(wrapper.find('GlobalModal[visible=true]').exists()).toBe(false);
   });
 
   it('shows button to redirect if user does not have password auth', async function () {
@@ -144,7 +140,7 @@ describe('Sudo Modal', function () {
     const errorCb = jest.fn();
 
     // No Modal
-    expect(wrapper.find('ModalDialog')).toHaveLength(0);
+    expect(wrapper.find('GlobalModal[visible=true]').exists()).toBe(false);
 
     // Should return w/ `sudoRequired`
     api.request('/organizations/org-slug/', {
@@ -158,7 +154,7 @@ describe('Sudo Modal', function () {
     wrapper.update();
 
     // Should have Modal + input
-    expect(wrapper.find('ModalDialog input')).toHaveLength(0);
-    expect(wrapper.find('Button').prop('href')).toMatch('/auth/login/?next=%2F');
+    expect(wrapper.find('Modal input')).toHaveLength(0);
+    expect(wrapper.find('Button[href]').prop('href')).toMatch('/auth/login/?next=%2F');
   });
 });

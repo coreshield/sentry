@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import {StacktraceLink} from 'app/components/events/interfaces/stacktraceLink';
@@ -12,17 +10,76 @@ describe('StacktraceLink', function () {
   const repo = TestStubs.Repository({integrationId: integration.id});
 
   const frame = {filename: '/sentry/app.py', lineNo: 233};
+  const platform = 'python';
   const config = TestStubs.RepositoryProjectPathConfig(project, repo, integration);
 
   beforeEach(function () {
     MockApiClient.clearMockResponses();
   });
 
+  it('does not render setup CTA for members', async function () {
+    const memberOrg = TestStubs.Organization({
+      slug: 'hello-org',
+      access: [],
+    });
+    MockApiClient.addMockResponse({
+      url: `/projects/${memberOrg.slug}/${project.slug}/stacktrace-link/`,
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {config: null, sourceUrl: null, integrations: [integration]},
+    });
+    MockApiClient.addMockResponse({
+      method: 'GET',
+      url: '/prompts-activity/',
+      body: {},
+    });
+    const wrapper = mountWithTheme(
+      <StacktraceLink
+        frame={frame}
+        event={event}
+        projects={[project]}
+        organization={memberOrg}
+        lineNo={frame.lineNo}
+      />,
+      TestStubs.routerContext()
+    );
+    await tick();
+    wrapper.update();
+    expect(wrapper.find('CodeMappingButtonContainer').exists()).toBe(false);
+  });
+
+  it('renders setup CTA with integration but no configs', async function () {
+    MockApiClient.addMockResponse({
+      url: `/projects/${org.slug}/${project.slug}/stacktrace-link/`,
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {config: null, sourceUrl: null, integrations: [integration]},
+    });
+    MockApiClient.addMockResponse({
+      method: 'GET',
+      url: '/prompts-activity/',
+      body: {},
+    });
+    const wrapper = mountWithTheme(
+      <StacktraceLink
+        frame={frame}
+        event={event}
+        projects={[project]}
+        organization={org}
+        lineNo={frame.lineNo}
+      />,
+      TestStubs.routerContext()
+    );
+    await tick();
+    wrapper.update();
+    expect(wrapper.find('CodeMappingButtonContainer').text()).toContain(
+      'Link your stack trace to your source code.'
+    );
+  });
+
   it('renders source url link', async function () {
     MockApiClient.addMockResponse({
       url: `/projects/${org.slug}/${project.slug}/stacktrace-link/`,
-      query: {file: frame.filename, commitId: 'master'},
-      body: {config, sourceUrl: 'https://something.io'},
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {config, sourceUrl: 'https://something.io', integrations: [integration]},
     });
     const wrapper = mountWithTheme(
       <StacktraceLink
@@ -41,8 +98,14 @@ describe('StacktraceLink', function () {
   it('renders file_not_found message', async function () {
     MockApiClient.addMockResponse({
       url: `/projects/${org.slug}/${project.slug}/stacktrace-link/`,
-      query: {file: frame.filename, commitId: 'master'},
-      body: {config, sourceUrl: null, error: 'file_not_found'},
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {
+        config,
+        sourceUrl: null,
+        error: 'file_not_found',
+        integrations: [integration],
+        attemptedUrl: 'https://something.io/blah',
+      },
     });
     const wrapper = mountWithTheme(
       <StacktraceLink
@@ -56,15 +119,21 @@ describe('StacktraceLink', function () {
     );
     expect(wrapper.state('match').sourceUrl).toBeFalsy();
     expect(wrapper.find('CodeMappingButtonContainer').text()).toContain(
-      'Could not find source file, check your repository and source code root.'
+      'Source file not found.'
     );
+    expect(wrapper.state('match').attemptedUrl).toEqual('https://something.io/blah');
   });
 
   it('renders stack_root_mismatch message', async function () {
     MockApiClient.addMockResponse({
       url: `/projects/${org.slug}/${project.slug}/stacktrace-link/`,
-      query: {file: frame.filename, commitId: 'master'},
-      body: {config, sourceUrl: null, error: 'stack_root_mismatch'},
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {
+        config,
+        sourceUrl: null,
+        error: 'stack_root_mismatch',
+        integrations: [integration],
+      },
     });
     const wrapper = mountWithTheme(
       <StacktraceLink
@@ -78,7 +147,33 @@ describe('StacktraceLink', function () {
     );
     expect(wrapper.state('match').sourceUrl).toBeFalsy();
     expect(wrapper.find('CodeMappingButtonContainer').text()).toContain(
-      'Error matching your configuration, check your stack trace root.'
+      'Error matching your configuration.'
+    );
+  });
+
+  it('renders default error message', async function () {
+    MockApiClient.addMockResponse({
+      url: `/projects/${org.slug}/${project.slug}/stacktrace-link/`,
+      query: {file: frame.filename, commitId: 'master', platform},
+      body: {
+        config,
+        sourceUrl: null,
+        integrations: [integration],
+      },
+    });
+    const wrapper = mountWithTheme(
+      <StacktraceLink
+        frame={frame}
+        event={event}
+        projects={[project]}
+        organization={org}
+        lineNo={frame.lineNo}
+      />,
+      TestStubs.routerContext()
+    );
+    expect(wrapper.state('match').sourceUrl).toBeFalsy();
+    expect(wrapper.find('CodeMappingButtonContainer').text()).toContain(
+      'There was an error encountered with the code mapping for this project'
     );
   });
 });

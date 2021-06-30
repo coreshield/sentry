@@ -1,16 +1,16 @@
 name: 'Sentry Setup'
 description: 'Sets up a Sentry test environment'
 inputs:
-  python:
-    description: 'python version (2 or 3)'
-    required: false
-    default: '3'
   snuba:
     description: 'Is snuba required?'
     required: false
     default: 'false'
   kafka:
     description: 'Is kafka required?'
+    required: false
+    default: 'false'
+  chartcuterie:
+    description: 'Is chartcuterie required?'
     required: false
     default: 'false'
 
@@ -34,7 +34,6 @@ runs:
     - name: Setup default environment variables
       shell: bash
       env:
-        PYTHON_VERSION: ${{ inputs.python }}
         NEED_KAFKA: ${{ inputs.kafka }}
         MATRIX_INSTANCE: ${{ matrix.instance }}
         MATRIX_INSTANCE_TOTAL: ${{ strategy.job-total }}
@@ -43,8 +42,6 @@ runs:
         echo "MIGRATIONS_TEST_MIGRATE=0" >> $GITHUB_ENV
         echo "SENTRY_LIGHT_BUILD=1" >> $GITHUB_ENV
         echo "SENTRY_SKIP_BACKEND_VALIDATION=1" >> $GITHUB_ENV
-
-        [ "$PYTHON_VERSION" = "3" ] && echo "SENTRY_PYTHON3=1" >> $GITHUB_ENV || true
 
         ### node configuration ###
         echo "NODE_ENV=development" >> $GITHUB_ENV
@@ -63,6 +60,7 @@ runs:
         [ "$GITHUB_REF" = "refs/heads/master" ] && echo "PYTEST_SENTRY_ALWAYS_REPORT=1" >> $GITHUB_ENV || true
 
         ### services configuration ###
+        echo "BIGTABLE_EMULATOR_HOST=localhost:8086" >> $GITHUB_ENV
         # Note: some backend tests (e.g. tests/sentry/eventstream/kafka/test_consumer.py) will behave
         # differently if these are set.
         if [ "$NEED_KAFKA" = "true" ]; then
@@ -92,7 +90,7 @@ runs:
       shell: bash
       run: |
         python setup.py install_egg_info
-        pip install wheel # GitHub Actions does not have `wheel` installed by default (unlike Travis)
+        pip install wheel # GitHub Actions does not have `wheel` installed by default
         pip install -U -e ".[dev]"
 
         # pytest plugin used for better pytest failure annotations
@@ -103,11 +101,16 @@ runs:
       env:
         NEED_KAFKA: ${{ inputs.kafka }}
         NEED_SNUBA: ${{ inputs.snuba }}
+        NEED_CHARTCUTERIE: ${{ inputs.chartcuterie }}
       run: |
         sentry init
 
         # redis, postgres are needed for almost every code path.
         sentry devservices up redis postgres
+
+        if [ "$BIGTABLE_EMULATOR_HOST" ]; then
+          sentry devservices up --skip-only-if bigtable
+        fi
 
         # TODO: Use devservices kafka. See https://github.com/getsentry/sentry/pull/20986#issuecomment-704510570
         if [ "$NEED_KAFKA" = "true" ]; then
@@ -131,6 +134,10 @@ runs:
 
         if [ "$NEED_SNUBA" = "true" ]; then
           sentry devservices up clickhouse snuba
+        fi
+
+        if [ "$NEED_CHARTCUTERIE" = "true" ]; then
+          sentry devservices up --skip-only-if chartcuterie
         fi
 
         docker ps -a

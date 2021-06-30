@@ -1,15 +1,12 @@
-import React from 'react';
+import * as React from 'react';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import Filter from 'app/components/events/interfaces/breadcrumbs/filter';
 import Icon from 'app/components/events/interfaces/breadcrumbs/icon';
 import Level from 'app/components/events/interfaces/breadcrumbs/level';
-import {
-  BreadcrumbLevelType,
-  BreadcrumbType,
-} from 'app/components/events/interfaces/breadcrumbs/types';
 import {IconFire, IconFix, IconLocation, IconSpan, IconSwitch, IconUser} from 'app/icons';
+import {BreadcrumbLevelType, BreadcrumbType} from 'app/types/breadcrumbs';
 
 const options: React.ComponentProps<typeof Filter>['options'] = [
   [
@@ -90,8 +87,8 @@ describe('Filter', () => {
 
   it('Without Options', () => {
     const wrapper = mountWithTheme(<Filter options={[[], []]} onFilter={handleFilter} />);
-    expect(wrapper.find('Header')).toHaveLength(0);
-    expect(wrapper.find('OptionsGroup')).toHaveLength(0);
+    expect(wrapper.find('Header').exists()).toBe(false);
+    expect(wrapper.find('OptionsGroup').exists()).toBe(false);
   });
 
   it('With Option Type only', () => {

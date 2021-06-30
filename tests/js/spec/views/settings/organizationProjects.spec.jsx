@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import {Client} from 'app/api';
@@ -81,7 +79,7 @@ describe('OrganizationProjects', function () {
       })
     );
 
-    wrapper.find('PanelHeader form').simulate('submit');
+    wrapper.find('SearchWrapper form').simulate('submit');
     expect(routerContext.context.router.push).toHaveBeenCalledTimes(1);
   });
 });

@@ -1,10 +1,8 @@
-import React from 'react';
 import sortBy from 'lodash/sortBy';
 
-import {mountWithTheme} from 'sentry-test/enzyme';
+import {mountGlobalModal} from 'sentry-test/modal';
 
 import {openModal} from 'app/actionCreators/modal';
-import GlobalModal from 'app/components/globalModal';
 import convertRelayPiiConfig from 'app/views/settings/components/dataScrubbing/convertRelayPiiConfig';
 import Edit from 'app/views/settings/components/dataScrubbing/modals/edit';
 import submitRules from 'app/views/settings/components/dataScrubbing/submitRules';
@@ -31,7 +29,7 @@ const api = new MockApiClient();
 jest.mock('app/views/settings/components/dataScrubbing/submitRules');
 
 async function renderComponent() {
-  const wrapper = mountWithTheme(<GlobalModal />);
+  const modal = await mountGlobalModal();
 
   openModal(modalProps => (
     <Edit
@@ -48,18 +46,16 @@ async function renderComponent() {
 
   // @ts-expect-error
   await tick();
-  wrapper.update();
+  modal.update();
 
-  return wrapper;
+  return modal;
 }
 
 describe('Edit Modal', () => {
   it('open Edit Rule Modal', async () => {
     const wrapper = await renderComponent();
 
-    expect(wrapper.find('[data-test-id="modal-title"]').text()).toEqual(
-      'Edit an advanced data scrubbing rule'
-    );
+    expect(wrapper.find('Header').text()).toEqual('Edit an advanced data scrubbing rule');
 
     const fieldGroup = wrapper.find('FieldGroup');
     expect(fieldGroup).toHaveLength(2);
@@ -153,7 +149,7 @@ describe('Edit Modal', () => {
     await tick();
     wrapper.update();
 
-    expect(wrapper.find('[data-test-id="modal-title"]')).toHaveLength(0);
+    expect(wrapper.find('GlobalModal[visible=true]').exists()).toBe(false);
   });
 
   it('edit Rule Modal', async () => {

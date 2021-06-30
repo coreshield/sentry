@@ -1,8 +1,6 @@
-from __future__ import absolute_import
-
-from django.core.urlresolvers import reverse
+import pytest
 from django.db import models
-from sentry.utils.compat.mock import patch
+from django.urls import reverse
 
 from sentry.auth.authenticators import TotpInterface
 from sentry.auth.exceptions import IdentityNotValid
@@ -13,13 +11,15 @@ from sentry.models import (
     AuthProvider,
     Organization,
     OrganizationMember,
+    SentryAppInstallationForProvider,
 )
 from sentry.testutils import AuthProviderTestCase, PermissionTestCase
+from sentry.utils.compat.mock import patch
 
 
 class OrganizationAuthSettingsPermissionTest(PermissionTestCase):
     def setUp(self):
-        super(OrganizationAuthSettingsPermissionTest, self).setUp()
+        super().setUp()
         self.auth_provider = AuthProvider.objects.create(
             organization=self.organization, provider="dummy"
         )
@@ -234,6 +234,9 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
     @patch("sentry.web.frontend.organization_auth_settings.email_unlink_notifications")
     def test_superuser_disable_provider(self, email_unlink_notifications):
         organization, auth_provider = self.create_org_and_auth_provider()
+        with self.feature("organizations:sso-scim"):
+            auth_provider.enable_scim(self.user)
+
         om = self.create_om_and_link_sso(organization)
 
         path = reverse("sentry-organization-auth-provider-settings", args=[organization.slug])
@@ -255,6 +258,11 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
         assert not om.user.is_managed
 
         assert email_unlink_notifications.delay.called
+
+        with pytest.raises(SentryAppInstallationForProvider.DoesNotExist):
+            SentryAppInstallationForProvider.objects.get(
+                organization=self.organization, provider="dummy_scim"
+            )
 
     def test_edit_sso_settings(self):
         organization, auth_provider = self.create_org_and_auth_provider()
@@ -284,7 +292,7 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
             actor=self.user,
         )[0]
 
-        assert result.data == {"require_link": u"to False", "default_role": u"to owner"}
+        assert result.data == {"require_link": "to False", "default_role": "to owner"}
 
     def test_edit_sso_settings__sso_required(self):
         organization, auth_provider = self.create_org_and_auth_provider()
@@ -314,7 +322,7 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
             actor=self.user,
         )[0]
 
-        assert result.data == {"require_link": u"to False"}
+        assert result.data == {"require_link": "to False"}
 
     def test_edit_sso_settings__default_role(self):
         organization, auth_provider = self.create_org_and_auth_provider()
@@ -344,7 +352,7 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
             actor=self.user,
         )[0]
 
-        assert result.data == {"default_role": u"to owner"}
+        assert result.data == {"default_role": "to owner"}
 
     def test_edit_sso_settings__no_change(self):
         organization, auth_provider = self.create_org_and_auth_provider()
@@ -370,3 +378,52 @@ class OrganizationAuthSettingsTest(AuthProviderTestCase):
         assert not AuditLogEntry.objects.filter(
             organization=organization, event=AuditLogEntryEvent.SSO_EDIT
         ).exists()
+
+    def test_edit_sso_settings__scim(self):
+        organization, auth_provider = self.create_org_and_auth_provider()
+        self.create_om_and_link_sso(organization)
+        path = reverse("sentry-organization-auth-provider-settings", args=[organization.slug])
+
+        assert not getattr(auth_provider.flags, "allow_unlinked")
+        assert organization.default_role == "member"
+        self.login_as(self.user, organization_id=organization.id)
+
+        with self.feature({"organizations:sso-basic": True, "organizations:sso-scim": True}):
+            resp = self.client.post(
+                path,
+                {
+                    "op": "settings",
+                    "require_link": True,
+                    "enable_scim": True,
+                    "default_role": "member",
+                },
+            )
+
+        assert resp.status_code == 200
+
+        auth_provider = AuthProvider.objects.get(organization=organization)
+        assert getattr(auth_provider.flags, "scim_enabled")
+        assert auth_provider.get_scim_token() is not None
+        assert auth_provider.get_scim_url() is not None
+
+        with self.feature({"organizations:sso-basic": True, "organizations:sso-scim": True}):
+            resp = self.client.post(
+                path,
+                {
+                    "op": "settings",
+                    "require_link": True,
+                    "enable_scim": False,
+                    "default_role": "member",
+                },
+            )
+
+        assert resp.status_code == 200
+        auth_provider = AuthProvider.objects.get(organization=organization)
+
+        assert not getattr(auth_provider.flags, "scim_enabled")
+        assert auth_provider.get_scim_token() is None
+        assert auth_provider.get_scim_url() is None
+        with pytest.raises(SentryAppInstallationForProvider.DoesNotExist):
+            SentryAppInstallationForProvider.objects.get(
+                organization=self.organization, provider="dummy_scim"
+            )

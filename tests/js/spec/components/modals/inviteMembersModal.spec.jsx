@@ -1,6 +1,3 @@
-import React from 'react';
-import {Modal} from 'react-bootstrap';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 
 import InviteMembersModal from 'app/components/modals/inviteMembersModal';
@@ -10,6 +7,12 @@ describe('InviteMembersModal', function () {
   const team = TestStubs.Team();
   const org = TestStubs.Organization({access: ['member:write'], teams: [team]});
   TeamStore.loadInitialData([team]);
+
+  const modalProps = {
+    Body: p => p.children,
+    Header: p => p.children,
+    Footer: p => p.children,
+  };
 
   const noWriteOrg = TestStubs.Organization({
     access: [],
@@ -38,12 +41,7 @@ describe('InviteMembersModal', function () {
 
   it('renders', async function () {
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -52,19 +50,14 @@ describe('InviteMembersModal', function () {
 
     // We have two roles loaded from the members/me endpoint, defaulting to the
     // 'member' role.
-    expect(wrapper.find('RoleSelectControl').props().options).toHaveLength(roles.length);
-    expect(wrapper.find('RoleSelectControl Value').text()).toBe('Member');
+    expect(wrapper.find('RoleSelectControl').props().roles).toHaveLength(roles.length);
+    expect(wrapper.find('RoleSelectControl SingleValue').text()).toBe('Member');
   });
 
   it('renders without organization.access', async function () {
     const organization = TestStubs.Organization({access: undefined});
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={organization}
-      />,
+      <InviteMembersModal {...modalProps} organization={organization} />,
       TestStubs.routerContext()
     );
 
@@ -73,12 +66,7 @@ describe('InviteMembersModal', function () {
 
   it('can add a second row', async function () {
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -89,12 +77,7 @@ describe('InviteMembersModal', function () {
 
   it('errors on duplicate emails', async function () {
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -120,12 +103,7 @@ describe('InviteMembersModal', function () {
 
   it('indicates the total invites on the invite button', function () {
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -145,13 +123,7 @@ describe('InviteMembersModal', function () {
     const close = jest.fn();
 
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-        closeModal={close}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} closeModal={close} />,
       TestStubs.routerContext()
     );
 
@@ -166,12 +138,7 @@ describe('InviteMembersModal', function () {
     });
 
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -245,12 +212,7 @@ describe('InviteMembersModal', function () {
     });
 
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} />,
       TestStubs.routerContext()
     );
 
@@ -283,23 +245,11 @@ describe('InviteMembersModal', function () {
     const initialData = [{emails: new Set([initialEmail])}];
 
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-        initialData={initialData}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} initialData={initialData} />,
       TestStubs.routerContext()
     );
 
-    expect(
-      wrapper
-        .find('span[className="Select-value-label"]')
-        .first()
-        .text()
-        .includes(initialEmail)
-    ).toBe(true);
+    expect(wrapper.find('MultiValue').first().text().includes(initialEmail)).toBe(true);
 
     wrapper.find('FooterContent Button[priority="primary"]').simulate('click');
     await tick();
@@ -328,13 +278,7 @@ describe('InviteMembersModal', function () {
     ];
 
     const wrapper = mountWithTheme(
-      <InviteMembersModal
-        Body={Modal.Body}
-        Header={Modal.Header}
-        Footer={Modal.Footer}
-        organization={org}
-        initialData={initialData}
-      />,
+      <InviteMembersModal {...modalProps} organization={org} initialData={initialData} />,
       TestStubs.routerContext()
     );
 
@@ -373,12 +317,7 @@ describe('InviteMembersModal', function () {
   describe('member invite request mode', function () {
     it('has adjusted wording', function () {
       const wrapper = mountWithTheme(
-        <InviteMembersModal
-          Body={Modal.Body}
-          Header={Modal.Header}
-          Footer={Modal.Footer}
-          organization={noWriteOrg}
-        />,
+        <InviteMembersModal {...modalProps} organization={noWriteOrg} />,
         TestStubs.routerContext()
       );
 
@@ -396,12 +335,7 @@ describe('InviteMembersModal', function () {
       });
 
       const wrapper = mountWithTheme(
-        <InviteMembersModal
-          Body={Modal.Body}
-          Header={Modal.Header}
-          Footer={Modal.Footer}
-          organization={noWriteOrg}
-        />,
+        <InviteMembersModal {...modalProps} organization={noWriteOrg} />,
         TestStubs.routerContext()
       );
 

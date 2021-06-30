@@ -1,8 +1,6 @@
-from __future__ import absolute_import
-
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.urlresolvers import reverse
 from django.test.client import RequestFactory
+from django.urls import reverse
 
 from tests.apidocs.util import APIDocsTestCase
 
@@ -46,7 +44,11 @@ class ProjectReleaseFilesListDocsTest(APIDocsTestCase):
                 "application.js", b"function() { }", content_type="application/javascript"
             ),
         }
-        response = self.client.post(self.url, data, format="multipart",)
+        response = self.client.post(
+            self.url,
+            data,
+            format="multipart",
+        )
         request = RequestFactory().post(self.url, data=data, content_type="multipart/form-data")
 
         self.validate_schema(request, response)

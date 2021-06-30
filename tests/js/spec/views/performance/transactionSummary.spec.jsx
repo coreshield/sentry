@@ -1,4 +1,3 @@
-import React from 'react';
 import {browserHistory} from 'react-router';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
@@ -54,8 +53,7 @@ describe('Performance > TransactionSummary', function () {
       body: [],
     });
     MockApiClient.addMockResponse({
-      url:
-        '/organizations/org-slug/issues/?limit=5&project=1&query=is%3Aunresolved%20transaction%3A%2Fperformance&sort=new&statsPeriod=14d',
+      url: '/organizations/org-slug/issues/?limit=5&project=1&query=is%3Aunresolved%20transaction%3A%2Fperformance&sort=new&statsPeriod=14d',
       body: [],
     });
     MockApiClient.addMockResponse({
@@ -72,6 +70,14 @@ describe('Performance > TransactionSummary', function () {
       body: [],
     });
     MockApiClient.addMockResponse({
+      url: '/organizations/org-slug/sdk-updates/',
+      body: [],
+    });
+    MockApiClient.addMockResponse({
+      url: '/prompts-activity/',
+      body: {},
+    });
+    MockApiClient.addMockResponse({
       url: '/organizations/org-slug/is-key-transactions/',
       body: [],
     });
@@ -83,18 +89,24 @@ describe('Performance > TransactionSummary', function () {
         body: {
           meta: {
             count: 'number',
-            apdex_300: 'number',
-            user_misery_300: 'number',
+            apdex_400: 'number',
+            count_miserable_user_400: 'number',
+            user_misery_400: 'number',
             count_unique_user: 'number',
             p95: 'number',
+            failure_rate: 'number',
+            tpm: 'number',
           },
           data: [
             {
               count: 2,
-              apdex_300: 0.6,
-              user_misery_300: 122,
+              apdex_400: 0.6,
+              count_miserable_user_400: 122,
+              user_misery_400: 0.114,
               count_unique_user: 1,
               p95: 750.123,
+              failure_rate: 1,
+              tpm: 1,
             },
           ],
         },
@@ -180,11 +192,45 @@ describe('Performance > TransactionSummary', function () {
         },
       ],
     });
+    MockApiClient.addMockResponse({
+      url: '/organizations/org-slug/events-vitals/',
+      body: {
+        'measurements.fcp': {
+          poor: 3,
+          meh: 100,
+          good: 47,
+          total: 150,
+          p75: 1500,
+        },
+        'measurements.lcp': {
+          poor: 2,
+          meh: 38,
+          good: 40,
+          total: 80,
+          p75: 2750,
+        },
+        'measurements.fid': {
+          poor: 2,
+          meh: 53,
+          good: 5,
+          total: 60,
+          p75: 1000,
+        },
+        'measurements.cls': {
+          poor: 3,
+          meh: 10,
+          good: 4,
+          total: 17,
+          p75: 0.2,
+        },
+      },
+    });
   });
 
   afterEach(function () {
     MockApiClient.clearMockResponses();
     ProjectsStore.reset();
+    jest.clearAllMocks();
   });
 
   it('renders basic UI elements', async function () {
@@ -220,6 +266,9 @@ describe('Performance > TransactionSummary', function () {
 
     // Ensure create alert from discover is hidden without metric alert
     expect(wrapper.find('CreateAlertFromViewButton')).toHaveLength(0);
+
+    // Ensure status breakdown exists
+    expect(wrapper.find('StatusBreakdown')).toHaveLength(1);
   });
 
   it('renders feature flagged UI elements', async function () {
@@ -252,7 +301,7 @@ describe('Performance > TransactionSummary', function () {
     wrapper.update();
 
     // Fill out the search box, and submit it.
-    const searchBar = wrapper.find('SearchBar input');
+    const searchBar = wrapper.find('SearchBar textarea');
     searchBar
       .simulate('change', {target: {value: 'user.email:uhoh*'}})
       .simulate('submit', {preventDefault() {}});
@@ -359,8 +408,7 @@ describe('Performance > TransactionSummary', function () {
 
   it('forwards conditions to related issues', async function () {
     const issueGet = MockApiClient.addMockResponse({
-      url:
-        '/organizations/org-slug/issues/?limit=5&project=1&query=tag%3Avalue%20is%3Aunresolved%20transaction%3A%2Fperformance&sort=new&statsPeriod=14d',
+      url: '/organizations/org-slug/issues/?limit=5&project=1&query=tag%3Avalue%20is%3Aunresolved%20transaction%3A%2Fperformance&sort=new&statsPeriod=14d',
       body: [],
     });
 
@@ -376,5 +424,61 @@ describe('Performance > TransactionSummary', function () {
     wrapper.update();
 
     expect(issueGet).toHaveBeenCalled();
+  });
+
+  it('does not forward event type to related issues', async function () {
+    const issueGet = MockApiClient.addMockResponse(
+      {
+        url: '/organizations/org-slug/issues/?limit=5&project=1&query=tag%3Avalue%20is%3Aunresolved%20transaction%3A%2Fperformance&sort=new&statsPeriod=14d',
+        body: [],
+      },
+      {
+        predicate: (url, options) =>
+          url.startsWith(`/organizations/org-slug/issues/`) &&
+          // event.type must NOT be in the query params
+          !options.query?.query?.includes('event.type'),
+      }
+    );
+
+    const initialData = initializeData({
+      query: {query: 'tag:value event.type:transaction'},
+    });
+    const wrapper = mountWithTheme(
+      <TransactionSummary
+        organization={initialData.organization}
+        location={initialData.router.location}
+      />,
+      initialData.routerContext
+    );
+    await tick();
+    wrapper.update();
+
+    expect(issueGet).toHaveBeenCalled();
+  });
+
+  it('adds search condition on transaction status when clicking on status breakdown', async function () {
+    const initialData = initializeData();
+    const wrapper = mountWithTheme(
+      <TransactionSummary
+        organization={initialData.organization}
+        location={initialData.router.location}
+      />,
+      initialData.routerContext
+    );
+    await tick();
+    wrapper.update();
+
+    wrapper.find('BarContainer[data-test-id="status-ok"]').at(0).simulate('click');
+    await tick();
+    wrapper.update();
+
+    expect(browserHistory.push).toHaveBeenCalledTimes(1);
+    expect(browserHistory.push).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: expect.objectContaining({
+          query: expect.stringContaining('transaction.status:ok'),
+        }),
+      })
+    );
   });
 });

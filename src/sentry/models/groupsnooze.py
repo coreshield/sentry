@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from datetime import timedelta
 
 from django.db import models
@@ -32,7 +30,7 @@ class GroupSnooze(Model):
     NOTE: `window` and `user_window` are specified in minutes
     """
 
-    __core__ = False
+    __include_in_export__ = False
 
     group = FlexibleForeignKey("sentry.Group", unique=True)
     until = models.DateTimeField(null=True)

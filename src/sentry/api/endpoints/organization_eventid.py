@@ -1,7 +1,3 @@
-from __future__ import absolute_import
-
-import six
-
 from rest_framework.response import Response
 
 from sentry import eventstore
@@ -10,6 +6,7 @@ from sentry.api.exceptions import ResourceDoesNotExist
 from sentry.api.helpers.group_index import rate_limit_endpoint
 from sentry.api.serializers import serialize
 from sentry.models import Project
+from sentry.utils.validators import INVALID_EVENT_DETAILS, is_event_id
 
 
 class EventIdLookupEndpoint(OrganizationEndpoint):
@@ -23,12 +20,12 @@ class EventIdLookupEndpoint(OrganizationEndpoint):
 
         :pparam string organization_slug: the slug of the organization the
                                           event ID should be looked up in.
-        :param string event_id: the event ID to look up.
+        :param string event_id: the event ID to look up. validated by a
+                                regex in the URL.
         :auth: required
         """
-        # Largely copied from ProjectGroupIndexEndpoint
-        if len(event_id) != 32:
-            return Response({"detail": "Event ID must be 32 characters."}, status=400)
+        if event_id and not is_event_id(event_id):
+            return Response({"detail": INVALID_EVENT_DETAILS.format("Event")}, status=400)
 
         project_slugs_by_id = dict(
             Project.objects.filter(organization=organization).values_list("id", "slug")
@@ -48,8 +45,8 @@ class EventIdLookupEndpoint(OrganizationEndpoint):
                 {
                     "organizationSlug": organization.slug,
                     "projectSlug": project_slugs_by_id[event.project_id],
-                    "groupId": six.text_type(event.group_id),
-                    "eventId": six.text_type(event.event_id),
+                    "groupId": str(event.group_id),
+                    "eventId": str(event.event_id),
                     "event": serialize(event, request.user),
                 }
             )

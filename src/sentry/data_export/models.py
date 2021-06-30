@@ -1,9 +1,8 @@
-from __future__ import absolute_import
-
 import logging
+
 from django.conf import settings
-from django.core.urlresolvers import reverse
 from django.db import models
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_text
 
@@ -18,7 +17,7 @@ from sentry.db.models import (
 from sentry.utils import json
 from sentry.utils.http import absolute_uri
 
-from .base import ExportQueryType, ExportStatus, DEFAULT_EXPIRATION
+from .base import DEFAULT_EXPIRATION, ExportQueryType, ExportStatus
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +27,7 @@ class ExportedData(Model):
     Stores references to asynchronous data export jobs
     """
 
-    __core__ = False
+    __include_in_export__ = False
 
     organization = FlexibleForeignKey("sentry.Organization")
     user = FlexibleForeignKey(settings.AUTH_USER_MODEL, null=True, on_delete=models.SET_NULL)
@@ -61,7 +60,7 @@ class ExportedData(Model):
         date = self.date_added.strftime("%Y-%B-%d")
         export_type = ExportQueryType.as_str(self.query_type)
         # Example: Discover_2020-July-21_27.csv
-        return "{}_{}_{}.csv".format(export_type, date, self.id)
+        return f"{export_type}_{date}_{self.id}.csv"
 
     @staticmethod
     def format_date(date):
@@ -74,7 +73,7 @@ class ExportedData(Model):
 
     def delete(self, *args, **kwargs):
         self.delete_file()
-        super(ExportedData, self).delete(*args, **kwargs)
+        super().delete(*args, **kwargs)
 
     def finalize_upload(self, file, expiration=DEFAULT_EXPIRATION):
         self.delete_file()  # If a file is present, remove it
@@ -130,7 +129,7 @@ class ExportedData(Model):
 
 
 class ExportedDataBlob(Model):
-    __core__ = False
+    __include_in_export__ = False
 
     data_export = FlexibleForeignKey("sentry.ExportedData")
     blob = FlexibleForeignKey("sentry.FileBlob", db_constraint=False)

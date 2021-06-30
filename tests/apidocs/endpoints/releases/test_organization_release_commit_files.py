@@ -1,7 +1,5 @@
-from __future__ import absolute_import
-
-from django.core.urlresolvers import reverse
 from django.test.client import RequestFactory
+from django.urls import reverse
 
 from sentry.models import Commit, CommitFileChange, ReleaseCommit
 from tests.apidocs.util import APIDocsTestCase

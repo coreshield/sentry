@@ -1,18 +1,17 @@
-from __future__ import absolute_import
-
-import six
-
 from collections import OrderedDict
+
 from django import forms
 
 from sentry.rules.conditions.base import EventCondition
 
 
-class MatchType(object):
+class MatchType:
     EQUAL = "eq"
     NOT_EQUAL = "ne"
     STARTS_WITH = "sw"
+    NOT_STARTS_WITH = "nsw"
     ENDS_WITH = "ew"
+    NOT_ENDS_WITH = "new"
     CONTAINS = "co"
     NOT_CONTAINS = "nc"
     IS_SET = "is"
@@ -24,7 +23,9 @@ MATCH_CHOICES = OrderedDict(
         (MatchType.EQUAL, "equals"),
         (MatchType.NOT_EQUAL, "does not equal"),
         (MatchType.STARTS_WITH, "starts with"),
+        (MatchType.NOT_STARTS_WITH, "does not start with"),
         (MatchType.ENDS_WITH, "ends with"),
+        (MatchType.NOT_ENDS_WITH, "does not end with"),
         (MatchType.CONTAINS, "contains"),
         (MatchType.NOT_CONTAINS, "does not contain"),
         (MatchType.IS_SET, "is set"),
@@ -54,8 +55,8 @@ ATTR_CHOICES = [
 
 
 class EventAttributeForm(forms.Form):
-    attribute = forms.ChoiceField((a, a) for a in ATTR_CHOICES)
-    match = forms.ChoiceField(list(MATCH_CHOICES.items()))
+    attribute = forms.ChoiceField(choices=[(a, a) for a in ATTR_CHOICES])
+    match = forms.ChoiceField(choices=list(MATCH_CHOICES.items()))
     value = forms.CharField(widget=forms.TextInput(), required=False)
 
 
@@ -77,7 +78,7 @@ class EventAttributeCondition(EventCondition):
     # TODO(dcramer): add support for stacktrace.vars.[name]
 
     form_cls = EventAttributeForm
-    label = u"The event's {attribute} value {match} {value}"
+    label = "The event's {attribute} value {match} {value}"
 
     form_fields = {
         "attribute": {
@@ -191,7 +192,7 @@ class EventAttributeCondition(EventCondition):
         except KeyError:
             attribute_values = []
 
-        attribute_values = [six.text_type(v).lower() for v in attribute_values if v is not None]
+        attribute_values = [str(v).lower() for v in attribute_values if v is not None]
 
         if match == MatchType.EQUAL:
             for a_value in attribute_values:
@@ -211,11 +212,23 @@ class EventAttributeCondition(EventCondition):
                     return True
             return False
 
+        elif match == MatchType.NOT_STARTS_WITH:
+            for a_value in attribute_values:
+                if a_value.startswith(value):
+                    return False
+            return True
+
         elif match == MatchType.ENDS_WITH:
             for a_value in attribute_values:
                 if a_value.endswith(value):
                     return True
             return False
+
+        elif match == MatchType.NOT_ENDS_WITH:
+            for a_value in attribute_values:
+                if a_value.endswith(value):
+                    return False
+            return True
 
         elif match == MatchType.CONTAINS:
             for a_value in attribute_values:

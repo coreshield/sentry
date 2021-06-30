@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 import {initializeOrg} from 'sentry-test/initializeOrg';
 
@@ -88,6 +86,11 @@ describe('IssueList -> Polling', function () {
       body: [],
     });
     MockApiClient.addMockResponse({
+      url: '/organizations/org-slug/issues-count/',
+      method: 'GET',
+      body: [{}],
+    });
+    MockApiClient.addMockResponse({
       url: '/organizations/org-slug/processingissues/',
       method: 'GET',
       body: [
@@ -126,6 +129,11 @@ describe('IssueList -> Polling', function () {
         Link: DEFAULT_LINKS_HEADER,
       },
     });
+    const groupStats = TestStubs.GroupStats();
+    MockApiClient.addMockResponse({
+      url: '/organizations/org-slug/issues-stats/',
+      body: [groupStats],
+    });
     pollRequest = MockApiClient.addMockResponse({
       url: `http://127.0.0.1:8000/api/0/organizations/org-slug/issues/?cursor=${PREVIOUS_PAGE_CURSOR}:0:1`,
       body: [],
@@ -158,10 +166,10 @@ describe('IssueList -> Polling', function () {
     );
 
     // Enable real time control
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(1);
-    wrapper.find('[data-test-id="realtime-control"]').simulate('click');
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(1);
+    wrapper.find('button[data-test-id="real-time"]').simulate('click');
 
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(0);
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(0);
 
     // Each poll request gets delayed by additional 3s, up to max of 60s
     jest.advanceTimersByTime(3001);
@@ -170,8 +178,8 @@ describe('IssueList -> Polling', function () {
     expect(pollRequest).toHaveBeenCalledTimes(2);
 
     // Pauses
-    wrapper.find('[data-test-id="realtime-control"]').simulate('click');
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(1);
+    wrapper.find('button[data-test-id="real-time"]').simulate('click');
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(1);
 
     jest.advanceTimersByTime(12001);
     expect(pollRequest).toHaveBeenCalledTimes(2);
@@ -187,8 +195,8 @@ describe('IssueList -> Polling', function () {
     await createWrapper();
 
     // Enable real time control
-    wrapper.find('[data-test-id="realtime-control"]').simulate('click');
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(0);
+    wrapper.find('button[data-test-id="real-time"]').simulate('click');
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(0);
 
     // Each poll request gets delayed by additional 3s, up to max of 60s
     jest.advanceTimersByTime(3001);
@@ -207,9 +215,9 @@ describe('IssueList -> Polling', function () {
     await createWrapper();
 
     // Enable real time control
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(1);
-    wrapper.find('[data-test-id="realtime-control"]').simulate('click');
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(0);
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(1);
+    wrapper.find('button[data-test-id="real-time"]').simulate('click');
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(0);
 
     // Each poll request gets delayed by additional 3s, up to max of 60s
     jest.advanceTimersByTime(3001);
@@ -228,8 +236,8 @@ describe('IssueList -> Polling', function () {
     await createWrapper();
 
     // Enable real time control
-    wrapper.find('[data-test-id="realtime-control"]').simulate('click');
-    expect(wrapper.find('[data-test-id="realtime-control"] IconPlay')).toHaveLength(0);
+    wrapper.find('button[data-test-id="real-time"]').simulate('click');
+    expect(wrapper.find('button[data-test-id="real-time"] IconPlay')).toHaveLength(0);
 
     // Each poll request gets delayed by additional 3s, up to max of 60s
     jest.advanceTimersByTime(3001);

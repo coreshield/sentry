@@ -1,4 +1,3 @@
-import React from 'react';
 import moment from 'moment';
 
 import {mountWithTheme} from 'sentry-test/enzyme';
@@ -16,8 +15,11 @@ describe('EventCauseEmpty', function () {
     platform: 'javascript',
     firstEvent: '2020-01-01T23:54:33.831199Z',
   });
+  const event = TestStubs.Event();
 
   beforeEach(function () {
+    jest.clearAllMocks();
+
     MockApiClient.clearMockResponses();
 
     MockApiClient.addMockResponse({
@@ -26,18 +28,18 @@ describe('EventCauseEmpty', function () {
     });
     MockApiClient.addMockResponse({
       method: 'GET',
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
       body: {},
     });
     putMock = MockApiClient.addMockResponse({
       method: 'PUT',
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
     });
   });
 
   it('renders', async function () {
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -54,9 +56,31 @@ describe('EventCauseEmpty', function () {
     });
   });
 
+  /**
+   * Want to alternate between showing the configure suspect commits prompt and
+   * the show configure distributed tracing prompt.
+   */
+  it('doesnt render when event id starts with even char', async function () {
+    const newEvent = {
+      ...event,
+      id: 'A',
+      eventID: 'ABCDEFABCDEFABCDEFABCDEFABCDEFAB',
+    };
+    const wrapper = mountWithTheme(
+      <EventCauseEmpty event={newEvent} organization={organization} project={project} />,
+      routerContext
+    );
+
+    await tick();
+    wrapper.update();
+
+    expect(wrapper.find('ExampleCommitPanel').exists()).toBe(false);
+    expect(trackAdhocEvent).not.toHaveBeenCalled();
+  });
+
   it('can be snoozed', async function () {
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -65,8 +89,11 @@ describe('EventCauseEmpty', function () {
 
     wrapper.find('button[aria-label="Snooze"]').first().simulate('click');
 
+    await tick();
+    await wrapper.update();
+
     expect(putMock).toHaveBeenCalledWith(
-      '/promptsactivity/',
+      '/prompts-activity/',
       expect.objectContaining({
         method: 'PUT',
         data: {
@@ -94,12 +121,12 @@ describe('EventCauseEmpty', function () {
 
     MockApiClient.addMockResponse({
       method: 'GET',
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
       body: {data: {snoozed_ts}},
     });
 
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -114,12 +141,12 @@ describe('EventCauseEmpty', function () {
 
     MockApiClient.addMockResponse({
       method: 'GET',
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
       body: {data: {snoozed_ts}},
     });
 
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -131,7 +158,7 @@ describe('EventCauseEmpty', function () {
 
   it('can be dismissed', async function () {
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -140,8 +167,11 @@ describe('EventCauseEmpty', function () {
 
     wrapper.find('button[aria-label="Dismiss"]').first().simulate('click');
 
+    await tick();
+    await wrapper.update();
+
     expect(putMock).toHaveBeenCalledWith(
-      '/promptsactivity/',
+      '/prompts-activity/',
       expect.objectContaining({
         method: 'PUT',
         data: {
@@ -167,12 +197,12 @@ describe('EventCauseEmpty', function () {
   it('does not render when dismissed', async function () {
     MockApiClient.addMockResponse({
       method: 'GET',
-      url: '/promptsactivity/',
+      url: '/prompts-activity/',
       body: {data: {dismissed_ts: moment().unix()}},
     });
 
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 
@@ -184,7 +214,7 @@ describe('EventCauseEmpty', function () {
 
   it('can capture analytics on docs click', async function () {
     const wrapper = mountWithTheme(
-      <EventCauseEmpty organization={organization} project={project} />,
+      <EventCauseEmpty event={event} organization={organization} project={project} />,
       routerContext
     );
 

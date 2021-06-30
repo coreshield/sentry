@@ -1,10 +1,6 @@
-from __future__ import absolute_import
-
-from mock import Mock, patch
-
 from sentry.rules.registry import RuleRegistry
 from sentry.testutils import APITestCase
-
+from sentry.utils.compat.mock import Mock, patch
 
 EMAIL_ACTION = "sentry.mail.actions.NotifyEmailAction"
 APP_ACTION = "sentry.rules.actions.notify_event_service.NotifyEventServiceAction"
@@ -15,7 +11,7 @@ class ProjectRuleConfigurationTest(APITestCase):
     endpoint = "sentry-api-0-project-rules-configuration"
 
     def setUp(self):
-        super(ProjectRuleConfigurationTest, self).setUp()
+        super().setUp()
         self.login_as(user=self.user)
 
     def test_simple(self):
@@ -24,8 +20,7 @@ class ProjectRuleConfigurationTest(APITestCase):
         self.create_project(teams=[team], name="baz")
 
         response = self.get_valid_response(self.organization.slug, project1.slug)
-
-        assert len(response.data["actions"]) == 5
+        assert len(response.data["actions"]) == 7
         assert len(response.data["conditions"]) == 6
         assert len(response.data["filters"]) == 7
 
@@ -93,11 +88,35 @@ class ProjectRuleConfigurationTest(APITestCase):
 
         action_ids = [action["id"] for action in response.data["actions"]]
         assert EMAIL_ACTION in action_ids
-        assert JIRA_ACTION not in action_ids
+        assert JIRA_ACTION in action_ids
 
-    def test_ticket_rules_in_available_actions(self):
-        with self.feature("organizations:integrations-ticket-rules"):
+    def test_ticket_rules_not_in_available_actions(self):
+        with self.feature({"organizations:integrations-ticket-rules": False}):
             response = self.get_valid_response(self.organization.slug, self.project.slug)
             action_ids = [action["id"] for action in response.data["actions"]]
             assert EMAIL_ACTION in action_ids
-            assert JIRA_ACTION in action_ids
+            assert JIRA_ACTION not in action_ids
+
+    def test_percent_condition_flag(self):
+        with self.feature({"organizations:issue-percent-filters": False}):
+            # We should not get back the condition.
+            response = self.get_valid_response(self.organization.slug, self.project.slug)
+            assert len(response.data["conditions"]) == 9
+            for condition in response.data["conditions"]:
+                assert (
+                    condition["id"]
+                    != "sentry.rules.conditions.event_frequency.EventFrequencyPercentCondition"
+                )
+
+        with self.feature({"organizations:issue-percent-filters": True}):
+            # We should get back the condition.
+            response = self.get_valid_response(self.organization.slug, self.project.slug)
+            assert len(response.data["conditions"]) == 10
+            found = False
+            for condition in response.data["conditions"]:
+                if (
+                    condition["id"]
+                    != "sentry.rules.conditions.event_frequency.EventFrequencyPercentCondition"
+                ):
+                    found = True
+            assert found is True

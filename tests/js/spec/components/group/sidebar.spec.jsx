@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 import {initializeOrg} from 'sentry-test/initializeOrg';
 
@@ -39,6 +37,11 @@ describe('GroupSidebar', function () {
     MockApiClient.addMockResponse({
       url: '/issues/1/',
       body: group,
+    });
+
+    MockApiClient.addMockResponse({
+      url: '/issues/1/current-release/',
+      body: {},
     });
 
     MockApiClient.addMockResponse({

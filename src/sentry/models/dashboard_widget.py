@@ -1,28 +1,25 @@
-from __future__ import absolute_import, print_function
-
-import six
 from django.db import models
 from django.utils import timezone
 
 from sentry.db.models import (
+    ArrayField,
     BoundedPositiveIntegerField,
     FlexibleForeignKey,
-    ArrayField,
     Model,
     sane_repr,
 )
 
 
-class TypesClass(object):
+class TypesClass:
     TYPES = []
 
     @classmethod
     def as_choices(cls):
-        return [(k, six.text_type(v)) for k, v in cls.TYPES]
+        return [(k, str(v)) for k, v in cls.TYPES]
 
     @classmethod
     def as_text_choices(cls):
-        return [(six.text_type(v), six.text_type(v)) for _, v in cls.TYPES]
+        return [(str(v), str(v)) for _, v in cls.TYPES]
 
     @classmethod
     def get_type_name(cls, num):
@@ -43,12 +40,16 @@ class DashboardWidgetDisplayTypes(TypesClass):
     STACKED_AREA_CHART = 2
     BAR_CHART = 3
     TABLE = 4
+    WORLD_MAP = 5
+    BIG_NUMBER = 6
     TYPES = [
         (LINE_CHART, "line"),
         (AREA_CHART, "area"),
         (STACKED_AREA_CHART, "stacked_area"),
         (BAR_CHART, "bar"),
         (TABLE, "table"),
+        (WORLD_MAP, "world_map"),
+        (BIG_NUMBER, "big_number"),
     ]
     TYPE_NAMES = [t[1] for t in TYPES]
 
@@ -58,20 +59,22 @@ class DashboardWidgetQuery(Model):
     A query in a dashboard widget.
     """
 
-    __core__ = True
+    __include_in_export__ = True
 
     widget = FlexibleForeignKey("sentry.DashboardWidget")
     name = models.CharField(max_length=255)
     fields = ArrayField()
     conditions = models.TextField()
-    interval = models.CharField(max_length=10)
+    # Orderby condition for the query
+    orderby = models.TextField(default="")
+    # Order of the widget query in the widget.
     order = BoundedPositiveIntegerField()
     date_added = models.DateTimeField(default=timezone.now)
 
     class Meta:
         app_label = "sentry"
         db_table = "sentry_dashboardwidgetquery"
-        unique_together = (("widget", "name"), ("widget", "order"))
+        unique_together = (("widget", "order"),)
 
     __repr__ = sane_repr("widget", "type", "name")
 
@@ -81,17 +84,18 @@ class DashboardWidget(Model):
     A dashboard widget.
     """
 
-    __core__ = True
+    __include_in_export__ = True
 
     dashboard = FlexibleForeignKey("sentry.Dashboard")
     order = BoundedPositiveIntegerField()
     title = models.CharField(max_length=255)
+    interval = models.CharField(max_length=10, null=True)
     display_type = BoundedPositiveIntegerField(choices=DashboardWidgetDisplayTypes.as_choices())
     date_added = models.DateTimeField(default=timezone.now)
 
     class Meta:
         app_label = "sentry"
         db_table = "sentry_dashboardwidget"
-        unique_together = (("dashboard", "order"), ("dashboard", "title"))
+        unique_together = (("dashboard", "order"),)
 
     __repr__ = sane_repr("dashboard", "title")

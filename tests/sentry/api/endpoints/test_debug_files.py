@@ -1,14 +1,12 @@
-from __future__ import absolute_import
-
 import zipfile
+from io import BytesIO
 from uuid import uuid4
-from six import BytesIO, text_type
 
 from django.core.files.uploadedfile import SimpleUploadedFile
-from django.core.urlresolvers import reverse
+from django.urls import reverse
 
+from sentry.models import File, ProjectDebugFile, Release, ReleaseFile
 from sentry.testutils import APITestCase
-from sentry.models import ProjectDebugFile, Release, ReleaseFile, File
 
 # This is obviously a freely generated UUID and not the checksum UUID.
 # This is permissible if users want to send different UUIDs
@@ -210,7 +208,7 @@ class DebugFilesUploadTest(APITestCase):
             response.get("Content-Disposition")
             == 'attachment; filename="' + PROGUARD_UUID + '.txt"'
         )
-        assert response.get("Content-Length") == text_type(len(PROGUARD_SOURCE))
+        assert response.get("Content-Length") == str(len(PROGUARD_SOURCE))
         assert response.get("Content-Type") == "application/octet-stream"
         assert PROGUARD_SOURCE == BytesIO(b"".join(response.streaming_content)).getvalue()
 
@@ -263,7 +261,7 @@ class DebugFilesUploadTest(APITestCase):
         first_uuid = None
         last_uuid = None
         for i in range(25):
-            last_uuid = text_type(uuid4())
+            last_uuid = str(uuid4())
             if first_uuid is None:
                 first_uuid = last_uuid
             self._upload_proguard(url, last_uuid)
@@ -317,7 +315,7 @@ class DebugFilesUploadTest(APITestCase):
 
         assert response.status_code == 200, response.content
         assert len(response.data) == 2
-        assert response.data[0]["name"] == text_type(release2.version)
+        assert response.data[0]["name"] == str(release2.version)
         assert response.data[0]["fileCount"] == 0
         assert response.data[1]["fileCount"] == 2
 
@@ -346,3 +344,25 @@ class DebugFilesUploadTest(APITestCase):
         response = self.client.delete(url + "?name=1")
         assert response.status_code == 204
         assert not ReleaseFile.objects.filter(release=release).exists()
+
+    def test_source_maps_release_archive(self):
+        project = self.create_project(name="foo")
+
+        release = Release.objects.create(organization_id=project.organization_id, version="1")
+        release.add_project(project)
+
+        self.create_release_archive(release=release.version)
+
+        url = reverse(
+            "sentry-api-0-source-maps",
+            kwargs={"organization_slug": project.organization.slug, "project_slug": project.slug},
+        )
+
+        self.login_as(user=self.user)
+
+        response = self.client.get(url)
+
+        assert response.status_code == 200, response.content
+        assert len(response.data) == 1
+        assert response.data[0]["name"] == str(release.version)
+        assert response.data[0]["fileCount"] == 2

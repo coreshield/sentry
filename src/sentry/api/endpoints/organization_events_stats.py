@@ -1,17 +1,14 @@
-from __future__ import absolute_import
-
 import sentry_sdk
-import six
-
-from rest_framework.response import Response
 from rest_framework.exceptions import ParseError
+from rest_framework.response import Response
 
 from sentry import eventstore
-from sentry.constants import MAX_TOP_EVENTS
-from sentry.api.bases import OrganizationEventsV2EndpointBase, NoProjects
-from sentry.api.event_search import resolve_field_list, InvalidSearchQuery
+from sentry.api.bases import NoProjects, OrganizationEventsV2EndpointBase
 from sentry.api.serializers.snuba import SnubaTSResultSerializer
+from sentry.constants import MAX_TOP_EVENTS
 from sentry.discover.utils import transform_aliases_and_query
+from sentry.exceptions import InvalidSearchQuery
+from sentry.search.events.fields import resolve_field_list
 from sentry.snuba import discover
 from sentry.utils import snuba
 from sentry.utils.dates import get_rollup_from_request
@@ -23,36 +20,43 @@ class OrganizationEventsStatsEndpoint(OrganizationEventsV2EndpointBase):
             span.set_data("organization", organization)
             if not self.has_feature(organization, request):
                 span.set_data("using_v1_results", True)
+                sentry_sdk.set_tag("stats.using_v1", organization.slug)
                 return self.get_v1_results(request, organization)
 
-            top_events = "topEvents" in request.GET
-            limit = None
+            top_events = 0
 
-            if top_events:
+            if "topEvents" in request.GET:
                 try:
-                    limit = int(request.GET.get("topEvents", 0))
+                    top_events = int(request.GET.get("topEvents", 0))
                 except ValueError:
                     return Response({"detail": "topEvents must be an integer"}, status=400)
-                if limit > MAX_TOP_EVENTS:
+                if top_events > MAX_TOP_EVENTS:
                     return Response(
-                        {"detail": "Can only get up to {} top events".format(MAX_TOP_EVENTS)},
+                        {"detail": f"Can only get up to {MAX_TOP_EVENTS} top events"},
                         status=400,
                     )
-                elif limit <= 0:
+                elif top_events <= 0:
                     return Response({"detail": "If topEvents needs to be at least 1"}, status=400)
 
+            # The partial parameter determins whether or not partial buckets are allowed.
+            # The last bucket of the time series can potentially be a partial bucket when
+            # the start of the bucket does not align with the rollup.
+            allow_partial_buckets = request.GET.get("partial") == "1"
+
         def get_event_stats(query_columns, query, params, rollup):
-            if top_events:
+            if top_events > 0:
                 return discover.top_events_timeseries(
                     timeseries_columns=query_columns,
-                    selected_columns=request.GET.getlist("field")[:],
+                    selected_columns=self.get_field_list(organization, request),
+                    equations=self.get_equation_list(organization, request),
                     user_query=query,
                     params=params,
                     orderby=self.get_orderby(request),
                     rollup=rollup,
-                    limit=limit,
+                    limit=top_events,
                     organization=organization,
                     referrer="api.organization-event-stats.find-topn",
+                    allow_empty=False,
                 )
             return discover.timeseries_query(
                 selected_columns=query_columns,
@@ -63,7 +67,13 @@ class OrganizationEventsStatsEndpoint(OrganizationEventsV2EndpointBase):
             )
 
         return Response(
-            self.get_event_stats_data(request, organization, get_event_stats, top_events),
+            self.get_event_stats_data(
+                request,
+                organization,
+                get_event_stats,
+                top_events,
+                allow_partial_buckets=allow_partial_buckets,
+            ),
             status=200,
         )
 
@@ -71,7 +81,7 @@ class OrganizationEventsStatsEndpoint(OrganizationEventsV2EndpointBase):
         try:
             snuba_args = self.get_snuba_query_args_legacy(request, organization)
         except InvalidSearchQuery as exc:
-            raise ParseError(detail=six.text_type(exc))
+            raise ParseError(detail=str(exc))
         except NoProjects:
             return Response({"data": []})
 
@@ -79,8 +89,8 @@ class OrganizationEventsStatsEndpoint(OrganizationEventsV2EndpointBase):
         rollup = get_rollup_from_request(
             request,
             snuba_args,
-            "1h",
-            InvalidSearchQuery(
+            default_interval=None,
+            error=InvalidSearchQuery(
                 "Your interval and date range would create too many results. "
                 "Use a larger interval, or a smaller date range."
             ),
@@ -124,7 +134,7 @@ class OrganizationEventsStatsEndpoint(OrganizationEventsV2EndpointBase):
         try:
             resolved = resolve_field_list([y_axis], snuba_filter)
         except InvalidSearchQuery as err:
-            raise ParseError(detail=six.text_type(err))
+            raise ParseError(detail=str(err))
         try:
             aggregate = resolved["aggregations"][0]
         except IndexError:

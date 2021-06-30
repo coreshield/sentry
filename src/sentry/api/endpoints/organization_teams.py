@@ -1,8 +1,3 @@
-from __future__ import absolute_import
-
-import six
-import sentry_sdk
-
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 from django.utils.translation import ugettext_lazy as _
@@ -15,6 +10,7 @@ from sentry.api.serializers import serialize
 from sentry.api.serializers.models import team as team_serializers
 from sentry.models import (
     AuditLogEntryEvent,
+    ExternalActor,
     OrganizationMember,
     OrganizationMemberTeam,
     Team,
@@ -60,6 +56,8 @@ class TeamSerializer(serializers.Serializer):
 class OrganizationTeamsEndpoint(OrganizationEndpoint):
     permission_classes = (OrganizationTeamsPermission,)
 
+    team_serializer = team_serializers.TeamSerializer
+
     def get(self, request, organization):
         """
         List an Organization's Teams
@@ -78,10 +76,9 @@ class OrganizationTeamsEndpoint(OrganizationEndpoint):
         if request.auth and hasattr(request.auth, "project"):
             return Response(status=403)
 
-        with sentry_sdk.start_span(op="PERF: OrgTeam.get - filter"):
-            queryset = Team.objects.filter(
-                organization=organization, status=TeamStatus.VISIBLE
-            ).order_by("slug")
+        queryset = Team.objects.filter(
+            organization=organization, status=TeamStatus.VISIBLE
+        ).order_by("slug")
 
         if request.GET.get("is_not_member", "0") == "1":
             user_teams = Team.objects.get_for_user(organization=organization, user=request.user)
@@ -89,26 +86,37 @@ class OrganizationTeamsEndpoint(OrganizationEndpoint):
 
         query = request.GET.get("query")
 
-        with sentry_sdk.start_span(op="PERF: OrgTeam.get - tokenize"):
-            if query:
-                tokens = tokenize_query(query)
-                for key, value in six.iteritems(tokens):
-                    if key == "query":
-                        value = " ".join(value)
+        if query:
+            tokens = tokenize_query(query)
+            for key, value in tokens.items():
+                if key == "hasExternalTeams":
+                    hasExternalTeams = "true" in value
+                    if hasExternalTeams:
                         queryset = queryset.filter(
-                            Q(name__icontains=value) | Q(slug__icontains=value)
+                            actor_id__in=ExternalActor.objects.filter(
+                                organization=organization
+                            ).values_list("actor_id")
                         )
                     else:
-                        queryset = queryset.none()
+                        queryset = queryset.exclude(
+                            actor_id__in=ExternalActor.objects.filter(
+                                organization=organization
+                            ).values_list("actor_id")
+                        )
+
+                elif key == "query":
+                    value = " ".join(value)
+                    queryset = queryset.filter(Q(name__icontains=value) | Q(slug__icontains=value))
+                else:
+                    queryset = queryset.none()
 
         is_detailed = request.GET.get("detailed", "1") != "0"
 
-        with sentry_sdk.start_span(op="PERF: OrgTeam.get - serialize"):
-            serializer = (
-                team_serializers.TeamWithProjectsSerializer
-                if is_detailed
-                else team_serializers.TeamSerializer
-            )
+        serializer = (
+            team_serializers.TeamWithProjectsSerializer
+            if is_detailed
+            else team_serializers.TeamSerializer
+        )
 
         return self.paginate(
             request=request,
@@ -118,7 +126,10 @@ class OrganizationTeamsEndpoint(OrganizationEndpoint):
             paginator_cls=OffsetPaginator,
         )
 
-    def post(self, request, organization):
+    def should_add_creator_to_team(self, request):
+        return request.user.is_authenticated
+
+    def post(self, request, organization, **kwargs):
         """
         Create a new Team
         ``````````````````
@@ -158,8 +169,7 @@ class OrganizationTeamsEndpoint(OrganizationEndpoint):
                 team_created.send_robust(
                     organization=organization, user=request.user, team=team, sender=self.__class__
                 )
-
-            if request.user.is_authenticated():
+            if self.should_add_creator_to_team(request):
                 try:
                     member = OrganizationMember.objects.get(
                         user=request.user, organization=organization
@@ -176,6 +186,8 @@ class OrganizationTeamsEndpoint(OrganizationEndpoint):
                 event=AuditLogEntryEvent.TEAM_ADD,
                 data=team.get_audit_log_data(),
             )
-
-            return Response(serialize(team, request.user), status=201)
+            return Response(
+                serialize(team, request.user, self.team_serializer()),
+                status=201,
+            )
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -1,5 +1,3 @@
-from __future__ import absolute_import
-
 from django.contrib.auth import logout
 from django.contrib.auth.models import AnonymousUser
 from rest_framework import status
@@ -29,7 +27,7 @@ class AuthIndexEndpoint(Endpoint):
     permission_classes = ()
 
     def get(self, request):
-        if not request.user.is_authenticated():
+        if not request.user.is_authenticated:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
         user = extract_lazy_object(request._request.user)
@@ -51,7 +49,7 @@ class AuthIndexEndpoint(Endpoint):
 
             curl -X ###METHOD### -u username:password ###URL###
         """
-        if not request.user.is_authenticated():
+        if not request.user.is_authenticated:
             return Response(status=status.HTTP_400_BAD_REQUEST)
 
         # If 2fa login is enabled then we cannot sign in with username and
@@ -89,7 +87,7 @@ class AuthIndexEndpoint(Endpoint):
 
         :auth: required
         """
-        if not request.user.is_authenticated():
+        if not request.user.is_authenticated:
             return Response(status=status.HTTP_401_UNAUTHORIZED)
 
         validator = AuthVerifyValidator(data=request.data)

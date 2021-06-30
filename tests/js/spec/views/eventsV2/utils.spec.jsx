@@ -53,6 +53,24 @@ describe('decodeColumnOrder', function () {
     });
   });
 
+  it('can decode span op breakdown fields', function () {
+    const results = decodeColumnOrder([{field: 'spans.foo', width: 123}]);
+
+    expect(Array.isArray(results)).toBeTruthy();
+
+    expect(results[0]).toEqual({
+      key: 'spans.foo',
+      name: 'spans.foo',
+      column: {
+        kind: 'field',
+        field: 'spans.foo',
+      },
+      width: 123,
+      isSortable: false,
+      type: 'duration',
+    });
+  });
+
   it('can decode aggregate functions with no arguments', function () {
     let results = decodeColumnOrder([{field: 'count()', width: 123}]);
 
@@ -143,6 +161,42 @@ describe('decodeColumnOrder', function () {
       column: {
         kind: 'function',
         function: ['percentile', 'measurements.lcp', '0.65'],
+      },
+      width: COL_WIDTH_UNDEFINED,
+      isSortable: true,
+      type: 'duration',
+    });
+  });
+
+  it('can decode elements with aggregate functions using span op breakdowns', function () {
+    const results = decodeColumnOrder([{field: 'avg(spans.foo)'}]);
+
+    expect(Array.isArray(results)).toBeTruthy();
+
+    expect(results[0]).toEqual({
+      key: 'avg(spans.foo)',
+      name: 'avg(spans.foo)',
+      column: {
+        kind: 'function',
+        function: ['avg', 'spans.foo', undefined],
+      },
+      width: COL_WIDTH_UNDEFINED,
+      isSortable: true,
+      type: 'duration',
+    });
+  });
+
+  it('can decode elements with aggregate functions with multiple arguments using span op breakdowns', function () {
+    const results = decodeColumnOrder([{field: 'percentile(spans.lcp, 0.65)'}]);
+
+    expect(Array.isArray(results)).toBeTruthy();
+
+    expect(results[0]).toEqual({
+      key: 'percentile(spans.lcp, 0.65)',
+      name: 'percentile(spans.lcp, 0.65)',
+      column: {
+        kind: 'function',
+        function: ['percentile', 'spans.lcp', '0.65'],
       },
       width: COL_WIDTH_UNDEFINED,
       isSortable: true,
@@ -245,6 +299,17 @@ describe('getExpandedResults()', function () {
     environment: ['staging'],
   };
 
+  it('id should be default column when drilldown results in no columns', () => {
+    const view = new EventView({
+      ...state,
+      fields: [{field: 'count()'}, {field: 'epm()'}, {field: 'eps()'}],
+    });
+
+    const result = getExpandedResults(view, {}, {});
+
+    expect(result.fields).toEqual([{field: 'id', width: -1}]);
+  });
+
   it('preserves aggregated fields', () => {
     let view = new EventView(state);
 
@@ -282,7 +347,6 @@ describe('getExpandedResults()', function () {
       ...state,
       fields: [
         {field: 'last_seen()'}, // expect this to be transformed to timestamp
-        {field: 'latest_event()'},
         {field: 'title'},
         {field: 'avg(transaction.duration)'}, // expect this to be dropped
         {field: 'p50()'},
@@ -298,6 +362,7 @@ describe('getExpandedResults()', function () {
         {field: 'unique_count(id)'},
         {field: 'apdex(300)'}, // should be dropped
         {field: 'user_misery(300)'}, // should be dropped
+        {field: 'failure_count()'}, // expect this to be transformed to transaction.status
       ],
     });
 
@@ -307,6 +372,7 @@ describe('getExpandedResults()', function () {
       {field: 'title'},
       {field: 'transaction.duration', width: -1},
       {field: 'custom_tag'},
+      {field: 'transaction.status', width: -1},
     ]);
 
     // transforms pXX functions with optional arguments properly
@@ -397,6 +463,32 @@ describe('getExpandedResults()', function () {
     };
     const result = getExpandedResults(view, {}, event);
     expect(result.query).toEqual('event.type:error custom_tag:tag_value');
+  });
+
+  it('generate eventview from an empty eventview', () => {
+    const view = EventView.fromLocation({query: {}});
+    const result = getExpandedResults(view, {some_tag: 'value'}, {});
+    expect(result.fields).toEqual([]);
+    expect(result.query).toEqual('some_tag:value');
+  });
+
+  it('applies array value conditions from event data', () => {
+    const view = new EventView({
+      ...state,
+      fields: [...state.fields, {field: 'error.type'}],
+    });
+    const event = {
+      type: 'error',
+      tags: [
+        {key: 'nope', value: 'nope'},
+        {key: 'custom_tag', value: 'tag_value'},
+      ],
+      'error.type': ['DeadSystem Exception', 'RuntimeException', 'RuntimeException'],
+    };
+    const result = getExpandedResults(view, {}, event);
+    expect(result.query).toEqual(
+      'event.type:error custom_tag:tag_value error.type:"DeadSystem Exception" error.type:RuntimeException error.type:RuntimeException'
+    );
   });
 
   it('applies project condition to project property', () => {

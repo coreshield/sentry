@@ -1,4 +1,4 @@
-FROM python:3.6-slim-buster as sdist
+FROM python:3.6.13-slim-buster as sdist
 
 LABEL maintainer="oss@sentry.io"
 LABEL org.opencontainers.image.title="Sentry Wheel Builder"
@@ -8,7 +8,7 @@ LABEL org.opencontainers.image.vendor="Functional Software, Inc."
 LABEL org.opencontainers.image.authors="oss@sentry.io"
 
 # Sane defaults for pip
-ENV PIP_NO_CACHE_DIR=off \
+ENV PIP_NO_CACHE_DIR=1 \
   PIP_DISABLE_PIP_VERSION_CHECK=1
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -43,9 +43,6 @@ WORKDIR /workspace
 VOLUME ["/workspace/node_modules", "/workspace/build"]
 COPY docker/builder.sh /builder.sh
 ENTRYPOINT [ "/builder.sh" ]
-
-# TODO: Remove this once PY3 becomes stable
-ENV SENTRY_PYTHON3=1
 
 ARG SOURCE_COMMIT
 ENV SENTRY_BUILD=${SOURCE_COMMIT:-unknown}

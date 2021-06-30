@@ -1,5 +1,3 @@
-import React from 'react';
-
 import {mountWithTheme} from 'sentry-test/enzyme';
 import {initializeOrg} from 'sentry-test/initializeOrg';
 import {openMenu, selectByLabel} from 'sentry-test/select-new';
@@ -117,7 +115,7 @@ describe('EventsV2 -> ColumnEditModal', function () {
       expect(
         fieldRow.find('SelectControl[name="field"] span[data-test-id="label"]').text()
       ).toBe('user-def');
-      expect(fieldRow.find('SelectControl[name="field"] Badge')).toHaveLength(1);
+      expect(fieldRow.find('SelectControl[name="field"] Tag')).toHaveLength(1);
       expect(fieldRow.find('BlankSpace')).toHaveLength(1);
     });
   });
@@ -140,7 +138,7 @@ describe('EventsV2 -> ColumnEditModal', function () {
       expect(
         funcRow.find('SelectControl[name="field"] span[data-test-id="label"]').text()
       ).toBe('project');
-      expect(funcRow.find('SelectControl[name="field"] Badge')).toHaveLength(1);
+      expect(funcRow.find('SelectControl[name="field"] Tag')).toHaveLength(1);
     });
 
     it('selects tag expressions that overlap functions', function () {
@@ -148,7 +146,7 @@ describe('EventsV2 -> ColumnEditModal', function () {
       expect(
         funcRow.find('SelectControl[name="field"] span[data-test-id="label"]').text()
       ).toBe('count');
-      expect(funcRow.find('SelectControl[name="field"] Badge')).toHaveLength(1);
+      expect(funcRow.find('SelectControl[name="field"] Tag')).toHaveLength(1);
     });
   });
 
@@ -239,6 +237,51 @@ describe('EventsV2 -> ColumnEditModal', function () {
       expect(onApply).toHaveBeenCalledWith([
         {kind: 'function', function: ['apdex', '400', undefined]},
       ]);
+    });
+
+    it('handles parameter overrides', function () {
+      selectByLabel(wrapper, 'apdex(\u2026)', {name: 'field', at: 0, control: true});
+
+      // Parameter select should display and use the default value.
+      const field = wrapper.find('QueryField input[name="refinement"]');
+      expect(field.props().value).toBe('400');
+      expect(field.prop('placeholder')).toBe(undefined);
+
+      // Trigger a blur and make sure the column is not wrong.
+      field.simulate('blur');
+
+      const newData = initializeOrg({
+        organization: {
+          features: ['performance-view', 'project-transaction-threshold'],
+          apdexThreshold: 400,
+        },
+      });
+
+      const newApply = jest.fn();
+      const newWrapper = mountModal(
+        {
+          columns,
+          onApply: newApply,
+          tagKeys,
+        },
+        newData
+      );
+
+      selectByLabel(newWrapper, 'apdex(\u2026)', {name: 'field', at: 0, control: true});
+
+      // Parameter select should display and use the default value.
+      const newField = newWrapper.find('QueryField input[name="refinement"]');
+      expect(newField.props().value).toBe('');
+      expect(newField.prop('placeholder')).toBe('Automatic');
+
+      // Trigger a blur and make sure the column is not wrong.
+      newField.simulate('blur');
+
+      // Apply the changes so we can see the new columns.
+      newWrapper.find('Button[priority="primary"]').simulate('click');
+      expect(newApply).toHaveBeenCalledWith(
+        expect.objectContaining([{kind: 'function', function: ['apdex', '', undefined]}])
+      );
     });
 
     it('clears unused parameters', function () {

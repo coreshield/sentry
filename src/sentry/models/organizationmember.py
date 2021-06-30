@@ -1,23 +1,20 @@
-from __future__ import absolute_import, print_function
-
-import six
-
-from bitfield import BitField
 from datetime import timedelta
+from enum import Enum
+from hashlib import md5
+from urllib.parse import urlencode
+from uuid import uuid4
+
 from django.conf import settings
-from django.core.urlresolvers import reverse
 from django.db import models, transaction
+from django.urls import reverse
 from django.utils import timezone
 from django.utils.encoding import force_bytes
 from django.utils.translation import ugettext_lazy as _
-from enum import Enum
-from hashlib import md5
 from structlog import get_logger
-from uuid import uuid4
-from six.moves.urllib.parse import urlencode
 
+from bitfield import BitField
 from sentry import roles
-from sentry.constants import EVENTS_MEMBER_ADMIN_DEFAULT
+from sentry.constants import ALERTS_MEMBER_WRITE_DEFAULT, EVENTS_MEMBER_ADMIN_DEFAULT
 from sentry.db.models import (
     BaseModel,
     BoundedAutoField,
@@ -50,7 +47,7 @@ class OrganizationMemberTeam(BaseModel):
     Identifies relationships between organization members and the teams they are on.
     """
 
-    __core__ = True
+    __include_in_export__ = True
 
     id = BoundedAutoField(primary_key=True)
     team = FlexibleForeignKey("sentry.Team")
@@ -84,7 +81,7 @@ class OrganizationMember(Model):
     be set to ownership.
     """
 
-    __core__ = True
+    __include_in_export__ = True
 
     organization = FlexibleForeignKey("sentry.Organization", related_name="member_set")
 
@@ -92,9 +89,14 @@ class OrganizationMember(Model):
         settings.AUTH_USER_MODEL, null=True, blank=True, related_name="sentry_orgmember_set"
     )
     email = models.EmailField(null=True, blank=True, max_length=75)
-    role = models.CharField(max_length=32, default=six.text_type(roles.get_default().id))
+    role = models.CharField(max_length=32, default=str(roles.get_default().id))
     flags = BitField(
-        flags=((u"sso:linked", u"sso:linked"), (u"sso:invalid", u"sso:invalid")), default=0
+        flags=(
+            ("sso:linked", "sso:linked"),
+            ("sso:invalid", "sso:invalid"),
+            ("member-limit:restricted", "member-limit:restricted"),
+        ),
+        default=0,
     )
     token = models.CharField(max_length=64, null=True, blank=True, unique=True)
     date_added = models.DateTimeField(default=timezone.now)
@@ -138,7 +140,7 @@ class OrganizationMember(Model):
         assert self.user_id or self.email, "Must set user or email"
         if self.token and not self.token_expires_at:
             self.refresh_expires_at()
-        super(OrganizationMember, self).save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
     def set_user(self, user):
         self.user = user
@@ -197,7 +199,7 @@ class OrganizationMember(Model):
     @property
     def legacy_token(self):
         checksum = md5()
-        checksum.update(six.text_type(self.organization_id).encode("utf-8"))
+        checksum.update(str(self.organization_id).encode("utf-8"))
         checksum.update(self.get_email().encode("utf-8"))
         checksum.update(force_bytes(settings.SECRET_KEY))
         return checksum.hexdigest()
@@ -251,7 +253,7 @@ class OrganizationMember(Model):
         }
 
         msg = MessageBuilder(
-            subject="Action Required for %s" % (self.organization.name,),
+            subject=f"Action Required for {self.organization.name}",
             template="sentry/emails/auth-link-identity.txt",
             html_template="sentry/emails/auth-link-identity.html",
             type="organization.auth_link",
@@ -260,12 +262,12 @@ class OrganizationMember(Model):
         msg.send_async([self.get_email()])
 
     def send_sso_unlink_email(self, actor, provider):
-        from sentry.utils.email import MessageBuilder
         from sentry.models import LostPasswordHash
+        from sentry.utils.email import MessageBuilder
 
         email = self.get_email()
 
-        recover_uri = u"{path}?{query}".format(
+        recover_uri = "{path}?{query}".format(
             path=reverse("sentry-account-recover"), query=urlencode({"email": email})
         )
 
@@ -287,7 +289,7 @@ class OrganizationMember(Model):
             context["set_password_url"] = password_hash.get_absolute_url(mode="set_password")
 
         msg = MessageBuilder(
-            subject="Action Required for %s" % (self.organization.name,),
+            subject=f"Action Required for {self.organization.name}",
             template="sentry/emails/auth-sso-disabled.txt",
             html_template="sentry/emails/auth-sso-disabled.html",
             type="organization.auth_sso_disabled",
@@ -349,11 +351,19 @@ class OrganizationMember(Model):
     def get_scopes(self):
         scopes = roles.get(self.role).scopes
 
-        if self.role == "member" and not self.organization.get_option(
-            "sentry:events_member_admin", EVENTS_MEMBER_ADMIN_DEFAULT
-        ):
-            scopes = frozenset(s for s in scopes if s != "event:admin")
+        disabled_scopes = set()
 
+        if self.role == "member":
+            if not self.organization.get_option(
+                "sentry:events_member_admin", EVENTS_MEMBER_ADMIN_DEFAULT
+            ):
+                disabled_scopes.add("event:admin")
+            if not self.organization.get_option(
+                "sentry:alerts_member_write", ALERTS_MEMBER_WRITE_DEFAULT
+            ):
+                disabled_scopes.add("alerts:write")
+
+        scopes = frozenset(s for s in scopes if s not in disabled_scopes)
         return scopes
 
     @classmethod

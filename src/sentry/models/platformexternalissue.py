@@ -1,15 +1,14 @@
-from __future__ import absolute_import, print_function
+from collections import defaultdict
 
 from django.db import models
 from django.utils import timezone
-from collections import defaultdict
 
 from sentry.db.models import Model, sane_repr
 from sentry.db.models.fields.foreignkey import FlexibleForeignKey
 
 
 class PlatformExternalIssue(Model):
-    __core__ = False
+    __include_in_export__ = False
 
     group = FlexibleForeignKey("sentry.Group", db_constraint=False, db_index=False)
     project = FlexibleForeignKey("sentry.Project", null=True, db_constraint=False)
@@ -34,7 +33,7 @@ class PlatformExternalIssue(Model):
         # group annotations by group id
         annotations_by_group_id = defaultdict(list)
         for ei in external_issues:
-            annotation = '<a href="%s">%s</a>' % (ei.web_url, ei.display_name)
+            annotation = f'<a href="{ei.web_url}">{ei.display_name}</a>'
             annotations_by_group_id[ei.group_id].append(annotation)
 
         return annotations_by_group_id
